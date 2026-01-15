@@ -168,9 +168,6 @@ body.adminLoginPage .login{
   gap: 12px;
 }
 .field{
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.05);
   padding: 12px;
   margin:10px;
 }
