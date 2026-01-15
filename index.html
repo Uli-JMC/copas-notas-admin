@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
-  <title>Experiencias | Catas & Cocteles</title>
-  <meta name="description" content="Experiencias de catas de vino y coctelería. Reservá tu cupo en próximos eventos." />
+  <title>Admin | Entre Copas & Notas</title>
+  <meta name="description" content="Acceso al panel de administración de Entre Copas & Notas." />
 
   <style>
     :root{
@@ -197,11 +197,11 @@
     <div class="spot" aria-hidden="true"></div>
 
     <section class="center">
-      <p class="kicker">Experiencias</p>
+      <p class="kicker">Acceso admin</p>
 
-      <!-- ✅ LOGO REAL -->
+      <!-- ✅ FIX: rutas relativas estables -->
       <img
-        src="/assets/img/logo-entrecopasynotas.png"
+        src="./assets/img/logo-entrecopasynotas.png"
         alt="Entre Copas & Notas"
         class="logoImg"
       />
@@ -209,11 +209,12 @@
       <h1 class="logoText">Entre Copas &amp; Notas</h1>
 
       <p class="tagline">
-        Catas de vino &amp; coctelería • Reservas • Experiencias guiadas
+        Panel de administración • Eventos • Inscripciones • Recursos
       </p>
 
       <div class="actions">
-        <a class="btn primary" href="/admin-login.html" aria-label="Entrar a la página principal">
+        <!-- ✅ FIX: ruta relativa -->
+        <a class="btn primary" href="./admin-login.html" aria-label="Ir al login de administración">
           Entrar →
         </a>
       </div>

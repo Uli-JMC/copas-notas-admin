@@ -20,7 +20,8 @@
         <div class="loginCard">
 
           <div class="loginBrand" aria-label="Marca">
-            <img id="adminLogo" src="/assets/img/logocuadrado-entrecopasynotas.png" alt="Entre Copas & Notas" />
+            <!-- ✅ Ruta relativa (más estable en Netlify) -->
+            <img id="adminLogo" src="./assets/img/logocuadrado-entrecopasynotas.png" alt="Entre Copas & Notas" />
             <div>
               <p class="kicker">Acceso</p>
               <h1 class="h1">Panel de administración</h1>
@@ -34,13 +35,32 @@
           <form id="loginForm" class="loginForm" novalidate>
             <div class="field">
               <label for="adminEmail">Correo</label>
-              <input id="adminEmail" type="email" placeholder="admin@entrecopasynotas.com" required />
+              <input
+                id="adminEmail"
+                name="email"
+                type="email"
+                placeholder="admin@entrecopasynotas.com"
+                autocomplete="email"
+                inputmode="email"
+                required
+                aria-describedby="errEmail"
+                aria-invalid="false"
+              />
               <p class="fine" id="errEmail" hidden>Ingresá un correo válido.</p>
             </div>
 
             <div class="field">
               <label for="adminPass">Contraseña</label>
-              <input id="adminPass" type="password" placeholder="••••••••" required />
+              <input
+                id="adminPass"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                required
+                aria-describedby="errPass"
+                aria-invalid="false"
+              />
               <p class="fine" id="errPass" hidden>Mínimo 6 caracteres.</p>
             </div>
 
@@ -61,11 +81,25 @@
 
   <script>
     (function () {
+      // Normaliza rutas tipo:
+      // - "assets/img/x.png" -> "/assets/img/x.png" o "./assets/img/x.png"
+      // - "./assets/img/x.png" -> "./assets/img/x.png"
+      // - "/assets/img/x.png" -> "/assets/img/x.png"
+      function normalizePath(p) {
+        var raw = String(p || "").trim();
+        if (!raw) return "";
+        raw = raw.replace(/\\/g, "/");
+        if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+        if (raw.startsWith("./") || raw.startsWith("/")) return raw;
+        if (raw.startsWith("assets/")) return "./" + raw;
+        return "./assets/img/" + raw;
+      }
+
       try {
         if (window.ECN && typeof ECN.getMedia === "function") {
-          const m = ECN.getMedia();
-          const img = document.getElementById("adminLogo");
-          if (img && m && m.logoPath) img.src = m.logoPath;
+          var m = ECN.getMedia();
+          var img = document.getElementById("adminLogo");
+          if (img && m && m.logoPath) img.src = normalizePath(m.logoPath);
         }
       } catch (_) { }
     })();
