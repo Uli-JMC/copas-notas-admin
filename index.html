@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>Experiencias | Catas & Cocteles</title>
+  <meta name="description" content="Experiencias de catas de vino y coctelería. Reservá tu cupo en próximos eventos." />
+
+  <style>
+    :root{
+      --bg:#000;
+      --text:rgba(255,255,255,.92);
+      --muted:rgba(255,255,255,.62);
+      --line:rgba(255,255,255,.14);
+      --focus:rgba(255,255,255,.28);
+      --max:1100px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", Helvetica, sans-serif;
+      letter-spacing:.2px;
+      overflow:hidden;
+    }
+
+    /* Layout */
+    .wrap{
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      position:relative;
+    }
+
+    /* Spotlight */
+    .spot{
+      position:absolute;
+      inset:auto 0 18% 0;
+      height:320px;
+      width:min(720px, 92vw);
+      margin:0 auto;
+      background: radial-gradient(
+        closest-side,
+        rgba(255,255,255,.18),
+        rgba(255,255,255,.06) 55%,
+        rgba(0,0,0,0) 75%
+      );
+      opacity:.9;
+      pointer-events:none;
+    }
+
+    .center{
+      position:relative;
+      text-align:center;
+      max-width:var(--max);
+      width:100%;
+      z-index:2;
+      padding-bottom:56px;
+    }
+
+    .kicker{
+      text-transform:uppercase;
+      letter-spacing:.45em;
+      font-size:12px;
+      color:var(--muted);
+      margin:0 0 16px;
+    }
+
+    /* ✅ LOGO IMAGEN */
+    .logoImg{
+      width: min(220px, 78vw);
+      height:auto;
+      margin: 0 auto 26px;
+      display:block;
+      filter: drop-shadow(0 18px 40px rgba(0,0,0,.65));
+    }
+
+    /* Texto de marca (secundario) */
+    .logoText{
+      margin:0;
+      font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+      font-weight:600;
+      letter-spacing:.08em;
+      font-size: clamp(34px, 5vw, 48px);
+      line-height:1.05;
+    }
+
+    .tagline{
+      margin:16px auto 0;
+      color:var(--muted);
+      font-size:14px;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      max-width:680px;
+      line-height:1.6;
+    }
+
+    .actions{
+      display:flex;
+      justify-content:center;
+      margin-top:30px;
+    }
+
+    .btn{
+      border:1px solid var(--line);
+      background:transparent;
+      color:var(--text);
+      padding:14px 22px;
+      border-radius:999px;
+      font-size:14px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      transition:.15s ease;
+      outline:none;
+    }
+    .btn:hover{
+      transform: translateY(-1px);
+      border-color: rgba(255,255,255,.28);
+    }
+    .btn:focus-visible{ box-shadow: 0 0 0 4px var(--focus); }
+
+    .btn.primary{
+      background: rgba(255,255,255,.10);
+      border-color: rgba(255,255,255,.22);
+    }
+    .btn.primary:hover{
+      background: rgba(255,255,255,.14);
+      border-color: rgba(255,255,255,.32);
+    }
+
+    /* Footer */
+    .footer{
+      position:absolute;
+      left:0; right:0; bottom:0;
+      padding:18px 22px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-top:1px solid rgba(255,255,255,.06);
+      background: linear-gradient(to top, rgba(0,0,0,.86), rgba(0,0,0,0));
+      z-index:3;
+    }
+    .footer .left{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:var(--muted);
+      font-size:13px;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      max-width:62vw;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .social{
+      display:flex;
+      gap:10px;
+    }
+    .icon-btn{
+      width:44px; height:44px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      display:grid;
+      place-items:center;
+      background:transparent;
+      color:var(--text);
+      text-decoration:none;
+      transition:.15s ease;
+    }
+    .icon-btn:hover{
+      background: rgba(255,255,255,.06);
+      border-color: rgba(255,255,255,.28);
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 480px){
+      .logoImg{ width: 86vw; }
+      .logoText{ font-size: 32px; }
+      .footer{ padding:14px; }
+      .footer .left{ font-size:12px; letter-spacing:.10em; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="wrap" aria-label="Portada">
+    <div class="spot" aria-hidden="true"></div>
+
+    <section class="center">
+      <p class="kicker">Experiencias</p>
+
+      <!-- ✅ LOGO REAL -->
+      <img
+        src="./assets/img/logo-entrecopasynotas.png"
+        alt="Entre Copas & Notas"
+        class="logoImg"
+      />
+
+      <h1 class="logoText">Entre Copas &amp; Notas</h1>
+
+      <p class="tagline">
+        Catas de vino &amp; coctelería • Reservas • Experiencias guiadas
+      </p>
+
+      <div class="actions">
+        <a class="btn primary" href="./admin-login.html" aria-label="Entrar a la página principal">
+          Entrar →
+        </a>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="left">
+        <span>Contacto</span>
+        <span>•</span>
+        <span>Eventos &amp; Reservas</span>
+      </div>
+
+      <div class="social">
+        <a class="icon-btn" id="waLink" href="#" target="_blank" rel="noopener" aria-label="WhatsApp">WA</a>
+        <a class="icon-btn" id="igLink" href="#" target="_blank" rel="noopener" aria-label="Instagram">IG</a>
+      </div>
+    </footer>
+  </main>
+
+  <!-- JS intacto -->
+  <script>
+    // ✅ Formato correcto: código país + número (sin "+")
+    const WHATSAPP_NUMBER = "5068845123";
+    const IG_URL = "https://instagram.com/entrecopasynotas";
+
+    const waLink = document.getElementById("waLink");
+    const igLink = document.getElementById("igLink");
+
+    const msg = encodeURIComponent("Hola, quiero info de los próximos eventos 🍷🍸");
+    waLink.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`;
+    igLink.href = IG_URL;
+  </script>
+</body>
+</html>
