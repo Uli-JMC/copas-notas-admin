@@ -1,0 +1,707 @@
+:root{
+  --bg:#0b0b0c;
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.62);
+  --line: rgba(255,255,255,.14);
+  --focus: rgba(255,255,255,.28);
+  --max: 1200px;
+  --radius: 18px;
+  --shadow: 0 18px 60px rgba(0,0,0,.55);
+  --btnBg: rgba(255,255,255,.10);
+  --btnBgHover: rgba(255,255,255,.14);
+
+  /* ✅ NUEVO (login-only page) */
+  --topbarH: 86px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", Helvetica, sans-serif;
+  letter-spacing:.2px;
+}
+a{color:inherit}
+.container{ width: min(var(--max), calc(100% - 40px)); margin:0 auto; }
+
+/* Topbar */
+.topbar{
+  position: sticky; top:0; z-index: 50;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(0,0,0,.55);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.nav{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:14px; padding: 14px 0;
+}
+.brand{
+  display:flex; align-items:center; gap:10px;
+  text-decoration:none;
+}
+.brand img{ width:34px; height:34px; object-fit:contain; }
+.brand span{
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight:650; letter-spacing:.04em;
+  white-space:nowrap;
+}
+.navRight{ display:flex; gap:10px; align-items:center; }
+
+/* Buttons */
+.btn{
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  padding: 11px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing:.10em;
+  text-transform: uppercase;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  transition: transform .15s ease, background .15s ease, border-color .15s ease;
+  outline:none;
+  cursor:pointer;
+  user-select:none;
+  white-space:nowrap;
+}
+.btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.28);
+  background: rgba(255,255,255,.06);
+}
+.btn:focus-visible{ box-shadow: 0 0 0 4px var(--focus); }
+.btn.primary{
+  background: var(--btnBg);
+  border-color: rgba(255,255,255,.22);
+}
+.btn.primary:hover{
+  background: var(--btnBgHover);
+  border-color: rgba(255,255,255,.32);
+}
+
+.page{ padding: 22px 0 58px; }
+
+/* ============================================================
+   ✅ Login-only page refinements (admin-login.html)
+   - centra sin depender de topbar (porque no hay topbar)
+   ============================================================ */
+body.adminLoginPage .page{
+  min-height: 100vh;
+  display:flex;
+  align-items:center;
+  padding: 26px 0;
+}
+body.adminLoginPage .login{
+  min-height: auto;
+  width: 100%;
+}
+
+/* Login */
+.login{
+  display:flex; justify-content:center; align-items:center;
+  min-height: calc(100vh - var(--topbarH));
+}
+.loginCard{
+  width: min(520px, 100%);
+  border-radius: calc(var(--radius) + 6px);
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.55);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+/* ✅ nuevo bloque brand para admin-login.html */
+.loginBrand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom: 10px;
+}
+.loginBrand img{
+  width:44px;
+  height:44px;
+  object-fit:contain;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.04);
+  padding: 6px;
+}
+
+.kicker{
+  margin:0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing:.18em;
+  text-transform: uppercase;
+}
+.h1{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight: 650;
+  letter-spacing:.02em;
+  font-size: 30px;
+}
+.h2{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight: 650;
+  letter-spacing:.02em;
+  font-size: 26px;
+}
+.sub{
+  margin: 10px 0 0;
+  color: rgba(255,255,255,.78);
+  line-height: 1.6;
+  font-size: 14px;
+}
+.loginForm{
+  margin-top: 14px;
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+}
+.field{
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.05);
+  padding: 12px;
+  margin:10px;
+}
+label{
+  display:block;
+  margin:0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+}
+input, select, textarea{
+  width:100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.35);
+  color: var(--text);
+  padding: 12px 12px;
+  outline:none;
+  font-size: 14px;
+}
+textarea{ resize: vertical; }
+input:focus, select:focus, textarea:focus{ box-shadow: 0 0 0 4px var(--focus); }
+
+.fine{
+  margin: 12px 0 0;
+  color: rgba(255,255,255,.62);
+  font-size:12px;
+  line-height:1.55;
+}
+.hint{
+  margin: 8px 0 0;
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.counter{
+  margin-top: 8px;
+  display:flex;
+  justify-content:flex-end;
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  letter-spacing:.08em;
+}
+
+/* App */
+.app .head{
+  display:flex;
+  gap: 14px;
+  justify-content:space-between;
+  align-items:flex-end;
+  flex-wrap:wrap;
+  margin-bottom: 14px;
+}
+.headActions{ display:flex; gap:10px; align-items:center; }
+.search{
+  width: min(420px, 100%);
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.35);
+  padding: 12px 14px;
+  color: var(--text);
+  outline:none;
+}
+.search:focus{ box-shadow: 0 0 0 4px var(--focus); }
+
+/* Tabs */
+.tabs{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin: 14px 0;
+}
+.tab{
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing:.16em;
+  text-transform: uppercase;
+  cursor:pointer;
+}
+.tab[aria-selected="true"]{
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.28);
+}
+
+/* Panel */
+.panel{
+  border-radius: calc(var(--radius) + 6px);
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.55);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.panelTop{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-bottom: 14px;
+}
+.panelTitle h3{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight:650;
+  letter-spacing:.02em;
+  font-size: 22px;
+}
+.panelTitle p{
+  margin:8px 0 0;
+  color: rgba(255,255,255,.76);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.split{
+  display:grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 14px;
+}
+.list{
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.05);
+  overflow:hidden;
+}
+.item{
+  padding: 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  cursor:pointer;
+  display:flex;
+  gap:10px;
+  justify-content:space-between;
+  align-items:flex-start;
+}
+.item:last-child{ border-bottom:0; }
+.item:hover{ background: rgba(255,255,255,.04); }
+.itemTitle{ margin:0; font-weight:650; }
+.itemMeta{ margin:6px 0 0; color: rgba(255,255,255,.72); font-size: 12px; letter-spacing:.10em; text-transform: uppercase; }
+.pills{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.pill{
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+  white-space:nowrap;
+}
+.pill.danger{
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.10);
+}
+
+.editor{
+  border-radius: 16px;
+  padding: 14px;
+}
+.editorEmpty{
+  color: rgba(255,255,255,.70);
+  border: 1px dashed rgba(255,255,255,.16);
+  border-radius: 16px;
+  padding: 16px;
+  line-height: 1.6;
+}
+.editorForm .row{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.divider{
+  margin: 14px 0;
+  height: 1px;
+  background: rgba(255,255,255,.08);
+  border-radius: 999px;
+}
+
+/* Dates */
+.datesBox h4{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight:650;
+  letter-spacing:.02em;
+  font-size: 18px;
+}
+.datesBox p{
+  margin:8px 0 0;
+  color: rgba(255,255,255,.76);
+  line-height: 1.6;
+  font-size: 13px;
+}
+.datesTop{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+  flex-wrap:wrap;
+}
+.datesList{
+  margin-top: 12px;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+.dateRow{
+  display:grid;
+  grid-template-columns: 1.3fr .7fr auto;
+  gap: 10px;
+  align-items:center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.32);
+}
+.dateRow input{
+  background: rgba(0,0,0,.35);
+}
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  font-size: 11px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  white-space:nowrap;
+}
+.notice{
+  margin-top: 12px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.32);
+  color: rgba(255,255,255,.78);
+  font-size: 13px;
+}
+
+.actions{
+  margin-top: 14px;
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+/* Table */
+.tableWrap{
+  overflow:auto;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.05);
+}
+.table{
+  width:100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+th,td{
+  text-align:left;
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  vertical-align: top;
+}
+th{
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+  position: sticky;
+  top:0;
+  background: rgba(0,0,0,.75);
+}
+td{ color: rgba(255,255,255,.82); font-size: 13px; line-height:1.4; }
+
+/* Toasts */
+.toasts{
+  position: fixed;
+  right: 14px;
+  top: 76px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  z-index: 999;
+  pointer-events:none;
+}
+.toast{
+  pointer-events:auto;
+  min-width: 280px;
+  max-width: 360px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 12px 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  transform: translateY(-6px);
+  opacity:0;
+  animation: toastIn .22s ease forwards;
+}
+@keyframes toastIn{ to{ transform: translateY(0); opacity:1; } }
+.toast .tTitle{
+  margin:0;
+  font-size: 12px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.toast .tMsg{
+  margin:6px 0 0;
+  color: rgba(255,255,255,.76);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.toast .close{
+  margin-left:auto;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 999px;
+  width: 34px; height: 34px;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+.toast .close:hover{ background: rgba(255,255,255,.10); }
+
+@media (max-width: 980px){
+  .split{ grid-template-columns: 1fr; }
+  .editorForm .row{ grid-template-columns: 1fr; }
+  .dateRow{ grid-template-columns: 1fr; }
+  body.adminLoginPage .page{ padding: 22px 0; }
+  .container{ width: calc(100% - 28px); }
+}
+
+/* ============================================================
+   ✅ GALLERY (Admin) - estilos mínimos para:
+   - preview de imagen
+   - lista con miniatura + tags + acciones
+============================================================ */
+#galPreview{
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.32);
+  padding: 12px;
+}
+
+.galPreviewRow{
+  display:grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items:start;
+}
+.galThumb{
+  width:96px;
+  height:96px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  overflow:hidden;
+  background: rgba(255,255,255,.06);
+}
+.galThumb img{
+  width:100%;
+  height:100%;
+  object-fit: cover;
+  display:block;
+}
+.galPreviewMeta{
+  display:flex;
+  flex-direction:column;
+  gap: 6px;
+}
+.galTitle{
+  margin:0;
+  font-weight:650;
+}
+.galSub{
+  margin:0;
+  color: rgba(255,255,255,.72);
+  font-size: 12px;
+  letter-spacing:.10em;
+  text-transform: uppercase;
+}
+
+.galPills{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top: 7px;
+}
+
+.galleryListEmpty{
+  padding: 14px;
+  color: rgba(255,255,255,.72);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.galleryItem{
+  padding: 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  display:grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items:start;
+}
+.galleryItem:last-child{ border-bottom:0; }
+
+.galleryItemThumb{
+  width:56px;
+  height:56px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  overflow:hidden;
+  background: rgba(255,255,255,.06);
+}
+.galleryItemThumb img{
+  width:100%;
+  height:100%;
+  object-fit: cover;
+  display:block;
+}
+
+.galleryItemMain{
+  display:flex;
+  flex-direction:column;
+  gap: 6px;
+  min-width: 0;
+}
+.galleryItemTitle{
+  margin:0;
+  font-weight:650;
+  overflow:hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.galleryItemMeta{
+  margin:0;
+  color: rgba(255,255,255,.72);
+  font-size: 12px;
+  letter-spacing:.10em;
+  text-transform: uppercase;
+}
+
+.galleryItemActions{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
+
+.btn.sm{
+  padding: 9px 11px;
+  min-height: 36px;
+  font-size: 12px;
+}
+
+@media (max-width: 980px){
+  .galPreviewRow{ grid-template-columns: 84px 1fr; }
+  .galThumb{ width:84px; height:84px; }
+  .galleryItem{ grid-template-columns: 56px 1fr; }
+  .galleryItemActions{ grid-column: 1 / -1; justify-content:flex-start; }
+}
+
+/* ============================================================
+   ✅ PROMOS (Admin) - ajustes mínimos para que quede pro
+   - Corrige spacing en grids (quita margin interno del .field)
+   - Preview estilo similar a Galería
+   - Listado y acciones consistentes
+============================================================ */
+
+/* 1) FIX: el margin en .field rompe la grilla (ya existe gap) */
+.editorForm .row .field{
+  margin: 5px 0; /* sobreescribe tu .field{ margin:5px } solo dentro del grid */
+}
+
+/* Cuando el field NO está en row (solo), mantenemos aire */
+.editorForm > .field{
+  margin: 5px 0 0;
+}
+
+/* 2) Preview Promos */
+#promoPreview{
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.32);
+  padding: 12px;
+}
+
+/* Que los pills del preview se vean igual */
+#promoPreview .pills{
+  justify-content: flex-start;
+}
+
+/* 3) Listado Promos */
+#promosList .item{
+  cursor: default; /* el click lo manejan los botones */
+}
+
+#promosList .item .btn{
+  padding: 9px 11px;
+  min-height: 36px;
+  font-size: 12px;
+}
+
+/* Botonera más compacta en desktop */
+#promosList .pills{
+  gap: 8px;
+}
+
+/* En mobile, que los botones bajen ordenados */
+@media (max-width: 980px){
+  #promosList .item{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #promosList .item .pills{
+    justify-content: flex-start;
+  }
+}

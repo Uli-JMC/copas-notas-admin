@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>Admin | Entre Copas & Notas</title>
+  <meta name="description" content="Panel de administración para eventos e inscripciones." />
+
+  <link rel="stylesheet" href="./css/admin.css" />
+</head>
+
+<body class="adminPage">
+  <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
+
+  <header class="topbar">
+    <div class="container">
+      <div class="nav">
+        <a class="brand" href="./home.html" aria-label="Ir a home">
+          <img id="adminLogo" src="./assets/img/logocuadrado-entrecopasynotas.png" alt="Logo" />
+          <span>Admin · Entre Copas &amp; Notas</span>
+        </a>
+
+        <div class="navRight">
+          <a class="btn" href="./home.html#proximos">Ver sitio</a>
+          <button class="btn" id="logoutBtn" type="button">Salir</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+
+      <!-- ✅ SOLO APP -->
+      <section class="app" id="appPanel">
+        <div class="head">
+          <div>
+            <p class="kicker">Gestión</p>
+            <h2 class="h2">Admin</h2>
+            <p class="sub">Eventos, fechas, cupos, inscripciones y recursos visuales.</p>
+          </div>
+
+          <div class="headActions">
+            <input class="search" id="search" type="search" placeholder="Buscar evento o inscripción…" />
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Secciones">
+          <button class="tab" data-tab="events" role="tab" aria-selected="true">Eventos</button>
+          <button class="tab" data-tab="regs" role="tab" aria-selected="false">Inscripciones</button>
+          <button class="tab" data-tab="media" role="tab" aria-selected="false">Medios</button>
+          <button class="tab" data-tab="gallery" role="tab" aria-selected="false">Galería</button>
+          <button class="tab" data-tab="promos" role="tab" aria-selected="false">Promos</button>
+        </div>
+
+        <!-- EVENTS TAB -->
+        <section class="panel" id="tab-events" role="tabpanel">
+          <div class="panelTop">
+            <div class="panelTitle">
+              <h3>Eventos</h3>
+              <p>Creá eventos, agregá fechas y cupos. “Agotado” si cupos = 0.</p>
+            </div>
+            <button class="btn primary" id="newEventBtn" type="button">+ Nuevo evento</button>
+          </div>
+
+          <div class="split">
+            <div class="list" id="eventList" aria-label="Lista de eventos"></div>
+
+            <div class="editor" aria-label="Editor de evento">
+              <div class="editorEmpty" id="editorEmpty">
+                Seleccioná un evento para editar o creá uno nuevo.
+              </div>
+
+              <form id="eventForm" class="editorForm" hidden>
+                <div class="row">
+                  <div class="field">
+                    <label for="evTitle">Nombre del evento</label>
+                    <input id="evTitle" type="text" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="evType">Tipo</label>
+                    <select id="evType" required>
+                      <option value="Cata de vino">Cata de vino</option>
+                      <option value="Coctelería">Coctelería</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="evMonth">Mes (para anclas)</label>
+                    <select id="evMonth" required>
+                      <option>ENERO</option>
+                      <option>FEBRERO</option>
+                      <option>MARZO</option>
+                      <option>ABRIL</option>
+                      <option>MAYO</option>
+                      <option>JUNIO</option>
+                      <option>JULIO</option>
+                      <option>AGOSTO</option>
+                      <option>SEPTIEMBRE</option>
+                      <option>OCTUBRE</option>
+                      <option>NOVIEMBRE</option>
+                      <option>DICIEMBRE</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="evImg">Imagen (ruta)</label>
+                    <input id="evImg" type="text" placeholder="./assets/img/hero-1.jpg" />
+                    <p class="hint">Luego lo conectamos a storage. Por ahora solo una ruta.</p>
+                  </div>
+                </div>
+
+                <!-- ✅ NUEVO: ubicación / horario / duración (1:1 con data.js) -->
+                <div class="row">
+                  <div class="field">
+                    <label for="evLocation">Lugar / Dirección</label>
+                    <input id="evLocation" type="text" placeholder="Ej: Barrio Escalante, San José (dirección exacta)" />
+                  </div>
+
+                  <div class="field">
+                    <label for="evTimeRange">Horario</label>
+                    <input id="evTimeRange" type="text" placeholder='Ej: 9–10 am' />
+                    <p class="hint">Formato libre (ej: 9–10 am / 6:30–8:30 pm).</p>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="evDurationHours">Duración</label>
+                    <input id="evDurationHours" type="text" placeholder="Ej: 3 hrs" />
+                    <p class="hint">Ej: 1.5 hrs / 2 hrs / 3 hrs.</p>
+                  </div>
+
+                  <div class="field">
+                    <label for="evDuration">Duración (legacy)</label>
+                    <input id="evDuration" type="text" placeholder="Opcional: 1.5–2.5 horas" />
+                    <p class="hint">Se mantiene por compatibilidad. Si no lo usás, podés dejarlo vacío.</p>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="evDesc">Descripción corta</label>
+                  <textarea id="evDesc" rows="3" maxlength="220" placeholder="Descripción breve (máx 220)"></textarea>
+                  <div class="counter"><span id="descCount">0</span>/220</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="datesBox">
+                  <div class="datesTop">
+                    <div>
+                      <h4>Fechas & cupos</h4>
+                      <p>Agregá varias fechas para un mismo evento.</p>
+                    </div>
+                    <button class="btn" id="addDateBtn" type="button">+ Agregar fecha</button>
+                  </div>
+
+                  <div class="datesList" id="datesList"></div>
+
+                  <div class="notice" id="soldNotice" hidden>
+                    <span class="badge">Agotado</span>
+                    <span>Este evento está agotado (no hay cupos disponibles).</span>
+                  </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="actions">
+                  <button class="btn primary" id="saveEventBtn" type="submit">Guardar</button>
+                  <button class="btn" id="dupEventBtn" type="button">Duplicar</button>
+                  <button class="btn" id="deleteEventBtn" type="button">Eliminar</button>
+                </div>
+
+                <p class="fine">
+                  * Esto guarda en tu navegador (localStorage). Luego lo movemos a Supabase.
+                </p>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- REGS TAB -->
+        <section class="panel" id="tab-regs" role="tabpanel" hidden>
+          <div class="panelTop">
+            <div class="panelTitle">
+              <h3>Inscripciones</h3>
+              <p>Lista de registros (demo local). Luego: Supabase table.</p>
+            </div>
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" id="seedRegsBtn" type="button">Cargar demo</button>
+              <button class="btn primary" id="exportCsvBtn" type="button">Exportar CSV</button>
+            </div>
+          </div>
+
+          <div class="tableWrap">
+            <table class="table" aria-label="Tabla de inscripciones">
+              <thead>
+                <tr>
+                  <th>Evento</th>
+                  <th>Fecha</th>
+                  <th>Nombre</th>
+                  <th>Correo</th>
+                  <th>Teléfono</th>
+                  <th>Marketing</th>
+                  <th>Fecha creación</th>
+                </tr>
+              </thead>
+              <tbody id="regsTbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- MEDIA TAB -->
+        <section class="panel" id="tab-media" role="tabpanel" hidden>
+          <div class="panelTop">
+            <div class="panelTitle">
+              <h3>Medios</h3>
+              <p>Config rápida de rutas de logo e imágenes (demo). Luego: storage.</p>
+            </div>
+          </div>
+
+          <form id="mediaForm" class="mediaForm">
+            <div class="row">
+              <div class="field">
+                <label for="logoPath">Logo (ruta)</label>
+                <input id="logoPath" type="text" placeholder="./assets/img/logo-entrecopasynotas.png" />
+              </div>
+              <div class="field">
+                <label for="defaultHero">Hero default (ruta)</label>
+                <input id="defaultHero" type="text" placeholder="./assets/img/hero-1.jpg" />
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="btn primary" type="submit">Guardar</button>
+              <button class="btn" id="resetMediaBtn" type="button">Reset</button>
+            </div>
+
+            <p class="fine">
+              Nota: esto no sube archivos todavía. En Supabase Storage lo hacemos con UI de upload.
+            </p>
+          </form>
+        </section>
+
+        <!-- ✅ GALLERY TAB -->
+        <section class="panel" id="tab-gallery" role="tabpanel" hidden>
+          <div class="panelTop">
+            <div class="panelTitle">
+              <h3>Galería</h3>
+              <p>Subí fotos (demo local). Luego lo conectamos a Storage + BD.</p>
+            </div>
+          </div>
+
+          <div class="split">
+            <!-- Uploader -->
+            <div class="editor" aria-label="Subir foto a galería">
+              <form id="galleryForm" class="editorForm">
+                <div class="row">
+                  <div class="field">
+                    <label for="galType">Tipo</label>
+                    <select id="galType" required>
+                      <option value="cocteles">Cocteles</option>
+                      <option value="maridajes">Maridajes</option>
+                    </select>
+                    <p class="hint">Define en cuál página se verá (cocteles o maridajes).</p>
+                  </div>
+
+                  <div class="field">
+                    <label for="galCreatedAt">Fecha</label>
+                    <input id="galCreatedAt" type="text" value="Automática (sistema)" disabled />
+                    <p class="hint">Se asigna al momento de subir.</p>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="galName">Nombre</label>
+                    <input id="galName" type="text" placeholder="Ej: Pasta night" maxlength="60" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="galTags">Tags</label>
+                    <input id="galTags" type="text" placeholder="#pasta #tinto #pairing" maxlength="120" />
+                    <p class="hint">Separá con espacios. (Luego lo normalizamos en el JS)</p>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="galFile">Foto</label>
+                  <input id="galFile" type="file" accept="image/*" required />
+                  <p class="hint">Demo: guardamos en el navegador (DataURL). Luego: Storage real.</p>
+                </div>
+
+                <div class="actions">
+                  <button class="btn primary" id="galUploadBtn" type="submit">Subir a galería</button>
+                  <button class="btn" id="galResetBtn" type="button">Limpiar</button>
+                </div>
+
+                <p class="fine">
+                  * En esta fase no hay BD. Se guarda local.
+                </p>
+              </form>
+
+              <!-- ✅ Preview (IDs esperados por admin-gallery.js) -->
+              <div class="divider"></div>
+
+              <div class="editorEmpty" id="galPreview" aria-label="Previsualización">
+                <img id="galPreviewImg" alt="Preview"
+                  style="display:none; width:100%; border-radius:14px; border:1px solid rgba(255,255,255,.10);" />
+                <div style="margin-top:12px;">
+                  <p class="itemTitle" id="galPreviewTitle">Sin imagen seleccionada</p>
+                  <p class="itemMeta" id="galPreviewMeta">Seleccioná una foto para previsualizar.</p>
+                  <div class="pills" id="galPreviewTags" style="margin-top:10px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- List -->
+            <div class="list" id="galleryList" aria-label="Lista de fotos en galería"></div>
+          </div>
+        </section>
+
+        <!-- ✅ PROMOS TAB -->
+        <section class="panel" id="tab-promos" role="tabpanel" hidden>
+          <div class="panelTop">
+            <div class="panelTitle">
+              <h3>Promos</h3>
+              <p>Creá banners o modales para el Home (demo local). Luego: BD.</p>
+            </div>
+
+            <button class="btn primary" id="newPromoBtnTop" type="button">+ Crear promo</button>
+          </div>
+
+          <div class="split">
+            <!-- Editor -->
+            <div class="editor" aria-label="Editor de promos">
+              <div class="editorEmpty" id="promoEmpty">
+                <p style="margin:0 0 10px;">
+                  Creá una promo nueva o seleccioná una de la lista.
+                </p>
+                <!-- ✅ CTA real que el bridge puede clickear -->
+              </div>
+
+              <form id="promoForm" class="editorForm" hidden>
+                <div class="row">
+                  <div class="field">
+                    <label for="pType">Tipo</label>
+                    <select id="pType" required>
+                      <option value="banner">Banner</option>
+                      <option value="modal">Modal</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="pActive">Estado</label>
+                    <select id="pActive" required>
+                      <option value="true">Activa</option>
+                      <option value="false">Inactiva</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="pPriority">Prioridad</label>
+                    <input id="pPriority" type="number" min="0" value="10" />
+                    <p class="hint">Mayor prioridad se muestra primero.</p>
+                  </div>
+
+                  <div class="field">
+                    <label for="pBadge">Badge (opcional)</label>
+                    <input id="pBadge" type="text" placeholder="NUEVO" maxlength="16" />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="pTitle">Título</label>
+                  <input id="pTitle" type="text" required maxlength="80" placeholder="Ej: Club del Vino viene pronto" />
+                </div>
+
+                <div class="field">
+                  <label for="pDesc">Descripción</label>
+                  <textarea id="pDesc" rows="3" maxlength="180" placeholder="Texto corto (máx 180)"></textarea>
+                  <div class="counter"><span id="pDescCount">0</span>/180</div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="pCtaLabel">CTA Label</label>
+                    <input id="pCtaLabel" type="text" maxlength="40" placeholder="Ej: Conocer" />
+                  </div>
+                  <div class="field">
+                    <label for="pCtaHref">CTA Link</label>
+                    <input id="pCtaHref" type="text" maxlength="240" placeholder="https://wa.me/..." />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label for="pMediaImg">Imagen (solo modal, opcional)</label>
+                    <input id="pMediaImg" type="text" maxlength="220" placeholder="./assets/img/hero-1.jpg" />
+                  </div>
+
+                  <div class="field">
+                    <label for="pDismissDays">“No molestar” (días)</label>
+                    <input id="pDismissDays" type="number" min="1" value="7" />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="pNote">Nota (solo modal, opcional)</label>
+                  <input id="pNote" type="text" maxlength="120" placeholder="Tip: si te unís ahora..." />
+                </div>
+
+                <div class="divider"></div>
+
+                <div id="promoPreview" aria-label="Preview"></div>
+
+                <div class="actions">
+                  <button class="btn primary" type="submit" id="savePromoBtn">Guardar</button>
+                  <button class="btn" type="button" id="newPromoBtn">Nueva</button>
+                  <button class="btn" type="button" id="deletePromoBtn">Eliminar</button>
+                </div>
+
+                <p class="fine">* Se guarda en tu navegador (localStorage). Home lo lee automáticamente.</p>
+              </form>
+            </div>
+
+            <!-- List -->
+            <div class="list" id="promosList" aria-label="Lista de promos"></div>
+          </div>
+        </section>
+
+      </section>
+    </div>
+  </main>
+
+  <!-- ✅ Orden: data, auth guard, admin app -->
+  <script src="./js/data.js"></script>
+  <script src="./js/admin-auth.js"></script>
+  <script src="./js/admin.js"></script>
+  <script src="./js/admin-gallery.js"></script>
+  <script src="./js/admin-promos.js"></script>
+
+  <!-- ✅ Bridge para abrir form de promos desde botones del HTML -->
+  <script>
+    (function () {
+      "use strict";
+      const tabBtn = document.querySelector('.tab[data-tab="promos"]');
+      const emptyCta = document.getElementById("promoEmptyCta");
+      const topNew = document.getElementById("newPromoBtnTop");
+
+      function goPromosTab() {
+        if (tabBtn) tabBtn.click();
+      }
+
+      function clickInnerNew() {
+        const innerNew = document.getElementById("newPromoBtn");
+        if (innerNew) innerNew.click();
+      }
+
+      function openPromosNew() {
+        goPromosTab();
+        setTimeout(clickInnerNew, 0);
+      }
+
+      if (emptyCta) emptyCta.addEventListener("click", openPromosNew);
+      if (topNew) topNew.addEventListener("click", openPromosNew);
+
+      if (location.hash === "#promos") {
+        openPromosNew();
+      }
+    })();
+  </script>
+</body>
+
+</html>

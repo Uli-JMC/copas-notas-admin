@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>Admin Login | Entre Copas & Notas</title>
+  <meta name="description" content="Acceso administrador." />
+
+  <link rel="stylesheet" href="./css/admin.css" />
+</head>
+
+<body class="adminLoginPage">
+  <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
+
+  <main class="page">
+    <div class="container">
+
+      <section class="login" id="loginPanel" aria-label="Login admin">
+        <div class="loginCard">
+
+          <div class="loginBrand" aria-label="Marca">
+            <img id="adminLogo" src="/assets/img/logocuadrado-entrecopasynotas.png" alt="Entre Copas & Notas" />
+            <div>
+              <p class="kicker">Acceso</p>
+              <h1 class="h1">Panel de administración</h1>
+            </div>
+          </div>
+
+          <p class="sub">
+            Por ahora es un “modo admin” local. Luego lo conectamos con Supabase Auth.
+          </p>
+
+          <form id="loginForm" class="loginForm" novalidate>
+            <div class="field">
+              <label for="adminEmail">Correo</label>
+              <input id="adminEmail" type="email" placeholder="admin@entrecopasynotas.com" required />
+              <p class="fine" id="errEmail" hidden>Ingresá un correo válido.</p>
+            </div>
+
+            <div class="field">
+              <label for="adminPass">Contraseña</label>
+              <input id="adminPass" type="password" placeholder="••••••••" required />
+              <p class="fine" id="errPass" hidden>Mínimo 6 caracteres.</p>
+            </div>
+
+            <button class="btn primary" type="submit">Entrar</button>
+
+            <p class="fine">
+              Demo: cualquier correo + contraseña con mínimo 6 caracteres.
+            </p>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="./js/data.js"></script>
+  <script src="./js/admin-auth.js"></script>
+
+  <script>
+    (function () {
+      try {
+        if (window.ECN && typeof ECN.getMedia === "function") {
+          const m = ECN.getMedia();
+          const img = document.getElementById("adminLogo");
+          if (img && m && m.logoPath) img.src = m.logoPath;
+        }
+      } catch (_) { }
+    })();
+  </script>
+</body>
+</html>
