@@ -1,40 +1,21 @@
 "use strict";
 
 /**
- * admin-auth.js ✅ PRO (Supabase Auth REAL + Admin Gate)
+ * admin-auth.js ✅ FINAL (Supabase Auth + Admin Gate)
  *
  * Páginas:
- * - admin-login.html: form #loginForm (#adminEmail, #adminPass) -> login -> redirect a ./admin.html
+ * - admin-login.html: form #loginForm (#adminEmail, #adminPass) -> login -> redirect
  * - admin.html: requiere sesión + requiere ser ADMIN -> guard + logout (#logoutBtn)
  *
  * Seguridad:
  * - returnUrl (?r=) sanitizado (solo permite archivos *.html simples)
  * - Sin service role key en frontend
- * - Gate por tabla "admins" (whitelist) para bloquear acceso al panel
+ * - Gate por tabla "admins" (whitelist) -> usa APP.isAdmin()
  *
  * Requisitos:
  * 1) https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
- * 2) ./js/supabaseClient.js   (crea APP.supabase)
+ * 2) ./js/supabaseClient.js   (crea APP.supabase + APP.isAdmin)
  * 3) ./js/admin-auth.js
- *
- * ⚙️ Necesitás una tabla: public.admins
- * Recomendado (simple):
- *   create table public.admins (
- *     user_id uuid primary key references auth.users(id) on delete cascade,
- *     email text,
- *     role text default 'admin',
- *     created_at timestamptz default now()
- *   );
- *
- * Y RLS:
- *   alter table public.admins enable row level security;
- *   create policy "admins can read own row"
- *     on public.admins for select
- *     to authenticated
- *     using (auth.uid() = user_id);
- *
- *   -- (opcional) si querés que solo ciertos usuarios puedan administrar admins,
- *   -- lo hacés con policies más avanzadas o desde SQL dashboard.
  */
 (function () {
   const $ = (sel) => document.querySelector(sel);
@@ -44,9 +25,6 @@
   // ------------------------------------------------------------
   const LOGIN_URL = "./admin-login.html";
   const ADMIN_URL = "./admin.html";
-
-  // Tabla whitelist de admins (ajustable)
-  const ADMINS_TABLE = "admins";
 
   // ------------------------------------------------------------
   // UI helpers
@@ -80,7 +58,7 @@
       el.style.transform = "translateY(-6px)";
       setTimeout(() => el.remove(), 180);
     };
-    el.querySelector(".close")?.addEventListener("click", kill);
+    el.querySelector(".close")?.addEventListener("click", kill, { once: true });
     setTimeout(kill, timeoutMs);
   }
 
@@ -122,8 +100,8 @@
   function hardFail(msg) {
     try {
       console.error("[admin-auth]", msg);
-    } catch (_) { }
-    toast("Error", msg, 3600);
+    } catch (_) {}
+    toast("Error", msg, 4200);
   }
 
   async function getSession() {
@@ -144,7 +122,7 @@
   async function signOut() {
     try {
       await window.APP.supabase.auth.signOut();
-    } catch (_) { }
+    } catch (_) {}
   }
 
   function mapAuthError(err) {
@@ -159,40 +137,27 @@
   }
 
   // ------------------------------------------------------------
-  // Admin Gate (whitelist)
+  // Admin Gate (usa APP.isAdmin() de supabaseClient.js)
   // ------------------------------------------------------------
-  async function isAdminUser(userId) {
-    // IMPORTANTE: esto depende de RLS en public.admins
-    // Policy recomendada: auth.uid() = user_id (select)
-    try {
-      const { data, error } = await window.APP.supabase
-        .from(ADMINS_TABLE)
-        .select("user_id")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (error) {
-        // Si hay error por RLS mal configurada, lo mostramos como acceso denegado pero avisamos en consola
-        console.warn("[admin-auth] admins table check error:", error);
-        return false;
-      }
-      return !!(data && String(data.user_id) === String(userId));
-    } catch (e) {
-      console.warn("[admin-auth] admins gate exception:", e);
-      return false;
-    }
-  }
-
   async function requireAdminOrKick(session) {
     const userId = session?.user?.id || "";
     if (!userId) return false;
 
-    const ok = await isAdminUser(userId);
+    // ✅ Centralizado (NO duplicamos query a tabla admins aquí)
+    if (typeof window.APP.isAdmin !== "function") {
+      console.warn("[admin-auth] Falta APP.isAdmin() (revisá supabaseClient.js).");
+      await signOut();
+      toast("Config incompleta", "Falta configurar el gate de admin.", 3600);
+      setTimeout(() => go(LOGIN_URL), 650);
+      return false;
+    }
+
+    const ok = await window.APP.isAdmin();
     if (ok) return true;
 
-    // Si no es admin, cerramos sesión para evitar quedarse “medio logueado” en el panel
+    // No admin → cerramos sesión para no quedar “medio logueado”
     await signOut();
-    toast("Acceso denegado", "Tu cuenta no tiene permisos para entrar al panel.", 3600);
+    toast("Acceso denegado", "Tu cuenta no tiene permisos para entrar al panel.", 3800);
     setTimeout(() => go(LOGIN_URL), 650);
     return false;
   }
@@ -235,7 +200,6 @@
         toast("Sesión cerrada", "Volviendo al login…", 1200);
         setTimeout(() => go(LOGIN_URL), 450);
       } finally {
-        // si por alguna razón no redirige
         setTimeout(() => (btn.disabled = false), 1200);
       }
     });
@@ -245,7 +209,7 @@
   // Login (admin-login.html)
   // ------------------------------------------------------------
   async function initLoginPage() {
-    // Si ya hay sesión válida, igual verificamos admin gate
+    // Si ya hay sesión, igual validamos admin gate
     const existing = await getSession();
     if (existing) {
       const okAdmin = await requireAdminOrKick(existing);
@@ -294,7 +258,7 @@
       try {
         const session = await signIn(email, pass);
 
-        // ✅ Gate real: si no es admin, no entra
+        // ✅ Si no es admin, NO entra
         const okAdmin = await requireAdminOrKick(session);
         if (!okAdmin) return;
 
@@ -330,7 +294,7 @@
           await requireAdminOrKick(session);
         }
       });
-    } catch (_) { }
+    } catch (_) {}
   }
 
   // ------------------------------------------------------------

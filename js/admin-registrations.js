@@ -1,9 +1,9 @@
 /* ============================================================
    admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV)
    - Admin: lista inscripciones desde public.registrations
-   - Join ligero para mostrar: events.title + event_dates.label
-   - Filtro usa el search global #search (mismo del panel)
-   - Exporta CSV (lo que esté filtrado en pantalla)
+   - Join ligero: events.title + event_dates.label (si existe event_date_id)
+   - Filtro usa el search global #search
+   - Exporta CSV (lo filtrado en pantalla)
    - Botón "Cargar demo" (seedRegsBtn) se usa como "Refrescar"
    - NO depende de data.js / ECN
 
@@ -14,9 +14,9 @@
    - #seedRegsBtn (botón)  -> lo usamos como "Refrescar"
    - #search (input search global)
 
-   Tablas/FK (según tu schema):
-   - registrations.event_id -> events.id
-   - registrations.event_date_id -> event_dates.id
+   Nota importante:
+   - Este archivo NO asume que registrations tiene event_date_id.
+     Si no existe, cae a joins parciales o sin joins.
    ============================================================ */
 (function () {
   "use strict";
@@ -29,7 +29,9 @@
   if (!document.getElementById("appPanel")) return;
 
   if (!window.APP || !APP.supabase) {
-    console.error("APP.supabase no existe. Revisá el orden: Supabase CDN -> supabaseClient.js -> admin-registrations.js");
+    console.error(
+      "APP.supabase no existe. Revisá el orden: Supabase CDN -> supabaseClient.js -> admin-registrations.js"
+    );
     return;
   }
 
@@ -87,12 +89,19 @@
   // ------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------
-  function safeStr(x) { return String(x ?? ""); }
-  function cleanSpaces(s) { return safeStr(s).replace(/\s+/g, " ").trim(); }
+  function safeStr(x) {
+    return String(x ?? "");
+  }
+  function cleanSpaces(s) {
+    return safeStr(s).replace(/\s+/g, " ").trim();
+  }
 
   function isRLSError(err) {
     const m = safeStr(err?.message || "").toLowerCase();
+    const code = safeStr(err?.code || "").toLowerCase();
     return (
+      code === "42501" ||
+      m.includes("42501") ||
       m.includes("rls") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
@@ -103,8 +112,24 @@
 
   function isMissingTable(err) {
     const m = safeStr(err?.message || "").toLowerCase();
-    // PostgREST suele decir: relation "public.x" does not exist
-    return m.includes("does not exist") || m.includes("relation") && m.includes("does not exist");
+    return (m.includes("relation") && m.includes("does not exist")) || m.includes("does not exist");
+  }
+
+  function isMissingColumn(err) {
+    const m = safeStr(err?.message || "").toLowerCase();
+    // PostgREST: column "x" does not exist / Could not find the 'x' column
+    return m.includes("column") && m.includes("does not exist") || m.includes("could not find") && m.includes("column");
+  }
+
+  function isJoinRelationError(err) {
+    const msg = safeStr(err?.message || "").toLowerCase();
+    return (
+      msg.includes("could not find") ||
+      msg.includes("relationship") ||
+      msg.includes("embedded") ||
+      msg.includes("schema cache") ||
+      msg.includes("foreign key")
+    );
   }
 
   function prettyError(err) {
@@ -168,8 +193,15 @@
   // ------------------------------------------------------------
   const TABLE = "registrations";
 
-  // Intento 1 (lo normal si las relaciones quedan como "events" y "event_dates")
-  const SELECT_A = `
+  // IMPORTANTE:
+  // - No asumimos que existe event_date_id.
+  // - Intentamos niveles: FULL JOIN (events+event_dates) -> events only -> flat.
+  //
+  // Nota: si tus FK tienen nombres "registrations_event_id_fkey", etc,
+  // el fallback con alias suele funcionar. Pero igual puede variar, por eso hay niveles.
+
+  // Nivel 1: columnas completas + join "simple"
+  const SELECT_FULL_A = `
     id,
     event_id,
     event_date_id,
@@ -182,10 +214,8 @@
     event_dates ( label )
   `;
 
-  // Fallback (si PostgREST nombra distinto la relación por FK)
-  // Muchos proyectos lo exponen como: events!registrations_event_id_fkey(...)
-  // y event_dates!registrations_event_date_id_fkey(...)
-  const SELECT_B = `
+  // Nivel 1b: FULL JOIN con alias por FK name típico
+  const SELECT_FULL_B = `
     id,
     event_id,
     event_date_id,
@@ -198,6 +228,42 @@
     event_dates:event_dates!registrations_event_date_id_fkey ( label )
   `;
 
+  // Nivel 2: SOLO events (si no existe event_date_id o el join a event_dates falla)
+  const SELECT_EVENTS_A = `
+    id,
+    event_id,
+    name,
+    email,
+    phone,
+    marketing_opt_in,
+    created_at,
+    events ( title )
+  `;
+
+  // Nivel 2b: SOLO events con alias por FK
+  const SELECT_EVENTS_B = `
+    id,
+    event_id,
+    name,
+    email,
+    phone,
+    marketing_opt_in,
+    created_at,
+    events:events!registrations_event_id_fkey ( title )
+  `;
+
+  // Nivel 3: sin joins (no rompe nunca)
+  const SELECT_FLAT = `
+    id,
+    event_id,
+    event_date_id,
+    name,
+    email,
+    phone,
+    marketing_opt_in,
+    created_at
+  `;
+
   // ------------------------------------------------------------
   // State
   // ------------------------------------------------------------
@@ -206,7 +272,9 @@
     loading: false,
     didBind: false,
     refreshT: null,
-    usingSelectB: false, // detecta si el join A falló
+
+    // debug: qué estrategia se usó
+    mode: "unknown", // fullA|fullB|eventsA|eventsB|flat
   };
 
   // ------------------------------------------------------------
@@ -238,45 +306,75 @@
     return Array.isArray(data) ? data : [];
   }
 
-  async function fetchWithFallback() {
-    // 1) Intento normal
+  async function fetchSmart() {
+    // 1) FULL A
     try {
-      const dataA = await fetchRegistrations(SELECT_A);
-      S.usingSelectB = false;
-      return dataA;
+      const data = await fetchRegistrations(SELECT_FULL_A);
+      S.mode = "fullA";
+      return data;
     } catch (errA) {
-      // Si el error es por join/relación, probamos fallback B
-      const msg = safeStr(errA?.message || "").toLowerCase();
-      const looksLikeJoin =
-        msg.includes("could not find") ||
-        msg.includes("relationship") ||
-        msg.includes("embedded") ||
-        msg.includes("schema cache") ||
-        msg.includes("foreign key");
+      // si falla por columna missing (ej: no existe event_date_id), nos vamos a nivel 2/3
+      const missingCol = isMissingColumn(errA);
+      const joinErr = isJoinRelationError(errA);
 
-      if (!looksLikeJoin) throw errA;
+      // 1b) FULL B solo si parece problema de relación/join
+      if (!missingCol && joinErr) {
+        try {
+          const data = await fetchRegistrations(SELECT_FULL_B);
+          S.mode = "fullB";
+          return data;
+        } catch (errB) {
+          // seguimos
+        }
+      }
 
-      const dataB = await fetchRegistrations(SELECT_B);
-      S.usingSelectB = true;
-      return dataB;
+      // 2) EVENTS A
+      try {
+        const data = await fetchRegistrations(SELECT_EVENTS_A);
+        S.mode = "eventsA";
+        return data;
+      } catch (err2A) {
+        const joinErr2 = isJoinRelationError(err2A);
+        if (joinErr2) {
+          // 2b) EVENTS B
+          try {
+            const data = await fetchRegistrations(SELECT_EVENTS_B);
+            S.mode = "eventsB";
+            return data;
+          } catch (err2B) {
+            // seguimos
+          }
+        }
+      }
+
+      // 3) FLAT (último recurso)
+      const dataFlat = await fetchRegistrations(SELECT_FLAT);
+      S.mode = "flat";
+      return dataFlat;
     }
   }
 
   function normalizeRow(r) {
-    // Con A: r.events.title / r.event_dates.label
-    // Con B: también quedan como "events" y "event_dates" por alias
+    // FULL/EVENTS: r.events.title
     const evTitle = r?.events?.title || "—";
+
+    // FULL: r.event_dates.label
     const dateLabel = r?.event_dates?.label || "—";
 
     return {
       id: safeStr(r?.id),
+
       eventTitle: safeStr(evTitle),
       dateLabel: safeStr(dateLabel),
+
       name: safeStr(r?.name),
       email: safeStr(r?.email),
       phone: safeStr(r?.phone || ""),
+
       marketing: !!r?.marketing_opt_in,
+
       createdAt: safeStr(r?.created_at || ""),
+
       eventId: safeStr(r?.event_id || ""),
       eventDateId: safeStr(r?.event_date_id || ""),
     };
@@ -287,9 +385,7 @@
     if (!q) return list;
 
     return list.filter((x) => {
-      const hay = (
-        `${x.eventTitle} ${x.dateLabel} ${x.name} ${x.email} ${x.phone}`
-      ).toLowerCase();
+      const hay = `${x.eventTitle} ${x.dateLabel} ${x.name} ${x.email} ${x.phone}`.toLowerCase();
       return hay.includes(q);
     });
   }
@@ -313,19 +409,21 @@
       return;
     }
 
-    tbody.innerHTML = list.map((r) => {
-      return `
-        <tr data-id="${escapeHtml(r.id)}">
-          <td>${escapeHtml(r.eventTitle)}</td>
-          <td>${escapeHtml(r.dateLabel)}</td>
-          <td>${escapeHtml(r.name)}</td>
-          <td>${escapeHtml(r.email)}</td>
-          <td>${escapeHtml(r.phone || "—")}</td>
-          <td>${r.marketing ? "Sí" : "No"}</td>
-          <td>${escapeHtml(fmtDate(r.createdAt))}</td>
-        </tr>
-      `;
-    }).join("");
+    tbody.innerHTML = list
+      .map((r) => {
+        return `
+          <tr data-id="${escapeHtml(r.id)}">
+            <td>${escapeHtml(r.eventTitle)}</td>
+            <td>${escapeHtml(r.dateLabel)}</td>
+            <td>${escapeHtml(r.name)}</td>
+            <td>${escapeHtml(r.email)}</td>
+            <td>${escapeHtml(r.phone || "—")}</td>
+            <td>${r.marketing ? "Sí" : "No"}</td>
+            <td>${escapeHtml(fmtDate(r.createdAt))}</td>
+          </tr>
+        `;
+      })
+      .join("");
   }
 
   // ------------------------------------------------------------
@@ -336,19 +434,26 @@
 
     if (S.loading) return;
     S.loading = true;
+
     if (!silent) toast("Inscripciones", "Cargando registros…", 1200);
 
     try {
       const s = await ensureSession();
       if (!s) return;
 
-      const data = await fetchWithFallback();
+      const data = await fetchSmart();
       S.list = data.map(normalizeRow);
 
       if (!silent) {
-        const j = S.usingSelectB ? " (join B)" : "";
-        toast("Listo", "Inscripciones actualizadas." + j, 1400);
+        const tag =
+          S.mode === "fullA" ? "" :
+          S.mode === "fullB" ? " (join full B)" :
+          S.mode === "eventsA" ? " (solo events)" :
+          S.mode === "eventsB" ? " (solo events B)" :
+          " (sin joins)";
+        toast("Listo", "Inscripciones actualizadas." + tag, 1400);
       }
+
       render();
     } catch (err) {
       console.error(err);
@@ -401,18 +506,22 @@
     lines.push(header.map(csvCell).join(","));
 
     rows.forEach((r) => {
-      lines.push([
-        r.eventTitle,
-        r.dateLabel,
-        r.name,
-        r.email,
-        r.phone || "",
-        r.marketing ? "true" : "false",
-        r.createdAt,
-        r.eventId,
-        r.eventDateId,
-        r.id,
-      ].map(csvCell).join(","));
+      lines.push(
+        [
+          r.eventTitle,
+          r.dateLabel,
+          r.name,
+          r.email,
+          r.phone || "",
+          r.marketing ? "true" : "false",
+          r.createdAt,
+          r.eventId,
+          r.eventDateId,
+          r.id,
+        ]
+          .map(csvCell)
+          .join(",")
+      );
     });
 
     // BOM para Excel (mejor soporte UTF-8)
@@ -430,7 +539,9 @@
     S.didBind = true;
 
     if (refreshBtn) {
-      try { refreshBtn.textContent = "Refrescar"; } catch (_) {}
+      try {
+        refreshBtn.textContent = "Refrescar";
+      } catch (_) {}
       refreshBtn.addEventListener("click", () => refreshNow({ silent: false }));
     }
 
@@ -439,7 +550,7 @@
     // Filtro global (local)
     searchEl?.addEventListener("input", () => render());
 
-    // Cuando se abre la pestaña regs, refrescamos
+    // Cuando se abre la pestaña regs, refrescamos (suave)
     document.querySelectorAll('.tab[data-tab="regs"]').forEach((btn) => {
       btn.addEventListener("click", () => {
         render();
@@ -458,6 +569,7 @@
     if (isRegsTabActive()) {
       await refreshNow({ silent: true });
     } else {
+      // no spamear: refresca una vez por si ya hay datos y el usuario entra luego
       refreshDebounced(250);
     }
   })();

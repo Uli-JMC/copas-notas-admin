@@ -57,6 +57,7 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
+    // Si más adelante exponés window.toast desde admin.js, lo usamos.
     try {
       if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
     } catch (_) {}
@@ -80,7 +81,7 @@
       el.style.transform = "translateY(-6px)";
       setTimeout(() => el.remove(), 180);
     };
-    el.querySelector(".close")?.addEventListener("click", kill);
+    el.querySelector(".close")?.addEventListener("click", kill, { once: true });
     setTimeout(kill, timeoutMs);
   }
 
@@ -114,7 +115,10 @@
 
   function isRLSError(err) {
     const m = String(err?.message || "").toLowerCase();
+    const code = String(err?.code || "").toLowerCase();
     return (
+      code === "42501" ||
+      m.includes("42501") ||
       m.includes("rls") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
@@ -146,8 +150,25 @@
     dates: [],
     query: "",
     didBind: false,
-    activeDateId: null, // dateId en edición
+
+    // edición
+    activeDateId: null,
+
+    // lock
+    busy: false,
   };
+
+  function withLock(fn) {
+    return async function (...args) {
+      if (S.busy) return;
+      S.busy = true;
+      try {
+        return await fn(...args);
+      } finally {
+        S.busy = false;
+      }
+    };
+  }
 
   // ------------------------------------------------------------
   // DOM refs (admin.html actualizado)
@@ -226,7 +247,7 @@
       event_id: eventId,
       label: cleanSpaces(label) || "Por definir",
       seats_total,
-      seats_available: seats_total, // arranque
+      seats_available: seats_total, // regla de creación
     };
 
     const { data, error } = await sb
@@ -308,23 +329,29 @@
   }
 
   function getActiveEvent() {
-    return S.events.find((x) => x.id === S.activeEventId) || null;
+    return S.events.find((x) => String(x.id) === String(S.activeEventId)) || null;
+  }
+
+  function getActiveDate() {
+    return S.dates.find((x) => String(x.id) === String(S.activeDateId)) || null;
   }
 
   function setFormMode(dateIdOrNull) {
     const r = R();
     S.activeDateId = dateIdOrNull ? String(dateIdOrNull) : null;
 
-    if (!r.dateId || !r.btnDelete) return;
+    if (r.dateId) r.dateId.value = S.activeDateId || "";
+    if (r.btnDelete) r.btnDelete.disabled = !S.activeDateId;
 
-    r.dateId.value = S.activeDateId || "";
-    r.btnDelete.disabled = !S.activeDateId;
-
+    // Modo Nueva
     if (!S.activeDateId) {
-      // modo "Nueva"
       if (r.label) r.label.value = "";
       if (r.seatsTotal) r.seatsTotal.value = "0";
       if (r.seatsAvail) r.seatsAvail.value = "0";
+    } else {
+      // si estamos setMode con id, llenamos desde date actual
+      const d = getActiveDate();
+      if (d) fillFormFromDate(d);
     }
   }
 
@@ -341,8 +368,15 @@
     if (r.label) r.label.value = d.label || "";
     if (r.seatsTotal) r.seatsTotal.value = String(total);
     if (r.seatsAvail) r.seatsAvail.value = String(avail);
-
     if (r.btnDelete) r.btnDelete.disabled = false;
+  }
+
+  function safeConfirm(msg) {
+    try {
+      return window.confirm(msg);
+    } catch (_) {
+      return false;
+    }
   }
 
   // ------------------------------------------------------------
@@ -370,7 +404,11 @@
     list.forEach((ev) => {
       const item = document.createElement("div");
       item.className = "item";
-      item.dataset.id = ev.id;
+      item.dataset.id = String(ev.id);
+
+      if (S.activeEventId && String(ev.id) === String(S.activeEventId)) {
+        item.classList.add("active");
+      }
 
       item.innerHTML = `
         <div>
@@ -378,27 +416,33 @@
           <p class="itemMeta">${escapeHtml(ev.type || "—")} • ${escapeHtml(fmtMonthKey(ev.month_key))}</p>
         </div>
         <div class="pills">
-          <span class="pill">${ev.id === S.activeEventId ? "ACTIVO" : "FECHAS"}</span>
+          <span class="pill">${String(ev.id) === String(S.activeEventId) ? "ACTIVO" : "FECHAS"}</span>
         </div>
       `;
 
-      item.addEventListener("click", async () => {
-        try {
-          if (S.activeEventId === ev.id) return;
-          S.activeEventId = ev.id;
-          setNote("Cargando fechas…");
-          await fetchDatesForEvent(S.activeEventId);
-          setNote("Listo.");
-          setEditorVisible(true);
-          setFormMode(null);
-          renderDatesList();
-          renderSelectedEventHeader();
-        } catch (err) {
-          console.error(err);
-          if (isRLSError(err)) setNote("⚠️ RLS bloquea lectura. Falta policy SELECT en event_dates.");
-          toast("Error", isRLSError(err) ? "RLS bloquea (SELECT event_dates)." : prettyError(err));
-        }
-      });
+      item.addEventListener(
+        "click",
+        withLock(async () => {
+          try {
+            if (String(S.activeEventId) === String(ev.id)) return;
+            S.activeEventId = ev.id;
+
+            setNote("Cargando fechas…");
+            await fetchDatesForEvent(S.activeEventId);
+
+            setNote("Listo.");
+            setEditorVisible(true);
+            setFormMode(null);
+
+            // Re-render completo para actualizar active pill
+            renderAll();
+          } catch (err) {
+            console.error(err);
+            if (isRLSError(err)) setNote("⚠️ RLS bloquea lectura. Falta policy SELECT en event_dates.");
+            toast("Error", isRLSError(err) ? "RLS bloquea (SELECT event_dates)." : prettyError(err));
+          }
+        })
+      );
 
       r.eventsList.appendChild(item);
     });
@@ -437,6 +481,10 @@
       row.className = "item";
       row.dataset.id = String(d.id);
 
+      if (S.activeDateId && String(d.id) === String(S.activeDateId)) {
+        row.classList.add("active");
+      }
+
       const total = clampInt(d.seats_total, 0, 1000000);
       const avail = clampInt(d.seats_available, 0, total);
 
@@ -460,7 +508,8 @@
 
       row.addEventListener("click", () => {
         fillFormFromDate(d);
-        toast("Editando", "Podés ajustar etiqueta y cupos. Guardá para aplicar cambios.", 2000);
+        renderDatesList(); // refresca highlight
+        toast("Editando", "Ajustá etiqueta y cupos. Guardá para aplicar cambios.", 2000);
       });
 
       frag.appendChild(row);
@@ -489,13 +538,13 @@
   // ------------------------------------------------------------
   // Actions
   // ------------------------------------------------------------
-  async function actionRefreshAll() {
+  const actionRefreshAll = withLock(async function () {
     try {
       setNote("Cargando eventos…");
       await fetchEvents();
 
       // mantener active si existe
-      if (S.activeEventId && !S.events.some((e) => e.id === S.activeEventId)) {
+      if (S.activeEventId && !S.events.some((e) => String(e.id) === String(S.activeEventId))) {
         S.activeEventId = null;
         S.dates = [];
         setFormMode(null);
@@ -512,6 +561,7 @@
       }
 
       setNote("Listo.");
+      setFormMode(null);
       renderAll();
     } catch (err) {
       console.error(err);
@@ -519,18 +569,18 @@
       toast("Error", isRLSError(err) ? "RLS bloquea (SELECT events/event_dates)." : prettyError(err));
       setNote("No se pudo refrescar.");
     }
-  }
+  });
 
-  async function actionNewDate() {
+  const actionNewDate = withLock(async function () {
     if (!S.activeEventId) {
       toast("Fechas", "Primero seleccioná un evento.");
       return;
     }
     setFormMode(null);
     toast("Nueva fecha", "Completá la etiqueta y cupos, luego Guardar.", 2200);
-  }
+  });
 
-  async function actionSaveDate(e) {
+  const actionSaveDate = withLock(async function (e) {
     e.preventDefault();
 
     if (!S.activeEventId) {
@@ -548,27 +598,27 @@
     }
 
     try {
-      // create
+      // CREATE
       if (!S.activeDateId) {
         setNote("Creando fecha…");
         const created = await createDate(S.activeEventId, label, total);
+
         S.dates.unshift(created);
         setNote("Fecha creada.");
         toast("Listo", "Fecha creada.");
+
         fillFormFromDate(created); // queda seleccionada
-        renderSelectedEventHeader();
-        renderDatesList();
+        renderAll();
         return;
       }
 
-      // update
+      // UPDATE
       const current = S.dates.find((x) => String(x.id) === String(S.activeDateId));
       const currTotal = clampInt(current?.seats_total, 0, 1000000);
       const currAvail = clampInt(current?.seats_available, 0, currTotal);
 
       // regla segura:
-      // - si total cambia y no sabemos "used", preservamos avail dentro del nuevo total:
-      //     newAvail = min(currAvail, newTotal)
+      // preserva available dentro del nuevo total
       const nextAvail = Math.min(currAvail, total);
 
       setNote("Guardando cambios…");
@@ -578,12 +628,12 @@
         seats_available: nextAvail,
       });
 
-      S.dates = S.dates.map((d) => (d.id === updated.id ? updated : d));
+      S.dates = S.dates.map((d) => (String(d.id) === String(updated.id) ? updated : d));
       setNote("Guardado.");
       toast("Guardado", "Fecha actualizada.");
+
       fillFormFromDate(updated);
-      renderSelectedEventHeader();
-      renderDatesList();
+      renderAll();
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {
@@ -594,9 +644,9 @@
         toast("Error", prettyError(err));
       }
     }
-  }
+  });
 
-  async function actionDeleteDate() {
+  const actionDeleteDate = withLock(async function () {
     if (!S.activeDateId) {
       toast("Eliminar", "Seleccioná una fecha de la lista primero.");
       return;
@@ -605,7 +655,7 @@
     const current = S.dates.find((x) => String(x.id) === String(S.activeDateId));
     const label = current?.label ? String(current.label) : "esta fecha";
 
-    const ok = confirm(`¿Eliminar ${label}?\n\nEsta acción no se puede deshacer.`);
+    const ok = safeConfirm(`¿Eliminar ${label}?\n\nEsta acción no se puede deshacer.`);
     if (!ok) return;
 
     try {
@@ -619,8 +669,7 @@
       setNote("Eliminada.");
       toast("Eliminada", "Se eliminó la fecha.");
 
-      renderSelectedEventHeader();
-      renderDatesList();
+      renderAll();
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {
@@ -631,16 +680,16 @@
         toast("Error", prettyError(err));
       }
     }
-  }
+  });
 
-  function actionClearForm() {
+  const actionClearForm = withLock(async function () {
     if (!S.activeEventId) {
       toast("Fechas", "Primero seleccioná un evento.");
       return;
     }
     setFormMode(null);
     toast("Nueva", "Formulario listo para crear una fecha nueva.", 2000);
-  }
+  });
 
   // ------------------------------------------------------------
   // Bind
@@ -658,10 +707,25 @@
     r.btnClear?.addEventListener("click", actionClearForm);
     r.btnDelete?.addEventListener("click", actionDeleteDate);
 
-    // Clamp UI: cuando cambia total, ajusta el available (disabled) por consistencia visual
+    // Importante:
+    // - En CREATE: seats_available refleja total
+    // - En EDIT: seats_available se preserva y solo se clampa visualmente a min(avail, total)
     r.seatsTotal?.addEventListener("input", () => {
       const total = clampInt(r.seatsTotal.value, 0, 1000000);
-      if (r.seatsAvail) r.seatsAvail.value = String(total); // en create lo refleja, en edit se recalcula en save
+
+      // si NO hay fecha activa => creando
+      if (!S.activeDateId) {
+        if (r.seatsAvail) r.seatsAvail.value = String(total);
+        return;
+      }
+
+      // editando => clamp visual
+      const curr = getActiveDate();
+      const currTotal = clampInt(curr?.seats_total, 0, 1000000);
+      const currAvail = clampInt(curr?.seats_available, 0, currTotal);
+      const nextAvail = Math.min(currAvail, total);
+
+      if (r.seatsAvail) r.seatsAvail.value = String(nextAvail);
     });
 
     // Búsqueda global re-render
@@ -694,6 +758,7 @@
         return;
       }
 
+      // Mantener active si ya existe, si no, seleccionar el primero
       if (!S.activeEventId) S.activeEventId = S.events[0].id;
 
       setNote("Cargando fechas…");

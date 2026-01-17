@@ -53,14 +53,15 @@ function toast(title, msg, timeoutMs = 3600) {
     el.style.transform = "translateY(-6px)";
     setTimeout(() => el.remove(), 180);
   };
-  el.querySelector(".close")?.addEventListener("click", kill);
+  el.querySelector(".close")?.addEventListener("click", kill, { once: true });
   setTimeout(kill, timeoutMs);
 }
 
 function setBusy(on, msg) {
   const note = $("#storageNote");
   if (!note) return;
-  note.textContent = on ? (msg || "Procesando…") : (msg || "");
+  if (!on && msg == null) return;
+  note.textContent = on ? (msg || "Procesando…") : (msg || note.textContent || "");
 }
 
 // ============================================================
@@ -70,8 +71,15 @@ function cleanSpaces(s) {
   return String(s ?? "").replace(/\s+/g, " ").trim();
 }
 
+const MONTHS = [
+  "ENERO", "FEBRERO", "MARZO", "ABRIL",
+  "MAYO", "JUNIO", "JULIO", "AGOSTO",
+  "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+];
+
 function normalizeMonth(m) {
-  return String(m || "").trim().toUpperCase();
+  const up = String(m || "").trim().toUpperCase();
+  return MONTHS.includes(up) ? up : "ENERO";
 }
 
 function parseHoursNumber(input) {
@@ -81,7 +89,7 @@ function parseHoursNumber(input) {
   if (!m) return "";
   const n = Number(m[1]);
   if (!Number.isFinite(n) || n <= 0) return "";
-  return Number.isInteger(n) ? String(n) : String(n);
+  return String(n);
 }
 
 function humanizeDurationFromHours(hoursStr) {
@@ -111,7 +119,10 @@ function getSB() {
 
 function isRLSError(err) {
   const m = String(err?.message || "").toLowerCase();
+  const code = String(err?.code || "").toLowerCase();
   return (
+    code === "42501" ||
+    m.includes("42501") ||
     m.includes("rls") ||
     m.includes("permission") ||
     m.includes("not allowed") ||
@@ -129,7 +140,6 @@ function prettyError(err) {
 // ============================================================
 // DB mapping (events)
 // ============================================================
-// Si tu schema cambia, ajustamos aquí (un solo lugar).
 const EVENTS_TABLE = "events";
 const EVENTS_SELECT = `
   id,
@@ -152,12 +162,9 @@ let state = {
   activeTab: "events",
   query: "",
   activeEventId: null,
-
-  // Supabase events
   events: [],
-
-  // modo
   mode: "supabase", // supabase | blocked | missing
+  busy: false,
 };
 
 // ============================================================
@@ -173,20 +180,20 @@ function hideAllTabs() {
 }
 
 function setTab(tab) {
-  state.activeTab = tab;
+  state.activeTab = tab || "events";
 
   $$(".tab").forEach((t) =>
-    t.setAttribute("aria-selected", t.dataset.tab === tab ? "true" : "false")
+    t.setAttribute("aria-selected", t.dataset.tab === state.activeTab ? "true" : "false")
   );
 
   hideAllTabs();
 
-  if (tab === "events") $("#tab-events") && ($("#tab-events").hidden = false);
-  if (tab === "dates") $("#tab-dates") && ($("#tab-dates").hidden = false);
-  if (tab === "regs") $("#tab-regs") && ($("#tab-regs").hidden = false);
-  if (tab === "media") $("#tab-media") && ($("#tab-media").hidden = false);
-  if (tab === "gallery") $("#tab-gallery") && ($("#tab-gallery").hidden = false);
-  if (tab === "promos") $("#tab-promos") && ($("#tab-promos").hidden = false);
+  if (state.activeTab === "events") $("#tab-events") && ($("#tab-events").hidden = false);
+  if (state.activeTab === "dates") $("#tab-dates") && ($("#tab-dates").hidden = false);
+  if (state.activeTab === "regs") $("#tab-regs") && ($("#tab-regs").hidden = false);
+  if (state.activeTab === "media") $("#tab-media") && ($("#tab-media").hidden = false);
+  if (state.activeTab === "gallery") $("#tab-gallery") && ($("#tab-gallery").hidden = false);
+  if (state.activeTab === "promos") $("#tab-promos") && ($("#tab-promos").hidden = false);
 
   renderAll();
 }
@@ -337,12 +344,14 @@ function renderEventList() {
   filtered.forEach((ev) => {
     const item = document.createElement("div");
     item.className = "item";
+    if (state.activeEventId && String(ev.id) === String(state.activeEventId)) {
+      item.classList.add("active");
+    }
+
     item.innerHTML = `
       <div>
         <p class="itemTitle">${escapeHtml(ev.title || "—")}</p>
-        <p class="itemMeta">
-          ${escapeHtml(ev.type || "—")} • ${escapeHtml(ev.month_key || "—")}
-        </p>
+        <p class="itemMeta">${escapeHtml(ev.type || "—")} • ${escapeHtml(ev.month_key || "—")}</p>
       </div>
       <div class="pills">
         <span class="pill">SUPABASE</span>
@@ -351,7 +360,7 @@ function renderEventList() {
 
     item.addEventListener("click", () => {
       state.activeEventId = ev.id;
-      renderEventEditor();
+      renderAll();
     });
 
     box.appendChild(item);
@@ -359,7 +368,7 @@ function renderEventList() {
 }
 
 function renderEventEditor() {
-  const ev = (state.events || []).find((e) => e.id === state.activeEventId) || null;
+  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
   if (!ev) {
     clearEditorForm();
@@ -371,14 +380,14 @@ function renderEventEditor() {
 
   $("#evTitle") && ($("#evTitle").value = ev.title || "");
   $("#evType") && ($("#evType").value = ev.type || "Cata de vino");
-  $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key) || "ENERO");
+  $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
   $("#evImg") && ($("#evImg").value = ev.img || "");
   $("#evDesc") && ($("#evDesc").value = ev.desc || "");
   $("#descCount") && ($("#descCount").textContent = String((ev.desc || "").length));
 
-  if ($("#evLocation")) $("#evLocation").value = ev.location || "";
-  if ($("#evTimeRange")) $("#evTimeRange").value = ev.time_range || "";
-  if ($("#evDurationHours")) $("#evDurationHours").value = ev.duration_hours || "";
+  $("#evLocation") && ($("#evLocation").value = ev.location || "");
+  $("#evTimeRange") && ($("#evTimeRange").value = ev.time_range || "");
+  $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours || "");
 
   if ($("#evDuration")) {
     const label =
@@ -387,15 +396,14 @@ function renderEventEditor() {
     $("#evDuration").value = label === "Por confirmar" ? "" : label;
   }
 
-  // En esta fase, dates siguen siendo otro módulo (event_dates)
+  // Fechas se conectan en admin-dates.js (event_dates)
   const datesList = $("#datesList");
   if (datesList) {
     datesList.innerHTML = `
       <div class="notice">
         <span class="badge">Fechas</span>
         <span>
-          Las fechas/cupos se gestionan en el siguiente paso con la tabla <strong>event_dates</strong>
-          (sección “Fechas”). Este editor se habilitará cuando actualicemos admin-dates.js.
+          Las fechas/cupos se gestionan en la sección <strong>“Fechas”</strong> usando la tabla <code>event_dates</code>.
         </span>
       </div>
     `;
@@ -404,9 +412,24 @@ function renderEventEditor() {
 }
 
 // ============================================================
+// Busy lock
+// ============================================================
+function withLock(fn) {
+  return async function (...args) {
+    if (state.busy) return;
+    state.busy = true;
+    try {
+      return await fn(...args);
+    } finally {
+      state.busy = false;
+    }
+  };
+}
+
+// ============================================================
 // Actions: Events (Supabase)
 // ============================================================
-async function createNewEvent() {
+const createNewEvent = withLock(async function () {
   try {
     if (state.mode !== "supabase") {
       toast("Bloqueado", "Primero necesitamos habilitar RLS/policies para admin.");
@@ -443,12 +466,12 @@ async function createNewEvent() {
       toast("Error", prettyError(err));
     }
   } finally {
-    setBusy(false, "");
+    setBusy(false, null);
   }
-}
+});
 
-async function duplicateActiveEvent() {
-  const ev = (state.events || []).find((e) => e.id === state.activeEventId);
+const duplicateActiveEvent = withLock(async function () {
+  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
   if (!ev) {
     toast("Seleccioná un evento", "Abrí un evento para poder duplicarlo.");
     return;
@@ -465,13 +488,13 @@ async function duplicateActiveEvent() {
     const payload = {
       title: `${ev.title || "Evento"} (Copia)`,
       type: ev.type || "Cata de vino",
-      month_key: ev.month_key || "ENERO",
+      month_key: normalizeMonth(ev.month_key || "ENERO"),
       img: ev.img || "./assets/img/hero-1.jpg",
       desc: ev.desc || "",
       location: ev.location || "",
       time_range: ev.time_range || "",
       duration_hours: ev.duration_hours || "",
-      duration: ev.duration || buildDurationLabel(ev.time_range || "", ev.duration_hours || ""),
+      duration: cleanSpaces(ev.duration || "") || buildDurationLabel(ev.time_range || "", ev.duration_hours || ""),
     };
 
     const created = await insertEvent(payload);
@@ -489,12 +512,12 @@ async function duplicateActiveEvent() {
       toast("Error", prettyError(err));
     }
   } finally {
-    setBusy(false, "");
+    setBusy(false, null);
   }
-}
+});
 
-async function deleteActiveEvent() {
-  const ev = (state.events || []).find((e) => e.id === state.activeEventId);
+const deleteActiveEvent = withLock(async function () {
+  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
   if (!ev) return;
 
   const ok = confirm(`Eliminar evento:\n\n${ev.title}\n\nEsta acción no se puede deshacer.`);
@@ -510,7 +533,7 @@ async function deleteActiveEvent() {
 
     await deleteEvent(ev.id);
 
-    state.events = (state.events || []).filter((x) => x.id !== ev.id);
+    state.events = (state.events || []).filter((x) => String(x.id) !== String(ev.id));
     state.activeEventId = null;
 
     toast("Evento eliminado", "Se eliminó correctamente.");
@@ -524,12 +547,12 @@ async function deleteActiveEvent() {
       toast("Error", prettyError(err));
     }
   } finally {
-    setBusy(false, "");
+    setBusy(false, null);
   }
-}
+});
 
-async function saveActiveEvent() {
-  const ev = (state.events || []).find((e) => e.id === state.activeEventId);
+const saveActiveEvent = withLock(async function () {
+  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
   if (!ev) return false;
 
   const title = cleanSpaces($("#evTitle")?.value || "");
@@ -572,7 +595,7 @@ async function saveActiveEvent() {
 
     const updated = await updateEvent(ev.id, payload);
 
-    state.events = (state.events || []).map((x) => (x.id === updated.id ? updated : x));
+    state.events = (state.events || []).map((x) => (String(x.id) === String(updated.id) ? updated : x));
 
     toast("Guardado", "Evento actualizado en Supabase.");
     renderAll();
@@ -587,9 +610,9 @@ async function saveActiveEvent() {
     }
     return false;
   } finally {
-    setBusy(false, "");
+    setBusy(false, null);
   }
-}
+});
 
 // ============================================================
 // Wiring
@@ -639,17 +662,21 @@ function wire() {
     saveActiveEvent();
   });
 
-  // Fechas placeholder: botón existe en UI de events, no lo dejamos “muerto”
+  // Ir a fechas
   $("#addDateBtn")?.addEventListener("click", () => {
-    toast("Fechas", "En el siguiente paso conectamos event_dates en la sección “Fechas”.");
+    toast("Fechas", "Ahora pasamos a conectar event_dates en la sección “Fechas”.", 2200);
     setTab("dates");
   });
+
+  // Default tab
+  setTab("events");
 }
 
 // ============================================================
 // Render all
 // ============================================================
 function renderAll() {
+  // SOLO events acá
   if (state.activeTab === "events") {
     renderEventList();
     renderEventEditor();
@@ -659,25 +686,18 @@ function renderAll() {
       if (state.mode === "supabase") {
         note.textContent = "✅ Eventos guardan en Supabase (CRUD real).";
       } else if (state.mode === "blocked") {
-        note.textContent = "⚠️ Supabase conectado, pero RLS bloquea. Falta policy para admin.";
+        note.textContent = "⚠️ Supabase conectado, pero RLS bloquea. Faltan policies para events.";
       } else {
         note.textContent = "⚠️ Falta Supabase Client. Revisá el orden de scripts.";
       }
     }
   }
-
-  // Los demás tabs quedan para siguientes archivos:
-  // - dates: admin-dates.js
-  // - regs: admin-registrations.js
-  // - media: admin-media.js o admin.js extendido
-  // - gallery/promos: módulos existentes
 }
 
 // ============================================================
 // Init
 // ============================================================
 (async function init() {
-  // Solo corre en admin.html
   if (!$("#appPanel")) return;
 
   wire();
