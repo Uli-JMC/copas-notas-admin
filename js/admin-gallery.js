@@ -2,55 +2,37 @@
 
 /**
  * admin-gallery.js ✅ PRO (Supabase Storage + DB)
- * - Admin sube fotos para la galería (Storage + tabla)
- * - Guarda metadata en Supabase (public.gallery_items)
+ * - Admin sube fotos para la galería (Storage + tabla public.gallery_items)
  * - Guarda archivo en Supabase Storage (bucket: gallery)
  *
- * Campos UI (admin.html):
+ * UI (admin.html):
  * - #tab-gallery
  * - #galleryForm, #galType, #galFile, #galName, #galTags, #galResetBtn
  * - #galleryList, #galPreview
- * - Preview IDs dentro de #galPreview:
- *    #galPreviewImg, #galPreviewTitle, #galPreviewMeta, #galPreviewTags
- *
- * Integra con admin.js:
- * - expone window.ECN_ADMIN_GALLERY = { init, render }
+ *   Preview: #galPreviewImg, #galPreviewTitle, #galPreviewMeta, #galPreviewTags
  *
  * Requisitos:
  * - Supabase CDN + supabaseClient.js + admin-auth.js (sesión válida)
  *
  * Supabase esperado:
- * 1) Bucket Storage: "gallery" (public o privado con signed urls)
- * 2) Tabla public.gallery_items (si no existe, el módulo entra en modo "pendiente")
- *
- * Sugerencia tabla:
- *   create table public.gallery_items (
- *     id uuid primary key default gen_random_uuid(),
- *     type text not null check (type in ('cocteles','maridajes')),
- *     name text not null,
- *     tags text[] not null default '{}',
- *     image_path text not null,
- *     image_url text null,
- *     target text not null default 'home',
- *     created_at timestamptz default now(),
- *     updated_at timestamptz default now()
- *   );
+ * - Bucket Storage: "gallery" (PUBLIC recomendado)
+ * - Tabla public.gallery_items con RLS:
+ *   - SELECT público
+ *   - INSERT/DELETE solo admins (via public.admins(user_id))
  */
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);
 
-  // Solo corre en admin.html
   if (!document.getElementById("appPanel")) return;
 
   if (!window.APP || !APP.supabase) {
-    console.error("APP.supabase no existe. Revisá el orden: Supabase CDN -> supabaseClient.js -> admin-gallery.js");
+    console.error("APP.supabase no existe. Orden: Supabase CDN -> supabaseClient.js -> admin-gallery.js");
     return;
   }
 
   const panel = document.getElementById("tab-gallery");
   if (!panel) return;
 
-  // Elements
   const listEl = $("#galleryList", panel);
 
   const formEl = $("#galleryForm", panel);
@@ -73,19 +55,14 @@
   const BUCKET = "gallery";
   const TARGET_DEFAULT = "home";
 
-  // Realtime (opcional)
   const ENABLE_REALTIME = true;
   const REALTIME_DEBOUNCE_MS = 250;
 
-  // Signed URLs fallback (si bucket privado)
-  const SIGNED_URL_TTL = 60 * 20; // 20 min
-
-  // Subida: límites recomendados
-  const MAX_MB = 6.0;
+  const MAX_MB = 6;
   const MAX_BYTES = MAX_MB * 1024 * 1024;
 
   // ------------------------------------------------------------
-  // Toast (unificado)
+  // Toast
   // ------------------------------------------------------------
   function escapeHtml(str) {
     return String(str ?? "")
@@ -106,6 +83,7 @@
 
     const toastsEl = document.getElementById("toasts");
     if (!toastsEl) return;
+
     const el = document.createElement("div");
     el.className = "toast";
     el.innerHTML = `
@@ -116,6 +94,7 @@
       <button class="close" aria-label="Cerrar" type="button">✕</button>
     `;
     toastsEl.appendChild(el);
+
     const kill = () => {
       el.style.opacity = "0";
       el.style.transform = "translateY(-6px)";
@@ -128,13 +107,8 @@
   // ------------------------------------------------------------
   // Utils
   // ------------------------------------------------------------
-  function safeStr(x) {
-    return String(x ?? "");
-  }
-
-  function cleanSpaces(s) {
-    return String(s ?? "").replace(/\s+/g, " ").trim();
-  }
+  function safeStr(x) { return String(x ?? ""); }
+  function cleanSpaces(s) { return safeStr(s).replace(/\s+/g, " ").trim(); }
 
   function clampStr(s, max) {
     const v = cleanSpaces(s);
@@ -147,7 +121,7 @@
   }
 
   function normTags(input) {
-    const raw = String(input || "")
+    const raw = safeStr(input)
       .replaceAll("\n", " ")
       .replaceAll("\r", " ")
       .trim();
@@ -163,24 +137,20 @@
     return Array.from(new Set(parts)).slice(0, 12);
   }
 
-  function nowISO() {
-    return new Date().toISOString();
-  }
+  function nowISO() { return new Date().toISOString(); }
 
   function fmtShortDate(iso) {
     try {
-      const d = new Date(String(iso));
+      const d = new Date(safeStr(iso));
       if (isNaN(d.getTime())) return "—";
-      return d
-        .toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" })
-        .replace(".", "");
+      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
     } catch (_) {
       return "—";
     }
   }
 
   function extFromMime(mime) {
-    const m = String(mime || "").toLowerCase();
+    const m = safeStr(mime).toLowerCase();
     if (m.includes("png")) return "png";
     if (m.includes("webp")) return "webp";
     if (m.includes("gif")) return "gif";
@@ -188,20 +158,15 @@
   }
 
   function humanKB(bytes) {
-    const kb = bytes / 1024;
+    const b = Number(bytes || 0);
+    if (!Number.isFinite(b) || b <= 0) return "—";
+    const kb = b / 1024;
     if (kb < 1024) return `${Math.round(kb)} KB`;
     const mb = kb / 1024;
     return `${mb.toFixed(1)} MB`;
   }
 
-  function esc(s) {
-    return safeStr(s)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+  function esc(s) { return escapeHtml(safeStr(s)); }
 
   function slugify(s) {
     return cleanSpaces(s)
@@ -212,23 +177,14 @@
       .replace(/^\-|\-$/g, "");
   }
 
-  function isMissingTable(err) {
+  function looksLikeRLSError(err) {
     const m = safeStr(err?.message || "").toLowerCase();
-    return (m.includes("relation") && m.includes("does not exist")) || m.includes("does not exist");
+    return m.includes("rls") || m.includes("row level security") || m.includes("not allowed") || m.includes("permission");
   }
 
-  function isRLSError(err) {
+  function looksLikeBucketError(err) {
     const m = safeStr(err?.message || "").toLowerCase();
-    const code = safeStr(err?.code || "").toLowerCase();
-    return (
-      code === "42501" ||
-      m.includes("42501") ||
-      m.includes("rls") ||
-      m.includes("permission") ||
-      m.includes("not allowed") ||
-      m.includes("row level security") ||
-      m.includes("new row violates row-level security")
-    );
+    return m.includes("bucket") || m.includes("storage") || m.includes("object") || m.includes("not found");
   }
 
   async function ensureSession() {
@@ -240,7 +196,7 @@
         return null;
       }
       return s;
-    } catch (e) {
+    } catch (_) {
       toast("Error", "No se pudo validar sesión con Supabase.", 3200);
       return null;
     }
@@ -256,34 +212,20 @@
     selectedBytes: 0,
     didBind: false,
     refreshing: false,
-    pendingRefresh: false,
-    tableReady: true,
-    storageReady: true,
+    pendingRefresh: false
   };
 
   let realtimeChannel = null;
 
   function setBusy(on) {
     try {
-      const els = formEl ? formEl.querySelectorAll("input, textarea, select, button") : [];
+      const els = formEl.querySelectorAll("input, textarea, select, button");
       els.forEach((el) => (el.disabled = !!on));
     } catch (_) {}
     try {
-      const submitBtn = formEl ? formEl.querySelector('button[type="submit"]') : null;
-      if (submitBtn) submitBtn.textContent = on ? "Subiendo…" : "Subir";
+      const submitBtn = formEl.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.textContent = on ? "Subiendo…" : "Subir a galería";
     } catch (_) {}
-  }
-
-  function renderEmptyMessage(title, msg) {
-    if (!listEl) return;
-    listEl.innerHTML = `
-      <div class="item" style="cursor:default;">
-        <div>
-          <p class="itemTitle">${esc(title)}</p>
-          <p class="itemMeta">${esc(msg)}</p>
-        </div>
-      </div>
-    `;
   }
 
   // ------------------------------------------------------------
@@ -300,8 +242,7 @@
       image_url: safeStr(row.image_url || ""),
       target: safeStr(row.target || TARGET_DEFAULT),
       created_at: safeStr(row.created_at || ""),
-      updated_at: safeStr(row.updated_at || ""),
-      _signedUrl: "" // cache local
+      updated_at: safeStr(row.updated_at || "")
     };
   }
 
@@ -320,23 +261,11 @@
   }
 
   function publicUrlFromPath(path) {
-    const p = safeStr(path).trim();
+    const p = cleanSpaces(path);
     if (!p) return "";
     try {
       const res = APP.supabase.storage.from(BUCKET).getPublicUrl(p);
       return res?.data?.publicUrl || "";
-    } catch (_) {
-      return "";
-    }
-  }
-
-  async function signedUrlFromPath(path) {
-    const p = safeStr(path).trim();
-    if (!p) return "";
-    try {
-      const { data, error } = await APP.supabase.storage.from(BUCKET).createSignedUrl(p, SIGNED_URL_TTL);
-      if (error) throw error;
-      return data?.signedUrl || "";
     } catch (_) {
       return "";
     }
@@ -353,7 +282,6 @@
     if (error) throw error;
 
     const rows = Array.isArray(data) ? data.map(mapDbRow) : [];
-    // si no viene image_url, lo calculamos del storage
     rows.forEach((it) => {
       if (!it.image_url && it.image_path) it.image_url = publicUrlFromPath(it.image_path);
     });
@@ -368,7 +296,6 @@
   }
 
   async function deleteDbRow(id) {
-    // pedimos image_path por si hay que borrar storage
     const { data, error } = await APP.supabase
       .from(TABLE)
       .delete()
@@ -380,7 +307,7 @@
   }
 
   async function deleteStorageObject(path) {
-    const p = safeStr(path).trim();
+    const p = cleanSpaces(path);
     if (!p) return;
     const { error } = await APP.supabase.storage.from(BUCKET).remove([p]);
     if (error) throw error;
@@ -389,14 +316,14 @@
   async function uploadToStorage(file, path) {
     const { error } = await APP.supabase.storage.from(BUCKET).upload(path, file, {
       cacheControl: "3600",
-      upsert: false,
+      upsert: false
     });
     if (error) throw error;
     return true;
   }
 
   // ------------------------------------------------------------
-  // Refresh (safe)
+  // Refresh
   // ------------------------------------------------------------
   async function refreshList() {
     if (state.refreshing) {
@@ -409,31 +336,14 @@
       const s = await ensureSession();
       if (!s) return;
 
-      // Si tabla no existe, mostramos mensaje “pendiente”
-      const items = await fetchItems();
-      state.items = items;
-      state.tableReady = true;
-
+      state.items = await fetchItems();
       renderList();
-    } catch (e) {
-      console.error(e);
-
-      if (isMissingTable(e)) {
-        state.tableReady = false;
-        renderEmptyMessage(
-          "Galería pendiente",
-          "No existe la tabla public.gallery_items en tu Supabase. Creala (o decime si querés que usemos promos como galería)."
-        );
-        toast("BD", "Falta crear public.gallery_items (la galería aún no está conectada).", 4200);
-      } else if (isRLSError(e)) {
-        renderEmptyMessage(
-          "Bloqueado por RLS",
-          "Supabase está conectado, pero RLS/policies no permiten leer gallery_items."
-        );
+    } catch (err) {
+      console.error(err);
+      if (looksLikeRLSError(err)) {
         toast("RLS", "Acceso bloqueado. Falta policy SELECT para gallery_items.", 4200);
       } else {
-        renderEmptyMessage("Error", "No se pudo cargar la galería. Revisá consola / policies.");
-        toast("Error", "No se pudo cargar la galería. Revisá RLS/policies.", 3600);
+        toast("Error", "No se pudo cargar la galería. Revisá tabla/policies.", 4200);
       }
     } finally {
       state.refreshing = false;
@@ -452,9 +362,7 @@
     state.selectedBytes = 0;
 
     if (state.selectedPreviewUrl) {
-      try {
-        URL.revokeObjectURL(state.selectedPreviewUrl);
-      } catch (_) {}
+      try { URL.revokeObjectURL(state.selectedPreviewUrl); } catch (_) {}
       state.selectedPreviewUrl = "";
     }
 
@@ -479,14 +387,14 @@
     const meta = [
       type === "cocteles" ? "Cocteles" : "Maridajes",
       state.selectedBytes ? humanKB(state.selectedBytes) : "—",
-      fmtShortDate(nowISO()),
+      fmtShortDate(nowISO())
     ].join(" · ");
 
     if (prevMeta) prevMeta.textContent = meta;
 
     if (prevTags) {
       prevTags.innerHTML = tags.length
-        ? tags.map((t) => `<span class="pill">${escapeHtml(t)}</span>`).join("")
+        ? tags.map((t) => `<span class="pill">${esc(t)}</span>`).join("")
         : `<span class="pill">#sin-tags</span>`;
     }
 
@@ -503,7 +411,7 @@
   }
 
   // ------------------------------------------------------------
-  // Modal simple para “Ver”
+  // Modal "Ver"
   // ------------------------------------------------------------
   function ensureModal() {
     let m = document.getElementById("ecnGalModal");
@@ -539,28 +447,13 @@
     document.body.appendChild(m);
 
     const close = () => (m.style.display = "none");
-    m.addEventListener("click", (e) => {
-      if (e.target === m) close();
-    });
+    m.addEventListener("click", (e) => { if (e.target === m) close(); });
     m.querySelector("#ecnGalModalClose")?.addEventListener("click", close);
 
     return m;
   }
 
-  async function resolveViewUrl(it) {
-    // 1) image_url si existe
-    if (it.image_url) return it.image_url;
-
-    // 2) public url
-    const pub = publicUrlFromPath(it.image_path);
-    if (pub) return pub;
-
-    // 3) signed url fallback
-    const signed = await signedUrlFromPath(it.image_path);
-    return signed || "";
-  }
-
-  async function openModal(it) {
+  function openModal(it) {
     const m = ensureModal();
     const title = m.querySelector("#ecnGalModalTitle");
     const meta = m.querySelector("#ecnGalModalMeta");
@@ -569,28 +462,22 @@
 
     const typeLabel = it.type === "cocteles" ? "Cocteles" : "Maridajes";
     const when = fmtShortDate(it.created_at);
+    const url = it.image_url || publicUrlFromPath(it.image_path) || "";
 
     if (title) title.textContent = it.name || "Foto";
     if (meta) meta.textContent = `${typeLabel} • ${when} • ${(it.tags || []).length} tag(s)`;
-
+    if (img) img.src = url;
     if (tags) {
-      tags.innerHTML =
-        it.tags && it.tags.length
-          ? it.tags.map((t) => `<span class="pill">${escapeHtml(t)}</span>`).join("")
-          : `<span class="pill">#sin-tags</span>`;
-    }
-
-    if (img) {
-      img.src = "";
-      const url = await resolveViewUrl(it);
-      img.src = url || "";
+      tags.innerHTML = (it.tags && it.tags.length)
+        ? it.tags.map((t) => `<span class="pill">${esc(t)}</span>`).join("")
+        : `<span class="pill">#sin-tags</span>`;
     }
 
     m.style.display = "flex";
   }
 
   // ------------------------------------------------------------
-  // List render (con filtro por búsqueda global)
+  // List render (filtro por búsqueda global)
   // ------------------------------------------------------------
   function getQuery() {
     const search = document.getElementById("search");
@@ -606,78 +493,48 @@
         (it.name || "").toLowerCase().includes(q) ||
         (it.type || "").toLowerCase().includes(q) ||
         (Array.isArray(it.tags) ? it.tags.join(" ").toLowerCase() : "").includes(q);
-
       return hay;
     });
   }
 
-  async function getThumbUrl(it) {
-    // cache
-    if (it._thumbUrl) return it._thumbUrl;
-
-    // prefer image_url
-    if (it.image_url) {
-      it._thumbUrl = it.image_url;
-      return it._thumbUrl;
-    }
-
-    // public
-    const pub = publicUrlFromPath(it.image_path);
-    if (pub) {
-      it._thumbUrl = pub;
-      return it._thumbUrl;
-    }
-
-    // signed fallback
-    const signed = await signedUrlFromPath(it.image_path);
-    it._thumbUrl = signed || "";
-    return it._thumbUrl;
-  }
-
-  async function renderList() {
+  function renderList() {
     if (!listEl) return;
-
-    if (!state.tableReady) {
-      renderEmptyMessage(
-        "Galería pendiente",
-        "No existe public.gallery_items en Supabase. Creala para habilitar este módulo."
-      );
-      return;
-    }
 
     const items = filterItems(stableSort(state.items));
     listEl.innerHTML = "";
 
     if (!items.length) {
-      renderEmptyMessage("Sin fotos", "Subí una imagen para empezar.");
+      listEl.innerHTML = `
+        <div class="item" style="cursor:default;">
+          <div>
+            <p class="itemTitle">Sin fotos</p>
+            <p class="itemMeta">Subí una imagen para empezar.</p>
+          </div>
+        </div>`;
       return;
     }
 
-    // Render rápido: primero estructura, luego resolvemos thumbs async
     const frag = document.createDocumentFragment();
 
     items.forEach((it) => {
       const row = document.createElement("div");
       row.className = "item";
-      row.dataset.id = String(it.id || "");
+      row.dataset.id = safeStr(it.id || "");
 
       const typeLabel = it.type === "cocteles" ? "Cocteles" : "Maridajes";
       const meta = `${typeLabel} • ${fmtShortDate(it.created_at)} • ${(it.tags || []).length} tag(s)`;
       const tags = Array.isArray(it.tags) ? it.tags.slice(0, 6) : [];
+      const thumb = it.image_url || publicUrlFromPath(it.image_path) || "";
 
       row.innerHTML = `
         <div style="display:flex; gap:12px; align-items:flex-start; width:100%;">
-          <img data-thumb="1" src="" alt="${esc(it.name || "Foto")}"
-               style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;background:rgba(255,255,255,.06);" loading="lazy">
+          <img src="${esc(thumb)}" alt="${esc(it.name || "Foto")}"
+               style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;" loading="lazy">
           <div style="flex:1 1 auto;">
             <p class="itemTitle">${esc(it.name || "Sin nombre")}</p>
             <p class="itemMeta">${esc(meta)}</p>
             <div class="pills" style="margin-top:8px;">
-              ${
-                tags.length
-                  ? tags.map((x) => `<span class="pill">${esc(x)}</span>`).join("")
-                  : `<span class="pill">#sin-tags</span>`
-              }
+              ${tags.length ? tags.map((x) => `<span class="pill">${esc(x)}</span>`).join("") : `<span class="pill">#sin-tags</span>`}
             </div>
           </div>
           <div class="pills" style="justify-content:flex-end; flex:0 0 auto;">
@@ -692,22 +549,6 @@
     });
 
     listEl.appendChild(frag);
-
-    // Resolver thumbs async (sin bloquear UI)
-    try {
-      const rows = Array.from(listEl.querySelectorAll(".item"));
-      for (const row of rows) {
-        const id = String(row.dataset.id || "");
-        const it = (state.items || []).find((x) => String(x.id) === id);
-        if (!it) continue;
-
-        const img = row.querySelector('img[data-thumb="1"]');
-        if (!img) continue;
-
-        const url = await getThumbUrl(it);
-        if (url) img.src = url;
-      }
-    } catch (_) {}
   }
 
   // ------------------------------------------------------------
@@ -715,10 +556,7 @@
   // ------------------------------------------------------------
   function onFileChange() {
     const f = fileInp && fileInp.files ? fileInp.files[0] : null;
-    if (!f) {
-      resetPreview();
-      return;
-    }
+    if (!f) { resetPreview(); return; }
 
     if (!/^image\//.test(f.type)) {
       toast("Archivo inválido", "Seleccioná una imagen (JPG/PNG/WebP).");
@@ -727,7 +565,7 @@
       return;
     }
 
-    if (f.size > MAX_BYTES) {
+    if (Number(f.size || 0) > MAX_BYTES) {
       toast("Muy pesada", `La imagen pesa ${humanKB(f.size)}. Usá una menor a ~${MAX_MB}MB.`);
       fileInp.value = "";
       resetPreview();
@@ -742,7 +580,6 @@
     state.selectedBytes = f.size;
     state.selectedPreviewUrl = URL.createObjectURL(f);
 
-    // Autonombre si está vacío
     if (nameInp && !cleanSpaces(nameInp.value)) {
       const base = f.name.replace(/\.[a-z0-9]+$/i, "");
       nameInp.value = base;
@@ -756,11 +593,6 @@
   // ------------------------------------------------------------
   async function onSubmit(e) {
     e.preventDefault();
-
-    if (!state.tableReady) {
-      toast("BD", "Primero hay que crear public.gallery_items para habilitar la galería.");
-      return;
-    }
 
     if (!state.selectedFile) {
       toast("Falta imagen", "Seleccioná una foto antes de subir.");
@@ -789,41 +621,36 @@
       const base = slugify(name) || "foto";
       const path = `${type}/${yyyyMm}/${base}_${Date.now()}.${ext}`;
 
-      // 1) Upload a Storage
       await uploadToStorage(f, path);
 
-      // 2) URL pública si aplica; si no, se verá por signedUrl
       const publicUrl = publicUrlFromPath(path);
 
-      // 3) Insert DB
       const payload = {
         type,
         name,
         tags,
         image_path: path,
         image_url: publicUrl || null,
-        target: TARGET_DEFAULT,
+        target: TARGET_DEFAULT
       };
 
       await insertDbRow(payload);
 
       toast("Listo", "La foto se agregó a la galería.", 2200);
 
-      // Refresh lista
       await refreshList();
 
-      // limpiar form
-      try {
-        formEl?.reset();
-      } catch (_) {}
+      formEl?.reset();
       resetPreview();
     } catch (err) {
       console.error(err);
 
-      if (isRLSError(err)) {
-        toast("RLS", "Bloqueado. Faltan policies de INSERT/SELECT para gallery_items o storage.", 4200);
+      if (looksLikeRLSError(err)) {
+        toast("RLS", "Bloqueado. Falta policy INSERT en gallery_items o Storage.", 4200);
+      } else if (looksLikeBucketError(err)) {
+        toast("Storage", "Error en bucket gallery (existe? policies? público?).", 4200);
       } else {
-        toast("Error", "No se pudo subir la imagen. Revisá bucket/policies/RLS.", 3600);
+        toast("Error", "No se pudo subir la imagen. Revisá bucket/policies/RLS.", 4200);
       }
     } finally {
       setBusy(false);
@@ -834,9 +661,7 @@
   // Reset
   // ------------------------------------------------------------
   function onReset() {
-    try {
-      formEl?.reset();
-    } catch (_) {}
+    formEl?.reset();
     resetPreview();
     toast("Limpiado", "Formulario y preview reiniciados.");
   }
@@ -851,10 +676,10 @@
     const row = btn.closest(".item");
     if (!row) return;
 
-    const id = String(row.dataset.id || "");
-    const action = String(btn.dataset.action || "");
+    const id = safeStr(row.dataset.id || "");
+    const action = safeStr(btn.dataset.action || "");
 
-    const it = (state.items || []).find((x) => String(x.id) === id);
+    const it = (state.items || []).find((x) => safeStr(x.id) === id);
     if (!it) return;
 
     if (action === "delete") {
@@ -866,18 +691,8 @@
         const s = await ensureSession();
         if (!s) return;
 
-        let deleted = null;
+        const deleted = await deleteDbRow(it.id);
 
-        // Intento 1: borrar DB y obtener image_path
-        try {
-          deleted = await deleteDbRow(it.id);
-        } catch (e1) {
-          console.warn("DB delete fail:", e1);
-          // si falla DB por RLS pero el usuario quiere borrar, no seguimos con storage
-          if (isRLSError(e1)) throw e1;
-        }
-
-        // Intento 2: borrar Storage si tenemos path
         const p = deleted?.image_path || it.image_path;
         if (p) {
           try {
@@ -891,10 +706,10 @@
         await refreshList();
       } catch (err) {
         console.error(err);
-        if (isRLSError(err)) {
-          toast("RLS", "Bloqueado. Falta policy DELETE en gallery_items (y/o storage).", 4200);
+        if (looksLikeRLSError(err)) {
+          toast("RLS", "Bloqueado. Falta policy DELETE en gallery_items o Storage.", 4200);
         } else {
-          toast("Error", "No se pudo eliminar. Revisá policies.", 3600);
+          toast("Error", "No se pudo eliminar. Revisá policies.", 4200);
         }
       } finally {
         setBusy(false);
@@ -903,7 +718,7 @@
     }
 
     if (action === "copy") {
-      const text = Array.isArray(it.tags) && it.tags.length ? it.tags.join(" ") : "";
+      const text = (Array.isArray(it.tags) && it.tags.length) ? it.tags.join(" ") : "";
       if (!text) {
         toast("Sin tags", "Esta foto no tiene tags para copiar.");
         return;
@@ -929,9 +744,7 @@
 
     try {
       if (realtimeChannel) {
-        try {
-          APP.supabase.removeChannel(realtimeChannel);
-        } catch (_) {}
+        try { APP.supabase.removeChannel(realtimeChannel); } catch (_) {}
         realtimeChannel = null;
       }
 
@@ -963,10 +776,7 @@
     resetBtn?.addEventListener("click", onReset);
     listEl?.addEventListener("click", onListClick);
 
-    // Re-render cuando cambia búsqueda global
-    document.getElementById("search")?.addEventListener("input", () => {
-      renderList();
-    });
+    document.getElementById("search")?.addEventListener("input", () => renderList());
   }
 
   // ------------------------------------------------------------
@@ -984,7 +794,6 @@
     renderPreview();
   }
 
-  // Auto-init
   init();
 
   window.ECN_ADMIN_GALLERY = { init, render };
