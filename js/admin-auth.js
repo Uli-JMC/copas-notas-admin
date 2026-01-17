@@ -46,7 +46,7 @@
   const ADMIN_URL = "./admin.html";
 
   // Tabla whitelist de admins (ajustable)
-  const ADMINS_TABLE = "admin_users";
+  const ADMINS_TABLE = "admins";
 
   // ------------------------------------------------------------
   // UI helpers
