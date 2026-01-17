@@ -1,11 +1,10 @@
 <!doctype html>
 <html lang="es">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
-  <title>Admin | Entre Copas & Notas</title>
+  <title>Admin | Entre Copas &amp; Notas</title>
   <meta name="description" content="Panel de administración para eventos e inscripciones." />
 
   <link rel="stylesheet" href="./css/admin.css" />
@@ -17,14 +16,13 @@
   <header class="topbar">
     <div class="container">
       <div class="nav">
-        <!-- ✅ FIX: Admin NO debe apuntar a ./home.html -->
-        <a class="brand" href="https://copas-notas-public.netlify.app/" aria-label="Ir a home">
+        <!-- Admin apunta al sitio público real -->
+        <a class="brand" href="https://copas-notas-public.netlify.app/" aria-label="Ir al sitio público">
           <img id="adminLogo" src="./assets/img/logocuadrado-entrecopasynotas.png" alt="Logo" />
           <span>Admin · Entre Copas &amp; Notas</span>
         </a>
 
         <div class="navRight">
-          <!-- ✅ FIX: Link al sitio público real -->
           <a class="btn" href="https://copas-notas-public.netlify.app/#proximos">Ver sitio</a>
           <button class="btn" id="logoutBtn" type="button">Salir</button>
         </div>
@@ -35,12 +33,11 @@
   <main class="page">
     <div class="container">
 
-      <!-- ✅ SOLO APP -->
       <section class="app" id="appPanel">
         <div class="head">
           <div>
             <p class="kicker">Gestión</p>
-            <h2 class="h2">Admin</h2>
+            <h2 class="h2">Panel de administración</h2>
             <p class="sub">Eventos, fechas, cupos, inscripciones y recursos visuales.</p>
           </div>
 
@@ -49,20 +46,75 @@
           </div>
         </div>
 
+        <!-- Tabs -->
         <div class="tabs" role="tablist" aria-label="Secciones">
-          <button class="tab" data-tab="events" role="tab" aria-selected="true">Eventos</button>
-          <button class="tab" data-tab="regs" role="tab" aria-selected="false">Inscripciones</button>
-          <button class="tab" data-tab="media" role="tab" aria-selected="false">Medios</button>
-          <button class="tab" data-tab="gallery" role="tab" aria-selected="false">Galería</button>
-          <button class="tab" data-tab="promos" role="tab" aria-selected="false">Promos</button>
+          <button
+            class="tab"
+            id="tabBtn-events"
+            data-tab="events"
+            role="tab"
+            aria-selected="true"
+            aria-controls="tab-events"
+            type="button"
+          >Eventos</button>
+
+          <button
+            class="tab"
+            id="tabBtn-dates"
+            data-tab="dates"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-dates"
+            type="button"
+          >Fechas</button>
+
+          <button
+            class="tab"
+            id="tabBtn-regs"
+            data-tab="regs"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-regs"
+            type="button"
+          >Inscripciones</button>
+
+          <button
+            class="tab"
+            id="tabBtn-media"
+            data-tab="media"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-media"
+            type="button"
+          >Medios</button>
+
+          <button
+            class="tab"
+            id="tabBtn-gallery"
+            data-tab="gallery"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-gallery"
+            type="button"
+          >Galería</button>
+
+          <button
+            class="tab"
+            id="tabBtn-promos"
+            data-tab="promos"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-promos"
+            type="button"
+          >Promos</button>
         </div>
 
         <!-- EVENTS TAB -->
-        <section class="panel" id="tab-events" role="tabpanel">
+        <section class="panel" id="tab-events" role="tabpanel" aria-labelledby="tabBtn-events">
           <div class="panelTop">
             <div class="panelTitle">
               <h3>Eventos</h3>
-              <p>Creá eventos, agregá fechas y cupos. “Agotado” si cupos = 0.</p>
+              <p>Creá eventos y administrá sus datos base (nombre, tipo, imagen, etc.).</p>
             </div>
             <button class="btn primary" id="newEventBtn" type="button">+ Nuevo evento</button>
           </div>
@@ -95,29 +147,19 @@
                   <div class="field">
                     <label for="evMonth">Mes (para anclas)</label>
                     <select id="evMonth" required>
-                      <option>ENERO</option>
-                      <option>FEBRERO</option>
-                      <option>MARZO</option>
-                      <option>ABRIL</option>
-                      <option>MAYO</option>
-                      <option>JUNIO</option>
-                      <option>JULIO</option>
-                      <option>AGOSTO</option>
-                      <option>SEPTIEMBRE</option>
-                      <option>OCTUBRE</option>
-                      <option>NOVIEMBRE</option>
-                      <option>DICIEMBRE</option>
+                      <option>ENERO</option><option>FEBRERO</option><option>MARZO</option><option>ABRIL</option>
+                      <option>MAYO</option><option>JUNIO</option><option>JULIO</option><option>AGOSTO</option>
+                      <option>SEPTIEMBRE</option><option>OCTUBRE</option><option>NOVIEMBRE</option><option>DICIEMBRE</option>
                     </select>
                   </div>
 
                   <div class="field">
                     <label for="evImg">Imagen (ruta)</label>
                     <input id="evImg" type="text" placeholder="./assets/img/hero-1.jpg" />
-                    <p class="hint">Luego lo conectamos a storage. Por ahora solo una ruta.</p>
+                    <p class="hint">Luego se conecta a Storage. Por ahora una ruta.</p>
                   </div>
                 </div>
 
-                <!-- ✅ NUEVO: ubicación / horario / duración (1:1 con data.js) -->
                 <div class="row">
                   <div class="field">
                     <label for="evLocation">Lugar / Dirección</label>
@@ -126,8 +168,8 @@
 
                   <div class="field">
                     <label for="evTimeRange">Horario</label>
-                    <input id="evTimeRange" type="text" placeholder='Ej: 9–10 am' />
-                    <p class="hint">Formato libre (ej: 9–10 am / 6:30–8:30 pm).</p>
+                    <input id="evTimeRange" type="text" placeholder="Ej: 6:30–8:30 pm" />
+                    <p class="hint">Formato libre.</p>
                   </div>
                 </div>
 
@@ -141,7 +183,7 @@
                   <div class="field">
                     <label for="evDuration">Duración (legacy)</label>
                     <input id="evDuration" type="text" placeholder="Opcional: 1.5–2.5 horas" />
-                    <p class="hint">Se mantiene por compatibilidad. Si no lo usás, podés dejarlo vacío.</p>
+                    <p class="hint">Compatibilidad. Si no lo usás, podés dejarlo vacío.</p>
                   </div>
                 </div>
 
@@ -156,10 +198,10 @@
                 <div class="datesBox">
                   <div class="datesTop">
                     <div>
-                      <h4>Fechas & cupos</h4>
-                      <p>Agregá varias fechas para un mismo evento.</p>
+                      <h4>Fechas &amp; cupos</h4>
+                      <p>Tip: administralas en la sección “Fechas” (CRUD real con <code>event_dates</code>).</p>
                     </div>
-                    <button class="btn" id="addDateBtn" type="button">+ Agregar fecha</button>
+                    <button class="btn" id="addDateBtn" type="button">+ Administrar fechas</button>
                   </div>
 
                   <div class="datesList" id="datesList"></div>
@@ -178,20 +220,122 @@
                   <button class="btn" id="deleteEventBtn" type="button">Eliminar</button>
                 </div>
 
-                <p class="fine">
-                  * Esto guarda en tu navegador (localStorage). Luego lo movemos a Supabase.
+                <p class="fine" id="storageNote">
+                  * Nota: este panel está en transición de demo local a Supabase (CRUD real).
                 </p>
               </form>
             </div>
           </div>
         </section>
 
+        <!-- DATES TAB (ACTIVADO PARA CRUD REAL) -->
+        <section class="panel" id="tab-dates" role="tabpanel" aria-labelledby="tabBtn-dates" hidden>
+          <div class="panelTop">
+            <div class="panelTitle">
+              <h3>Fechas</h3>
+              <p>Gestioná fechas por evento: etiqueta, cupos y disponibilidad. (Tabla: <code>event_dates</code>)</p>
+            </div>
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" id="datesRefreshBtn" type="button">Refrescar</button>
+              <button class="btn primary" id="datesNewBtn" type="button">+ Nueva fecha</button>
+            </div>
+          </div>
+
+          <div class="notice" id="datesNote">
+            Seleccioná un evento a la izquierda para administrar sus fechas.
+          </div>
+
+          <div class="split" style="margin-top:14px;">
+            <!-- Lista de eventos (para seleccionar y administrar fechas) -->
+            <div class="list" id="datesEventList" aria-label="Eventos para fechas"></div>
+
+            <!-- Editor -->
+            <div class="editor" aria-label="Fechas del evento seleccionado">
+              <div class="editorEmpty" id="datesEmpty">
+                Seleccioná un evento para ver y administrar sus fechas.
+              </div>
+
+              <div id="datesEditor" hidden>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                  <div>
+                    <p class="kicker" style="margin-bottom:6px;">Evento seleccionado</p>
+                    <h4 id="datesEventTitle" style="margin:0;">—</h4>
+                    <p class="sub" id="datesEventMeta" style="margin-top:6px;">—</p>
+                  </div>
+
+                  <div class="pills">
+                    <span class="pill" id="datesEventPill">SUPABASE</span>
+                  </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Lista de fechas del evento -->
+                <div class="panelTop" style="padding:0; margin-bottom:10px;">
+                  <div class="panelTitle">
+                    <h3 style="margin:0;">Fechas del evento</h3>
+                    <p style="margin:6px 0 0;">Creá y administrá cupos. (Al crear: <code>seats_available = seats_total</code>)</p>
+                  </div>
+                </div>
+
+                <div class="list" id="datesListByEvent" aria-label="Lista de fechas del evento"></div>
+
+                <div class="divider"></div>
+
+                <!-- Form de fecha -->
+                <form id="dateForm" class="editorForm">
+                  <input id="dateId" type="hidden" value="" />
+
+                  <div class="row">
+                    <div class="field">
+                      <label for="dateLabel">Etiqueta</label>
+                      <input id="dateLabel" type="text" maxlength="120" placeholder="Ej: Sábado 24 · 6:30 pm" required />
+                      <p class="hint">Formato libre. Esto es lo que verá el usuario.</p>
+                    </div>
+
+                    <div class="field">
+                      <label for="dateSeatsTotal">Cupos totales</label>
+                      <input id="dateSeatsTotal" type="number" min="0" step="1" value="0" required />
+                      <p class="hint">Al crear: disponibles = totales.</p>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="field">
+                      <label for="dateSeatsAvailable">Cupos disponibles</label>
+                      <input id="dateSeatsAvailable" type="number" min="0" step="1" value="0" disabled />
+                      <p class="hint">Se calcula/ajusta según inscripciones (más adelante).</p>
+                    </div>
+
+                    <div class="field">
+                      <label for="dateSeatsNote">Nota interna (opcional)</label>
+                      <input id="dateSeatsNote" type="text" maxlength="140" placeholder="Ej: VIP / Mesa alta / etc." />
+                      <p class="hint">Solo para el admin (si decidimos guardarlo luego).</p>
+                    </div>
+                  </div>
+
+                  <div class="actions">
+                    <button class="btn primary" id="dateSaveBtn" type="submit">Guardar</button>
+                    <button class="btn" id="dateClearBtn" type="button">Nueva</button>
+                    <button class="btn" id="dateDeleteBtn" type="button">Eliminar</button>
+                  </div>
+
+                  <p class="fine">
+                    * CRUD real en Supabase. Si aparece bloqueo, faltan policies/RLS para <code>event_dates</code>.
+                  </p>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- REGS TAB -->
-        <section class="panel" id="tab-regs" role="tabpanel" hidden>
+        <section class="panel" id="tab-regs" role="tabpanel" aria-labelledby="tabBtn-regs" hidden>
           <div class="panelTop">
             <div class="panelTitle">
               <h3>Inscripciones</h3>
-              <p>Lista de registros (demo local). Luego: Supabase table.</p>
+              <p>Lista de registros. (MVP: lectura de <code>registrations</code> con filtros por evento/fecha.)</p>
             </div>
 
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -219,11 +363,11 @@
         </section>
 
         <!-- MEDIA TAB -->
-        <section class="panel" id="tab-media" role="tabpanel" hidden>
+        <section class="panel" id="tab-media" role="tabpanel" aria-labelledby="tabBtn-media" hidden>
           <div class="panelTop">
             <div class="panelTitle">
               <h3>Medios</h3>
-              <p>Config rápida de rutas de logo e imágenes (demo). Luego: storage.</p>
+              <p>Config rápida de rutas de logo e imágenes (demo). Luego: Storage.</p>
             </div>
           </div>
 
@@ -250,8 +394,8 @@
           </form>
         </section>
 
-        <!-- ✅ GALLERY TAB -->
-        <section class="panel" id="tab-gallery" role="tabpanel" hidden>
+        <!-- GALLERY TAB -->
+        <section class="panel" id="tab-gallery" role="tabpanel" aria-labelledby="tabBtn-gallery" hidden>
           <div class="panelTop">
             <div class="panelTitle">
               <h3>Galería</h3>
@@ -260,7 +404,6 @@
           </div>
 
           <div class="split">
-            <!-- Uploader -->
             <div class="editor" aria-label="Subir foto a galería">
               <form id="galleryForm" class="editorForm">
                 <div class="row">
@@ -309,12 +452,14 @@
                 </p>
               </form>
 
-              <!-- ✅ Preview (IDs esperados por admin-gallery.js) -->
               <div class="divider"></div>
 
               <div class="editorEmpty" id="galPreview" aria-label="Previsualización">
-                <img id="galPreviewImg" alt="Preview"
-                  style="display:none; width:100%; border-radius:14px; border:1px solid rgba(255,255,255,.10);" />
+                <img
+                  id="galPreviewImg"
+                  alt="Preview"
+                  style="display:none; width:100%; border-radius:14px; border:1px solid rgba(255,255,255,.10);"
+                />
                 <div style="margin-top:12px;">
                   <p class="itemTitle" id="galPreviewTitle">Sin imagen seleccionada</p>
                   <p class="itemMeta" id="galPreviewMeta">Seleccioná una foto para previsualizar.</p>
@@ -323,13 +468,12 @@
               </div>
             </div>
 
-            <!-- List -->
             <div class="list" id="galleryList" aria-label="Lista de fotos en galería"></div>
           </div>
         </section>
 
-        <!-- ✅ PROMOS TAB -->
-        <section class="panel" id="tab-promos" role="tabpanel" hidden>
+        <!-- PROMOS TAB -->
+        <section class="panel" id="tab-promos" role="tabpanel" aria-labelledby="tabBtn-promos" hidden>
           <div class="panelTop">
             <div class="panelTitle">
               <h3>Promos</h3>
@@ -340,13 +484,12 @@
           </div>
 
           <div class="split">
-            <!-- Editor -->
             <div class="editor" aria-label="Editor de promos">
               <div class="editorEmpty" id="promoEmpty">
                 <p style="margin:0 0 10px;">
                   Creá una promo nueva o seleccioná una de la lista.
                 </p>
-                <!-- ✅ CTA real que el bridge puede clickear -->
+                <button class="btn" id="promoEmptyCta" type="button">Crear promo</button>
               </div>
 
               <form id="promoForm" class="editorForm" hidden>
@@ -430,11 +573,12 @@
                   <button class="btn" type="button" id="deletePromoBtn">Eliminar</button>
                 </div>
 
-                <p class="fine">* Se guarda en tu navegador (localStorage). Home lo lee automáticamente.</p>
+                <p class="fine">
+                  * Se guarda en tu navegador (localStorage). Más adelante migra a Supabase.
+                </p>
               </form>
             </div>
 
-            <!-- List -->
             <div class="list" id="promosList" aria-label="Lista de promos"></div>
           </div>
         </section>
@@ -443,10 +587,20 @@
     </div>
   </main>
 
-  <!-- ✅ Orden: data, auth guard, admin app -->
+  <!-- ✅ Orden correcto de scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./js/supabaseClient.js"></script>
+
+  <!-- Data API (ECN) ✅ solo para promos/media demo -->
   <script src="./js/data.js"></script>
+
+  <!-- Auth guard -->
   <script src="./js/admin-auth.js"></script>
+
+  <!-- Módulos del panel -->
   <script src="./js/admin.js"></script>
+  <script src="./js/admin-dates.js"></script>
+  <script src="./js/admin-registrations.js"></script>
   <script src="./js/admin-gallery.js"></script>
   <script src="./js/admin-promos.js"></script>
 
@@ -481,5 +635,4 @@
     })();
   </script>
 </body>
-
 </html>

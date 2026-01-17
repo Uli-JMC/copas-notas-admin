@@ -1,10 +1,14 @@
 "use strict";
 
 /**
- * ECN Data Layer (Local-first)
- * - Fuente única de verdad para: eventos, fechas/cupos, media (logo/hero), registros, promos.
+ * ECN Data Layer (Local-first) ✅ PRO
+ * - Fuente única de verdad para: events, event_dates (fechas/cupos), media, regs, promos.
  * - Hoy: localStorage (demo).
- * - Luego: se reemplaza por Supabase sin cambiar el resto del front.
+ * - Luego: reemplazo por Supabase sin cambiar el resto del front.
+ *
+ * ✅ Cambio clave:
+ * - event_dates ahora vive separado (ECN.LS.EVENT_DATES) y events[].dates es "legacy/derivado"
+ *   para no romper el sitio público mientras migramos.
  */
 (function () {
   // ============================================================
@@ -18,9 +22,9 @@
   ECN.LS = {
     ADMIN_SESSION: "ecn_admin_session",
     EVENTS: "ecn_events",
+    EVENT_DATES: "ecn_event_dates", // ✅ NUEVO (mapea tu tabla public.event_dates)
     REGS: "ecn_regs",
     MEDIA: "ecn_media",
-    // ✅ NUEVO
     PROMOS: "ecn_promos",
   };
 
@@ -36,17 +40,12 @@
       desc: "Explorá aromas y sabores con maridajes guiados. Ideal para principiantes y curiosos.",
       img: "./assets/img/hero-1.jpg",
 
-      // ✅ Dirección
       location: "San José (por confirmar)",
-
-      // ✅ NUEVOS (Admin)
-      timeRange: "Por confirmar", // ej: "9–10 am"
-      durationHours: "Por confirmar", // ej: "3"
-
-      // ✅ Campo que usa el EVENT (event.html): horario completo
-      // Regla: duration = timeRange (cuando exista), si no, cae a duration vieja
+      timeRange: "Por confirmar",
+      durationHours: "Por confirmar",
       duration: "1.5–2.5 horas",
 
+      // Legacy dates (se migran a EVENT_DATES en ensureDefaults)
       dates: [{ label: "18-19 enero", seats: 12 }],
     },
     {
@@ -91,12 +90,11 @@
     instagramUrl: "https://instagram.com/entrecopasynotas",
   };
 
-  // ✅ NUEVO: Promos (banner + modal)
   const DEFAULT_PROMOS = [
     {
       id: "club-vino-banner",
       active: true,
-      kind: "BANNER", // BANNER | MODAL
+      kind: "BANNER",
       target: "home",
       priority: 10,
 
@@ -144,7 +142,7 @@
   ];
 
   // ============================================================
-  // Helpers (storage)
+  // Helpers (storage + misc)
   // ============================================================
   function readJSON(key, fallback) {
     try {
@@ -199,6 +197,20 @@
     return new Date().toISOString();
   }
 
+  // uuid local (se parece a Supabase)
+  function uuid() {
+    try {
+      if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    } catch (_) {}
+    // fallback (no perfecto, pero suficiente para local)
+    return (
+      "id_" +
+      Math.random().toString(16).slice(2) +
+      "_" +
+      Date.now().toString(16)
+    );
+  }
+
   // ✅ Normaliza duración en horas (ej: "3", "3hrs", "3 hrs", "3h") => "3"
   function normalizeDurationHours(v) {
     const s = safeStr(v).trim().toLowerCase();
@@ -216,8 +228,155 @@
     return lg || "Por confirmar";
   }
 
+  // ✅ evita "javascript:" y basura rara en links
+  function sanitizeHref(href) {
+    const s = safeStr(href).trim();
+    if (!s) return "#";
+    const lower = s.toLowerCase();
+    if (lower.startsWith("javascript:")) return "#";
+
+    // permitimos: http(s), wa.me, mailto, tel, hash, /ruta, ./ruta
+    if (
+      lower.startsWith("http://") ||
+      lower.startsWith("https://") ||
+      lower.startsWith("mailto:") ||
+      lower.startsWith("tel:") ||
+      lower.startsWith("#") ||
+      lower.startsWith("/") ||
+      lower.startsWith("./")
+    ) return s;
+
+    // wa.me sin protocolo
+    if (lower.startsWith("wa.me/")) return "https://" + s;
+
+    return s; // default: lo dejamos (por si usás rutas internas)
+  }
+
   // ============================================================
-  // Seats
+  // ✅ EVENT_DATES (mapea tabla public.event_dates)
+  // Shape local:
+  // { id, event_id, label, seats_total, seats_available, created_at }
+  // ============================================================
+  function cleanEventDate(row) {
+    const r = row || {};
+    const id = safeStr(r.id).trim() || uuid();
+    const event_id = safeStr(r.event_id).trim();
+
+    const label = safeStr(r.label).trim() || "Por definir";
+    const seats_total = Math.max(0, Number(r.seats_total) || 0);
+
+    // si seats_available no viene, lo igualamos a total
+    const seats_available_raw = Number(r.seats_available);
+    const seats_available =
+      Number.isFinite(seats_available_raw)
+        ? Math.max(0, seats_available_raw)
+        : seats_total;
+
+    const created_at = safeStr(r.created_at).trim() || nowIso();
+
+    return { id, event_id, label, seats_total, seats_available, created_at };
+  }
+
+  ECN.getEventDatesRaw = function getEventDatesRaw() {
+    return asArray(readJSON(ECN.LS.EVENT_DATES, []));
+  };
+
+  ECN.setEventDatesRaw = function setEventDatesRaw(rows) {
+    const clean = asArray(rows).map(cleanEventDate).filter((x) => !!x.event_id);
+    writeJSON(ECN.LS.EVENT_DATES, clean);
+    // cada cambio a event_dates refresca legacy en events
+    syncLegacyDatesIntoEvents();
+    return clean;
+  };
+
+  ECN.getEventDatesByEventId = function getEventDatesByEventId(eventId) {
+    const id = safeStr(eventId);
+    return ECN.getEventDatesRaw()
+      .filter((d) => safeStr(d.event_id) === id)
+      .sort((a, b) => safeStr(a.created_at).localeCompare(safeStr(b.created_at)));
+  };
+
+  ECN.upsertEventDate = function upsertEventDate(row) {
+    const next = cleanEventDate(row);
+    if (!next.event_id) return null;
+
+    const all = ECN.getEventDatesRaw();
+    const i = all.findIndex((x) => safeStr(x.id) === safeStr(next.id));
+
+    if (i >= 0) {
+      // conserva created_at original
+      next.created_at = safeStr(all[i]?.created_at || next.created_at);
+      all[i] = next;
+    } else {
+      all.unshift(next);
+    }
+
+    ECN.setEventDatesRaw(all);
+    return next;
+  };
+
+  ECN.deleteEventDate = function deleteEventDate(id) {
+    const all = ECN.getEventDatesRaw();
+    const before = all.length;
+    const after = all.filter((d) => safeStr(d.id) !== safeStr(id));
+    ECN.setEventDatesRaw(after);
+    return after.length !== before;
+  };
+
+  ECN.deleteEventDatesByEventId = function deleteEventDatesByEventId(eventId) {
+    const all = ECN.getEventDatesRaw();
+    const before = all.length;
+    const after = all.filter((d) => safeStr(d.event_id) !== safeStr(eventId));
+    ECN.setEventDatesRaw(after);
+    return after.length !== before;
+  };
+
+  // ============================================================
+  // Legacy sync: event_dates => events[].dates (para no romper el sitio público)
+  // events[].dates queda como:
+  //   [{ label, seats }] donde seats = seats_available
+  // ============================================================
+  function syncLegacyDatesIntoEvents() {
+    const events = asArray(readJSON(ECN.LS.EVENTS, []));
+    if (!events.length) return;
+
+    const allDates = ECN.getEventDatesRaw();
+    const byEvent = new Map();
+    allDates.forEach((d) => {
+      const eid = safeStr(d.event_id);
+      if (!byEvent.has(eid)) byEvent.set(eid, []);
+      byEvent.get(eid).push(d);
+    });
+
+    const nextEvents = events.map((ev) => {
+      const eid = safeStr(ev?.id);
+      const rows = byEvent.get(eid) || [];
+
+      // derivamos legacy dates (label + seats available)
+      const legacyDates = rows
+        .slice()
+        .sort((a, b) => safeStr(a.created_at).localeCompare(safeStr(b.created_at)))
+        .map((r) => ({
+          label: safeStr(r.label).trim(),
+          seats: Math.max(0, Number(r.seats_available) || 0),
+        }));
+
+      return {
+        ...ev,
+        dates: legacyDates,
+      };
+    });
+
+    writeJSON(ECN.LS.EVENTS, nextEvents);
+  }
+
+  // Helper expuesto (por si admin-dates.js necesita forzar refresh)
+  ECN.syncLegacyDates = function syncLegacyDates() {
+    syncLegacyDatesIntoEvents();
+  };
+
+  // ============================================================
+  // Seats totals (para UI)
   // ============================================================
   ECN.totalSeats = function totalSeats(ev) {
     const dates = asArray(ev?.dates);
@@ -225,8 +384,38 @@
   };
 
   // ============================================================
-  // Ensure defaults
+  // Ensure defaults + migrate dates
   // ============================================================
+  function seedEventDatesFromLegacyIfMissing() {
+    const existing = readJSON(ECN.LS.EVENT_DATES, null);
+    if (Array.isArray(existing) && existing.length) return;
+
+    // si no hay event_dates todavía, los creamos desde DEFAULT_EVENTS (o desde events si ya existen)
+    const events = asArray(readJSON(ECN.LS.EVENTS, DEFAULT_EVENTS));
+    const rows = [];
+
+    events.forEach((ev) => {
+      const eid = safeStr(ev?.id);
+      asArray(ev?.dates).forEach((d, idx) => {
+        const seats = Math.max(0, Number(d?.seats) || 0);
+        rows.push(
+          cleanEventDate({
+            id: uuid(),
+            event_id: eid,
+            label: safeStr(d?.label || "Por definir").trim(),
+            seats_total: seats,
+            seats_available: seats,
+            created_at: nowIso(), // en local no importa precisión
+          })
+        );
+      });
+      // no borramos legacy aquí; luego se sincroniza
+    });
+
+    writeJSON(ECN.LS.EVENT_DATES, rows);
+    syncLegacyDatesIntoEvents();
+  }
+
   ECN.ensureDefaults = function ensureDefaults() {
     const events = readJSON(ECN.LS.EVENTS, null);
     if (!events || !Array.isArray(events) || events.length === 0) {
@@ -247,12 +436,21 @@
     if (!promos || !Array.isArray(promos)) {
       writeJSON(ECN.LS.PROMOS, DEFAULT_PROMOS);
     }
+
+    // ✅ nuevo: event_dates
+    seedEventDatesFromLegacyIfMissing();
   };
 
   // ============================================================
   // Events API (RAW)
   // ============================================================
   ECN.getEventsRaw = function getEventsRaw() {
+    // aseguramos que legacy esté sincronizado si event_dates existe
+    // (por si alguien tocó event_dates directo)
+    try {
+      const hasDates = asArray(readJSON(ECN.LS.EVENT_DATES, [])).length > 0;
+      if (hasDates) syncLegacyDatesIntoEvents();
+    } catch (_) {}
     return asArray(readJSON(ECN.LS.EVENTS, []));
   };
 
@@ -266,7 +464,6 @@
         normalizeDurationHours(ev?.durationHours || "") ||
         "Por confirmar";
 
-      // ✅ duration = horario (para event.html)
       const duration = pickSchedule(timeRange, ev?.duration);
 
       return {
@@ -280,8 +477,9 @@
         location,
         timeRange,
         durationHours,
-        duration, // ✅ horario visible
+        duration,
 
+        // ✅ legacy dates: dejamos lo que venga, pero normalmente se derivan de event_dates
         dates: asArray(ev?.dates).map((d) => ({
           label: safeStr(d?.label || "Por definir").trim(),
           seats: Math.max(0, Number(d?.seats) || 0),
@@ -290,6 +488,13 @@
     });
 
     writeJSON(ECN.LS.EVENTS, clean);
+
+    // si ya hay event_dates, forzamos sync legacy desde event_dates para consistencia
+    try {
+      const hasDates = ECN.getEventDatesRaw().length > 0;
+      if (hasDates) syncLegacyDatesIntoEvents();
+    } catch (_) {}
+
     return clean;
   };
 
@@ -298,7 +503,7 @@
     return events.find((e) => safeStr(e?.id) === safeStr(id)) || null;
   };
 
-  // ✅ alias usado por register.js / admin.js (debe ser RAW)
+  // alias usado por register.js / admin.js
   ECN.getEventById = function getEventById(id) {
     return ECN.getEventRawById(id);
   };
@@ -318,7 +523,6 @@
       normalizeDurationHours(raw.durationHours || "") ||
       "Por confirmar";
 
-    // ✅ duration = horario (para event.html)
     const duration = pickSchedule(timeRange, raw.duration);
 
     const next = {
@@ -334,6 +538,7 @@
       durationHours,
       duration,
 
+      // legacy dates se mantienen pero el source real será event_dates
       dates: asArray(raw.dates).map((d) => ({
         label: safeStr(d?.label || "Por definir").trim(),
         seats: Math.max(0, Number(d?.seats) || 0),
@@ -345,6 +550,26 @@
     else events.unshift(next);
 
     ECN.setEventsRaw(events);
+
+    // ✅ Si el admin aún manda dates legacy, las migramos a event_dates SOLO si no hay fechas para ese evento
+    const existingDates = ECN.getEventDatesByEventId(id);
+    if (!existingDates.length && next.dates.length) {
+      next.dates.forEach((d) => {
+        const seats = Math.max(0, Number(d.seats) || 0);
+        ECN.upsertEventDate({
+          id: uuid(),
+          event_id: id,
+          label: safeStr(d.label).trim(),
+          seats_total: seats,
+          seats_available: seats,
+          created_at: nowIso(),
+        });
+      });
+    } else {
+      // si ya hay event_dates, refrescamos legacy
+      syncLegacyDatesIntoEvents();
+    }
+
     return next;
   };
 
@@ -353,28 +578,56 @@
     const before = events.length;
     const after = events.filter((e) => safeStr(e?.id) !== safeStr(id));
     ECN.setEventsRaw(after);
+
+    // ✅ cascade local: borrar fechas del evento
+    ECN.deleteEventDatesByEventId(id);
+
     return after.length !== before;
   };
 
-  // Descontar cupo por fecha (para register.js)
+  /**
+   * Descontar cupo por fecha
+   * - Nuevo: opera sobre event_dates (label)
+   * - Compat: actualiza legacy events[].dates automáticamente
+   */
   ECN.decrementSeat = function decrementSeat(eventId, dateLabel) {
-    const events = ECN.getEventsRaw();
-    const i = events.findIndex((e) => safeStr(e?.id) === safeStr(eventId));
-    if (i < 0) return false;
+    const eid = safeStr(eventId);
+    const lab = safeStr(dateLabel);
 
-    const ev = events[i];
-    const dates = asArray(ev?.dates);
-    const j = dates.findIndex((d) => safeStr(d?.label) === safeStr(dateLabel));
-    if (j < 0) return false;
+    const rows = ECN.getEventDatesByEventId(eid);
+    if (!rows.length) {
+      // fallback legacy (por si algo quedó viejo)
+      const events = ECN.getEventsRaw();
+      const i = events.findIndex((e) => safeStr(e?.id) === eid);
+      if (i < 0) return false;
 
-    const cur = Math.max(0, Number(dates[j]?.seats) || 0);
+      const ev = events[i];
+      const dates = asArray(ev?.dates);
+      const j = dates.findIndex((d) => safeStr(d?.label) === lab);
+      if (j < 0) return false;
+
+      const cur = Math.max(0, Number(dates[j]?.seats) || 0);
+      if (cur <= 0) return false;
+
+      dates[j].seats = cur - 1;
+      ev.dates = dates;
+      events[i] = ev;
+
+      ECN.setEventsRaw(events);
+      return true;
+    }
+
+    // buscar por label (MVP: label como identificador)
+    const idx = rows.findIndex((r) => safeStr(r.label) === lab);
+    if (idx < 0) return false;
+
+    const row = rows[idx];
+    const cur = Math.max(0, Number(row.seats_available) || 0);
     if (cur <= 0) return false;
 
-    dates[j].seats = cur - 1;
-    ev.dates = dates;
-    events[i] = ev;
+    row.seats_available = cur - 1;
+    ECN.upsertEventDate(row); // esto ya sincroniza legacy
 
-    ECN.setEventsRaw(events);
     return true;
   };
 
@@ -402,20 +655,18 @@
       location: safeStr(raw.location || "Por confirmar"),
       timeRange,
       durationHours,
-      duration, // ✅ horario
+      duration,
 
       dates, // string[]
-      seats, // total
-      _dates: datesObj, // per-date seats
+      seats, // total disponible
+      _dates: datesObj, // legacy con seats disponibles
     };
   };
 
-  // UI list (flatten)
   ECN.getEvents = function getEvents() {
     return ECN.getEventsRaw().map(ECN.flattenEventForUI);
   };
 
-  // UI find (flatten)
   ECN.findEventById = function findEventById(id) {
     const raw = ECN.getEventsRaw().find((e) => safeStr(e?.id) === safeStr(id));
     return raw ? ECN.flattenEventForUI(raw) : null;
@@ -432,18 +683,8 @@
   // Months window (3 meses) (alias usado por home.js)
   // ============================================================
   const MONTHS_ES = [
-    "ENERO",
-    "FEBRERO",
-    "MARZO",
-    "ABRIL",
-    "MAYO",
-    "JUNIO",
-    "JULIO",
-    "AGOSTO",
-    "SEPTIEMBRE",
-    "OCTUBRE",
-    "NOVIEMBRE",
-    "DICIEMBRE",
+    "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
+    "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE",
   ];
 
   ECN.getMonths3 = function getMonths3(fromDate) {
@@ -452,11 +693,7 @@
         ? fromDate
         : new Date();
     const m0 = clampInt(d.getMonth(), 0, 11);
-    return [
-      MONTHS_ES[m0],
-      MONTHS_ES[(m0 + 1) % 12],
-      MONTHS_ES[(m0 + 2) % 12],
-    ];
+    return [MONTHS_ES[m0], MONTHS_ES[(m0 + 1) % 12], MONTHS_ES[(m0 + 2) % 12]];
   };
 
   // ============================================================
@@ -476,9 +713,7 @@
     const next = { ...DEFAULT_MEDIA, ...(media || {}) };
     next.logoPath = safeStr(next.logoPath || DEFAULT_MEDIA.logoPath);
     next.defaultHero = safeStr(next.defaultHero || DEFAULT_MEDIA.defaultHero);
-    next.whatsappNumber = safeStr(
-      next.whatsappNumber || DEFAULT_MEDIA.whatsappNumber
-    );
+    next.whatsappNumber = safeStr(next.whatsappNumber || DEFAULT_MEDIA.whatsappNumber);
     next.instagramUrl = safeStr(next.instagramUrl || DEFAULT_MEDIA.instagramUrl);
     writeJSON(ECN.LS.MEDIA, next);
     return next;
@@ -508,7 +743,7 @@
   };
 
   // ============================================================
-  // ✅ Promos API (RAW)
+  // Promos API (RAW) ✅ hardened
   // ============================================================
   function normalizePromoKind(k) {
     const v = safeStr(k).trim().toUpperCase();
@@ -528,9 +763,12 @@
     const createdAt = safeStr(raw.createdAt).trim() || nowIso();
     const updatedAt = nowIso();
 
+    // default active true cuando viene undefined (mejor UX en admin)
+    const active = raw.active === undefined ? true : !!raw.active;
+
     return {
       id,
-      active: !!raw.active,
+      active,
       kind: normalizePromoKind(raw.kind),
       target: normalizePromoTarget(raw.target),
       priority: Number(raw.priority) || 0,
@@ -541,7 +779,7 @@
       note: safeStr(raw.note || ""),
 
       ctaLabel: safeStr(raw.ctaLabel || "Conocer"),
-      ctaHref: safeStr(raw.ctaHref || "#"),
+      ctaHref: sanitizeHref(raw.ctaHref || "#"),
 
       mediaImg: safeStr(raw.mediaImg || ""),
 
@@ -593,7 +831,6 @@
     return after.length !== before;
   };
 
-  // Filtro de activos + ventana de tiempo
   ECN.getActivePromos = function getActivePromos(target) {
     const t = normalizePromoTarget(target || "home");
     const ms = Date.now();
@@ -623,4 +860,7 @@
   // Boot
   // ============================================================
   ECN.ensureDefaults();
+
+  // por si algo externo creó/alteró event_dates, sincronizamos legacy al cargar
+  try { syncLegacyDatesIntoEvents(); } catch (_) {}
 })();

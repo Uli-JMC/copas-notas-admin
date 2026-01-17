@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
-  <title>Admin Login | Entre Copas & Notas</title>
+  <title>Admin Login | Entre Copas &amp; Notas</title>
   <meta name="description" content="Acceso administrador." />
 
   <link rel="stylesheet" href="./css/admin.css" />
@@ -20,8 +20,14 @@
         <div class="loginCard">
 
           <div class="loginBrand" aria-label="Marca">
-            <!-- ✅ Ruta relativa (más estable en Netlify) -->
-            <img id="adminLogo" src="/assets/img/logocuadrado-entrecopasynotas.png" alt="Entre Copas & Notas" />
+            <!-- ✅ Ruta RELATIVA (estable en Netlify y folders) -->
+            <img
+              id="adminLogo"
+              src="./assets/img/logocuadrado-entrecopasynotas.png"
+              alt="Entre Copas &amp; Notas"
+              loading="eager"
+              decoding="async"
+            />
             <div>
               <p class="kicker">Acceso</p>
               <h1 class="h1">Panel de administración</h1>
@@ -29,7 +35,7 @@
           </div>
 
           <p class="sub">
-            Por ahora es un “modo admin” local. Luego lo conectamos con Supabase Auth.
+            Iniciá sesión con tu cuenta de administrador.
           </p>
 
           <form id="loginForm" class="loginForm" novalidate>
@@ -66,8 +72,8 @@
 
             <button class="btn primary" type="submit">Entrar</button>
 
-            <p class="fine">
-              Demo: cualquier correo + contraseña con mínimo 6 caracteres.
+            <p class="fine" style="margin-top:12px;">
+              Si no tenés acceso, pedí que te agreguen como admin en Supabase.
             </p>
           </form>
         </div>
@@ -76,33 +82,13 @@
     </div>
   </main>
 
-  <script src="./js/data.js"></script>
+  <!-- ✅ 1) Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- ✅ 2) Cliente Supabase (ADMIN) -->
+  <script src="./js/supabaseClient.js"></script>
+
+  <!-- ✅ 3) Auth real (guard/login/logout) -->
   <script src="./js/admin-auth.js"></script>
-
-  <script>
-    (function () {
-      // Normaliza rutas tipo:
-      // - "assets/img/x.png" -> "/assets/img/x.png" o "./assets/img/x.png"
-      // - "./assets/img/x.png" -> "./assets/img/x.png"
-      // - "/assets/img/x.png" -> "/assets/img/x.png"
-      function normalizePath(p) {
-        var raw = String(p || "").trim();
-        if (!raw) return "";
-        raw = raw.replace(/\\/g, "/");
-        if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
-        if (raw.startsWith("./") || raw.startsWith("/")) return raw;
-        if (raw.startsWith("assets/")) return "./" + raw;
-        return "./assets/img/" + raw;
-      }
-
-      try {
-        if (window.ECN && typeof ECN.getMedia === "function") {
-          var m = ECN.getMedia();
-          var img = document.getElementById("adminLogo");
-          if (img && m && m.logoPath) img.src = normalizePath(m.logoPath);
-        }
-      } catch (_) { }
-    })();
-  </script>
 </body>
 </html>
