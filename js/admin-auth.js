@@ -46,7 +46,7 @@
   const ADMIN_URL = "./admin.html";
 
   // Tabla whitelist de admins (ajustable)
-  const ADMINS_TABLE = "admins";
+  const ADMINS_TABLE = "admin_users";
 
   // ------------------------------------------------------------
   // UI helpers
@@ -122,7 +122,7 @@
   function hardFail(msg) {
     try {
       console.error("[admin-auth]", msg);
-    } catch (_) {}
+    } catch (_) { }
     toast("Error", msg, 3600);
   }
 
@@ -144,7 +144,7 @@
   async function signOut() {
     try {
       await window.APP.supabase.auth.signOut();
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function mapAuthError(err) {
@@ -330,7 +330,7 @@
           await requireAdminOrKick(session);
         }
       });
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // ------------------------------------------------------------

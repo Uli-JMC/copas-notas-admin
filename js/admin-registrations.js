@@ -4,6 +4,7 @@
    - Join ligero para mostrar: events.title + event_dates.label
    - Filtro usa el search global #search (mismo del panel)
    - Exporta CSV (lo que esté filtrado en pantalla)
+   - Botón "Cargar demo" (seedRegsBtn) se usa como "Refrescar"
    - NO depende de data.js / ECN
 
    Requiere (admin.html):
@@ -12,6 +13,10 @@
    - #exportCsvBtn (botón)
    - #seedRegsBtn (botón)  -> lo usamos como "Refrescar"
    - #search (input search global)
+
+   Tablas/FK (según tu schema):
+   - registrations.event_id -> events.id
+   - registrations.event_date_id -> event_dates.id
    ============================================================ */
 (function () {
   "use strict";
@@ -31,7 +36,7 @@
   const tab = $("#tab-regs");
   const tbody = $("#regsTbody");
   const exportBtn = $("#exportCsvBtn");
-  const refreshBtn = $("#seedRegsBtn"); // en HTML decía "Cargar demo", acá lo convertimos en refrescar
+  const refreshBtn = $("#seedRegsBtn"); // HTML dice "Cargar demo" pero acá es Refrescar
   const searchEl = $("#search");
 
   if (!tab || !tbody || !exportBtn) return;
@@ -96,6 +101,12 @@
     );
   }
 
+  function isMissingTable(err) {
+    const m = safeStr(err?.message || "").toLowerCase();
+    // PostgREST suele decir: relation "public.x" does not exist
+    return m.includes("does not exist") || m.includes("relation") && m.includes("does not exist");
+  }
+
   function prettyError(err) {
     const msg = safeStr(err?.message || err || "");
     return msg || "Ocurrió un error.";
@@ -122,7 +133,6 @@
   }
 
   function isRegsTabActive() {
-    // tab visible + aria-selected true en botón
     const btn = document.querySelector('.tab[data-tab="regs"]');
     const selected = btn ? btn.getAttribute("aria-selected") === "true" : false;
     return selected && !tab.hidden;
@@ -158,16 +168,8 @@
   // ------------------------------------------------------------
   const TABLE = "registrations";
 
-  // Importante:
-  // PostgREST (Supabase) permite nested select por FK si están bien definidas.
-  // Con tus FK: registrations.event_id -> events.id y registrations.event_date_id -> event_dates.id,
-  // esto normalmente funciona:
-  //
-  // events ( title )
-  // event_dates ( label )
-  //
-  // Si en tu proyecto el join no resuelve (por nombres de relaciones), lo ajustamos.
-  const SELECT = `
+  // Intento 1 (lo normal si las relaciones quedan como "events" y "event_dates")
+  const SELECT_A = `
     id,
     event_id,
     event_date_id,
@@ -180,6 +182,22 @@
     event_dates ( label )
   `;
 
+  // Fallback (si PostgREST nombra distinto la relación por FK)
+  // Muchos proyectos lo exponen como: events!registrations_event_id_fkey(...)
+  // y event_dates!registrations_event_date_id_fkey(...)
+  const SELECT_B = `
+    id,
+    event_id,
+    event_date_id,
+    name,
+    email,
+    phone,
+    marketing_opt_in,
+    created_at,
+    events:events!registrations_event_id_fkey ( title ),
+    event_dates:event_dates!registrations_event_date_id_fkey ( label )
+  `;
+
   // ------------------------------------------------------------
   // State
   // ------------------------------------------------------------
@@ -188,6 +206,7 @@
     loading: false,
     didBind: false,
     refreshT: null,
+    usingSelectB: false, // detecta si el join A falló
   };
 
   // ------------------------------------------------------------
@@ -208,13 +227,10 @@
     }
   }
 
-  async function fetchRegistrations() {
-    // OJO: en registros normalmente crecen mucho.
-    // MVP: traemos los más recientes.
-    // Si luego querés paginación o filtros por evento/fecha, lo agregamos.
+  async function fetchRegistrations(selectStr) {
     const { data, error } = await APP.supabase
       .from(TABLE)
-      .select(SELECT)
+      .select(selectStr)
       .order("created_at", { ascending: false })
       .limit(1000);
 
@@ -222,7 +238,33 @@
     return Array.isArray(data) ? data : [];
   }
 
+  async function fetchWithFallback() {
+    // 1) Intento normal
+    try {
+      const dataA = await fetchRegistrations(SELECT_A);
+      S.usingSelectB = false;
+      return dataA;
+    } catch (errA) {
+      // Si el error es por join/relación, probamos fallback B
+      const msg = safeStr(errA?.message || "").toLowerCase();
+      const looksLikeJoin =
+        msg.includes("could not find") ||
+        msg.includes("relationship") ||
+        msg.includes("embedded") ||
+        msg.includes("schema cache") ||
+        msg.includes("foreign key");
+
+      if (!looksLikeJoin) throw errA;
+
+      const dataB = await fetchRegistrations(SELECT_B);
+      S.usingSelectB = true;
+      return dataB;
+    }
+  }
+
   function normalizeRow(r) {
+    // Con A: r.events.title / r.event_dates.label
+    // Con B: también quedan como "events" y "event_dates" por alias
     const evTitle = r?.events?.title || "—";
     const dateLabel = r?.event_dates?.label || "—";
 
@@ -248,7 +290,6 @@
       const hay = (
         `${x.eventTitle} ${x.dateLabel} ${x.name} ${x.email} ${x.phone}`
       ).toLowerCase();
-
       return hay.includes(q);
     });
   }
@@ -259,8 +300,6 @@
   function render() {
     if (!tbody) return;
 
-    // Solo re-render “pesado” si la pestaña está activa
-    // (igual, si no lo está, dejamos listo para cuando entren)
     const list = filterList(S.list);
 
     if (!list.length) {
@@ -303,19 +342,25 @@
       const s = await ensureSession();
       if (!s) return;
 
-      const data = await fetchRegistrations();
+      const data = await fetchWithFallback();
       S.list = data.map(normalizeRow);
 
-      if (!silent) toast("Listo", "Inscripciones actualizadas.", 1400);
+      if (!silent) {
+        const j = S.usingSelectB ? " (join B)" : "";
+        toast("Listo", "Inscripciones actualizadas." + j, 1400);
+      }
       render();
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        toast("RLS", "Acceso bloqueado. Falta policy SELECT para registrations (y joins).", 4200);
+
+      if (isMissingTable(err)) {
+        toast("BD", "La tabla registrations no existe en Supabase (public.registrations).", 4200);
+      } else if (isRLSError(err)) {
+        toast("RLS", "Acceso bloqueado. Falta policy SELECT para registrations (y sus joins).", 4200);
       } else {
         toast("Error", prettyError(err), 4200);
       }
-      // fallback UI vacío
+
       S.list = [];
       render();
     } finally {
@@ -384,7 +429,6 @@
     if (S.didBind) return;
     S.didBind = true;
 
-    // Convertimos “Cargar demo” -> “Refrescar”
     if (refreshBtn) {
       try { refreshBtn.textContent = "Refrescar"; } catch (_) {}
       refreshBtn.addEventListener("click", () => refreshNow({ silent: false }));
@@ -392,17 +436,12 @@
 
     exportBtn.addEventListener("click", exportCsv);
 
-    // Filtro global
-    searchEl?.addEventListener("input", () => {
-      // Si hay muchos, no recargamos DB: filtramos local.
-      // Si querés búsqueda server-side después, lo hacemos.
-      render();
-    });
+    // Filtro global (local)
+    searchEl?.addEventListener("input", () => render());
 
-    // Cuando se abre la pestaña regs, refrescamos (pero debounced)
+    // Cuando se abre la pestaña regs, refrescamos
     document.querySelectorAll('.tab[data-tab="regs"]').forEach((btn) => {
       btn.addEventListener("click", () => {
-        // Render inmediato (por si hay cache) + refresh silencioso
         render();
         refreshDebounced(150);
       });
@@ -414,16 +453,11 @@
   // ------------------------------------------------------------
   (async function init() {
     bindOnce();
-
-    // primer render “vacío”
     render();
 
-    // Si el usuario ya cae en regs, cargamos de una.
-    // Si no, igual hacemos un fetch silencioso para tener cache listo.
     if (isRegsTabActive()) {
       await refreshNow({ silent: true });
     } else {
-      // cache en background (pero sin prometer nada)
       refreshDebounced(250);
     }
   })();
