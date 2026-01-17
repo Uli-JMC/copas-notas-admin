@@ -6,16 +6,13 @@
   <meta name="theme-color" content="#000000" />
   <title>Admin | Entre Copas &amp; Notas</title>
   <meta name="description" content="Panel de administración para eventos e inscripciones." />
-
   <link rel="stylesheet" href="./css/admin.css" />
 </head>
 
 <body class="adminPage" data-page="admin">
   <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
 
-  <!-- =========================================================
-       TOPBAR
-  ========================================================== -->
+  <!-- TOPBAR -->
   <header class="topbar">
     <div class="container">
       <div class="nav">
@@ -32,9 +29,7 @@
     </div>
   </header>
 
-  <!-- =========================================================
-       MAIN
-  ========================================================== -->
+  <!-- MAIN -->
   <main class="page">
     <div class="container">
 
@@ -58,70 +53,331 @@
           </div>
         </div>
 
-        <!-- =====================================================
-             TABS
-        ====================================================== -->
+        <!-- TABS -->
         <div class="tabs" role="tablist" aria-label="Secciones">
-          <button class="tab" data-tab="events" aria-selected="true">Eventos</button>
-          <button class="tab" data-tab="dates">Fechas</button>
-          <button class="tab" data-tab="regs">Inscripciones</button>
-          <button class="tab" data-tab="media">Medios</button>
-          <button class="tab" data-tab="gallery">Galería</button>
-          <button class="tab" data-tab="promos">Promos</button>
+          <button class="tab" data-tab="events" aria-selected="true" type="button">Eventos</button>
+          <button class="tab" data-tab="dates" aria-selected="false" type="button">Fechas</button>
+          <button class="tab" data-tab="regs" aria-selected="false" type="button">Inscripciones</button>
+          <button class="tab" data-tab="media" aria-selected="false" type="button">Medios</button>
+          <button class="tab" data-tab="gallery" aria-selected="false" type="button">Galería</button>
+          <button class="tab" data-tab="promos" aria-selected="false" type="button">Promos</button>
         </div>
 
         <!-- =====================================================
-             EVENTS (CRUD REAL)
+             EVENTS
         ====================================================== -->
         <section class="panel" id="tab-events" role="tabpanel">
-          <!-- (sin cambios estructurales, listo para admin.js) -->
+          <div class="grid2">
+            <div class="card">
+              <div class="cardHead">
+                <h3 class="h3">Eventos</h3>
+                <div class="mini">Crear, editar y publicar eventos.</div>
+              </div>
+
+              <div class="listHead">
+                <div class="pill">Lista</div>
+                <button class="btn btn--ghost" id="newEventBtn" type="button">Nuevo</button>
+              </div>
+
+              <div class="list" id="eventsList" aria-label="Lista de eventos">
+                <!-- JS -->
+              </div>
+
+              <div class="empty" id="eventsEmpty" hidden>
+                Aún no hay eventos. Creá el primero con “Nuevo”.
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="cardHead">
+                <h3 class="h3">Editor</h3>
+                <div class="mini">Completá la info del evento y guardá cambios.</div>
+              </div>
+
+              <form class="form" id="eventForm" autocomplete="off">
+                <input type="hidden" id="eventId" />
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="eventTitle">Título</label>
+                    <input class="input" id="eventTitle" type="text" required maxlength="80" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="eventType">Tipo</label>
+                    <select class="select" id="eventType" required>
+                      <option value="vino">Vino / Cata</option>
+                      <option value="maridajes">Maridajes</option>
+                      <option value="cocteles">Cocteles</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="eventMonthKey">Mes (key)</label>
+                    <input class="input" id="eventMonthKey" type="text" placeholder="ENE / FEB / MAR…" maxlength="8" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="eventImg">Imagen (url)</label>
+                    <input class="input" id="eventImg" type="url" placeholder="https://…" />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label class="label" for="eventDesc">Descripción</label>
+                  <textarea class="textarea" id="eventDesc" rows="4" maxlength="520"></textarea>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="eventLocation">Lugar</label>
+                    <input class="input" id="eventLocation" type="text" maxlength="80" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="eventTimeRange">Horario</label>
+                    <input class="input" id="eventTimeRange" type="text" placeholder="7:00pm - 9:00pm" maxlength="40" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="eventDurationHours">Duración (horas)</label>
+                    <input class="input" id="eventDurationHours" type="number" min="0" step="0.5" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="eventDuration">Duración (texto)</label>
+                    <input class="input" id="eventDuration" type="text" placeholder="2 horas" maxlength="30" />
+                  </div>
+                </div>
+
+                <div class="formActions">
+                  <button class="btn primary" id="saveEventBtn" type="submit">Guardar</button>
+                  <button class="btn" id="deleteEventBtn" type="button">Eliminar</button>
+                </div>
+
+                <div class="note" id="eventNote" aria-live="polite"></div>
+              </form>
+            </div>
+          </div>
         </section>
 
         <!-- =====================================================
-             DATES (CRUD REAL)
+             DATES
         ====================================================== -->
         <section class="panel" id="tab-dates" role="tabpanel" hidden>
-          <!-- (sin cambios estructurales, listo para admin-dates.js) -->
+          <div class="card">
+            <div class="cardHead">
+              <h3 class="h3">Fechas por evento</h3>
+              <div class="mini">Administrá fechas, cupos y etiquetas.</div>
+            </div>
+
+            <div class="toolbar">
+              <button class="btn primary" id="newDateBtn" type="button">Nueva fecha</button>
+              <button class="btn" id="seedDatesBtn" type="button">Refrescar</button>
+            </div>
+
+            <div class="tableWrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Label</th>
+                    <th>Fecha</th>
+                    <th>Cupos</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="datesTbody">
+                  <!-- JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <div class="empty" id="datesEmpty" hidden>No hay fechas aún.</div>
+          </div>
+
+          <div class="modal" id="dateModal" hidden aria-hidden="true">
+            <div class="modal__card" role="dialog" aria-modal="true" aria-label="Editar fecha">
+              <div class="modal__head">
+                <h3 class="h3">Fecha</h3>
+                <button class="iconBtn" id="closeDateModal" type="button" aria-label="Cerrar">✕</button>
+              </div>
+
+              <form class="form" id="dateForm" autocomplete="off">
+                <input type="hidden" id="dateId" />
+
+                <div class="field">
+                  <label class="label" for="dateEvent">Evento</label>
+                  <select class="select" id="dateEvent" required>
+                    <option value="" disabled selected>Seleccioná un evento</option>
+                    <!-- JS -->
+                  </select>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="dateLabel">Label</label>
+                    <input class="input" id="dateLabel" type="text" placeholder="18-19 enero" maxlength="40" required />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="dateISO">Fecha</label>
+                    <input class="input" id="dateISO" type="date" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="dateCapacity">Cupos</label>
+                    <input class="input" id="dateCapacity" type="number" min="0" step="1" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="dateStatus">Estado</label>
+                    <select class="select" id="dateStatus">
+                      <option value="open">Abierto</option>
+                      <option value="closed">Cerrado</option>
+                      <option value="soldout">Agotado</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="formActions">
+                  <button class="btn primary" id="saveDateBtn" type="submit">Guardar</button>
+                  <button class="btn" id="deleteDateBtn" type="button">Eliminar</button>
+                </div>
+
+                <div class="note" id="dateNote" aria-live="polite"></div>
+              </form>
+            </div>
+          </div>
         </section>
 
         <!-- =====================================================
-             REGISTRATIONS (LECTURA REAL)
+             REGISTRATIONS
         ====================================================== -->
         <section class="panel" id="tab-regs" role="tabpanel" hidden>
-          <!-- (sin cambios estructurales, listo para admin-registrations.js) -->
+          <div class="card">
+            <div class="cardHead">
+              <h3 class="h3">Inscripciones</h3>
+              <div class="mini">Listado (solo lectura) con exportación CSV.</div>
+            </div>
+
+            <div class="toolbar">
+              <button class="btn" id="seedRegsBtn" type="button">Refrescar</button>
+              <button class="btn primary" id="exportCsvBtn" type="button">Exportar CSV</button>
+            </div>
+
+            <div class="tableWrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Fecha</th>
+                    <th>Nombre</th>
+                    <th>Email</th>
+                    <th>Teléfono</th>
+                    <th>Marketing</th>
+                    <th>Creado</th>
+                  </tr>
+                </thead>
+                <tbody id="regsTbody">
+                  <!-- JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- =====================================================
-             MEDIA (CONFIG)
+             MEDIA
         ====================================================== -->
         <section class="panel" id="tab-media" role="tabpanel" hidden>
-          <!-- demo → luego Supabase Storage -->
+          <div class="card">
+            <div class="cardHead">
+              <h3 class="h3">Medios</h3>
+              <div class="mini">Placeholder: luego se conecta a Storage.</div>
+            </div>
+            <div class="empty">Próximo: subida de imágenes y gestión de rutas.</div>
+          </div>
         </section>
 
         <!-- =====================================================
-             GALLERY (DEMO → STORAGE)
+             GALLERY
         ====================================================== -->
         <section class="panel" id="tab-gallery" role="tabpanel" hidden>
+          <div class="card">
+            <div class="cardHead">
+              <h3 class="h3">Galería</h3>
+              <div class="mini">Subí y organizá imágenes para Maridajes / Cocteles.</div>
+            </div>
+
+            <div class="toolbar">
+              <button class="btn primary" id="newGalleryBtn" type="button">Nuevo ítem</button>
+              <button class="btn" id="refreshGalleryBtn" type="button">Refrescar</button>
+            </div>
+
+            <div class="tableWrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Nombre</th>
+                    <th>Tags</th>
+                    <th>Imagen</th>
+                    <th>Creado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="galleryTbody">
+                  <!-- JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- =====================================================
-             PROMOS (DEMO → BD)
+             PROMOS
         ====================================================== -->
         <section class="panel" id="tab-promos" role="tabpanel" hidden>
+          <div class="card">
+            <div class="cardHead">
+              <h3 class="h3">Promos</h3>
+              <div class="mini">Administración de promos (placeholder / luego BD).</div>
+            </div>
+
+            <div class="toolbar">
+              <button class="btn primary" id="newPromoBtn" type="button">Nueva promo</button>
+              <button class="btn" id="refreshPromosBtn" type="button">Refrescar</button>
+            </div>
+
+            <div class="tableWrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Título</th>
+                    <th>Target</th>
+                    <th>Creado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="promosTbody">
+                  <!-- JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
       </section>
     </div>
   </main>
 
-  <!-- =========================================================
-       SCRIPTS (ORDEN CRÍTICO)
-  ========================================================== -->
+  <!-- SCRIPTS (ORDEN CRÍTICO) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/supabaseClient.js"></script>
   <script src="./js/admin-auth.js"></script>
 
-  <!-- módulos -->
   <script src="./js/admin.js"></script>
   <script src="./js/admin-dates.js"></script>
   <script src="./js/admin-registrations.js"></script>
