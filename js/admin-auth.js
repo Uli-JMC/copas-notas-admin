@@ -1,21 +1,10 @@
 "use strict";
 
 /**
- * admin-auth.js ✅ FINAL (Supabase Auth + Admin Gate)
- *
- * Páginas:
- * - admin-login.html: form #loginForm (#adminEmail, #adminPass) -> login -> redirect
- * - admin.html: requiere sesión + requiere ser ADMIN -> guard + logout (#logoutBtn)
- *
- * Seguridad:
- * - returnUrl (?r=) sanitizado (solo permite archivos *.html simples)
- * - Sin service role key en frontend
- * - Gate por tabla "admins" (whitelist) -> usa APP.isAdmin()
- *
- * Requisitos:
- * 1) https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
- * 2) ./js/supabaseClient.js   (crea APP.supabase + APP.isAdmin)
- * 3) ./js/admin-auth.js
+ * admin-auth.js ✅ FINAL+DIAG (Supabase Auth + Admin Gate)
+ * - Igual que tu versión, pero:
+ *   ✅ Mejor diagnóstico cuando falla APP.isAdmin()
+ *   ✅ Marca APP.adminReady = true cuando pasa gate
  */
 (function () {
   const $ = (sel) => document.querySelector(sel);
@@ -69,6 +58,10 @@
   function isValidEmail(v) {
     const s = String(v || "").trim();
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
+  function safeStr(x) {
+    return String(x ?? "");
   }
 
   // ------------------------------------------------------------
@@ -136,26 +129,65 @@
     return "No se pudo iniciar sesión. Revisá tus datos e intentá otra vez.";
   }
 
+  function looksLikeRLSError(err) {
+    const m = safeStr(err?.message || "").toLowerCase();
+    return (
+      m.includes("rls") ||
+      m.includes("permission") ||
+      m.includes("not allowed") ||
+      m.includes("row level security") ||
+      m.includes("violates row-level security") ||
+      m.includes("new row violates row-level security")
+    );
+  }
+
   // ------------------------------------------------------------
   // Admin Gate (usa APP.isAdmin() de supabaseClient.js)
   // ------------------------------------------------------------
   async function requireAdminOrKick(session) {
     const userId = session?.user?.id || "";
+    const email = session?.user?.email || "";
     if (!userId) return false;
 
-    // ✅ Centralizado (NO duplicamos query a tabla admins aquí)
+    console.info("[admin-auth] session OK:", { userId, email });
+
     if (typeof window.APP.isAdmin !== "function") {
       console.warn("[admin-auth] Falta APP.isAdmin() (revisá supabaseClient.js).");
       await signOut();
-      toast("Config incompleta", "Falta configurar el gate de admin.", 3600);
+      toast("Config incompleta", "Falta configurar el gate de admin (APP.isAdmin).", 4200);
       setTimeout(() => go(LOGIN_URL), 650);
       return false;
     }
 
-    const ok = await window.APP.isAdmin();
-    if (ok) return true;
+    let ok = false;
+    try {
+      ok = await window.APP.isAdmin();
+    } catch (err) {
+      console.error("[admin-auth] isAdmin() error:", err);
 
-    // No admin → cerramos sesión para no quedar “medio logueado”
+      // 🔥 Mensaje útil: casi siempre es policy SELECT en admins
+      if (looksLikeRLSError(err)) {
+        toast(
+          "RLS / Policies",
+          "No se pudo validar admin. Revisá policy SELECT en tabla 'admins' para usuarios autenticados.",
+          5200
+        );
+      } else {
+        toast("Error", "Falló la validación de admin (isAdmin). Revisá consola.", 5200);
+      }
+
+      await signOut();
+      setTimeout(() => go(LOGIN_URL), 650);
+      return false;
+    }
+
+    console.info("[admin-auth] isAdmin =", ok);
+
+    if (ok) {
+      window.APP.adminReady = true; // ✅ bandera para módulos
+      return true;
+    }
+
     await signOut();
     toast("Acceso denegado", "Tu cuenta no tiene permisos para entrar al panel.", 3800);
     setTimeout(() => go(LOGIN_URL), 650);
@@ -179,7 +211,6 @@
       return false;
     }
 
-    // ✅ Gate real: solo admins
     const okAdmin = await requireAdminOrKick(session);
     if (!okAdmin) return false;
 
@@ -209,7 +240,6 @@
   // Login (admin-login.html)
   // ------------------------------------------------------------
   async function initLoginPage() {
-    // Si ya hay sesión, igual validamos admin gate
     const existing = await getSession();
     if (existing) {
       const okAdmin = await requireAdminOrKick(existing);
@@ -258,7 +288,6 @@
       try {
         const session = await signIn(email, pass);
 
-        // ✅ Si no es admin, NO entra
         const okAdmin = await requireAdminOrKick(session);
         if (!okAdmin) return;
 
@@ -282,14 +311,12 @@
   function wireAuthListener() {
     try {
       window.APP.supabase.auth.onAuthStateChange(async (event, session) => {
-        // Si estás en admin y te quedaste sin sesión -> login
         if (isAdminPage && (event === "SIGNED_OUT" || event === "USER_DELETED")) {
           const back = encodeURIComponent(window.location.pathname.split("/").pop() || "admin.html");
           go(`${LOGIN_URL}?r=${back}`);
           return;
         }
 
-        // Si estás en admin y cambia sesión (refresh/sign-in), revalida admin gate
         if (isAdminPage && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
           await requireAdminOrKick(session);
         }
