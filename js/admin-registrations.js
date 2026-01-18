@@ -1,22 +1,20 @@
 /* ============================================================
-   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV)
+   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 FIX
    - Admin: lista inscripciones desde public.registrations
-   - Join ligero: events.title + event_dates.label (si existe event_date_id)
+   - Join: events.title + event_dates.label (vía FK)
    - Filtro usa el search global #search
    - Exporta CSV (lo filtrado en pantalla)
-   - Botón "Cargar demo" (seedRegsBtn) se usa como "Refrescar"
-   - NO depende de data.js / ECN
+   - Botón "seedRegsBtn" se usa como "Refrescar"
 
    Requiere (admin.html):
    - #tab-regs (panel)
    - #regsTbody (tbody)
    - #exportCsvBtn (botón)
-   - #seedRegsBtn (botón)  -> lo usamos como "Refrescar"
+   - #seedRegsBtn (botón) -> "Refrescar"
    - #search (input search global)
 
-   Nota importante:
-   - Este archivo NO asume que registrations tiene event_date_id.
-     Si no existe, cae a joins parciales o sin joins.
+   IMPORTANTE:
+   - Si ves 403/42501 => faltan policies (RLS) para registrations (y joins).
    ============================================================ */
 (function () {
   "use strict";
@@ -28,17 +26,19 @@
   // ------------------------------------------------------------
   if (!document.getElementById("appPanel")) return;
 
-  if (!window.APP || !APP.supabase) {
+  if (!window.APP || !(APP.supabase || APP.sb)) {
     console.error(
       "APP.supabase no existe. Revisá el orden: Supabase CDN -> supabaseClient.js -> admin-registrations.js"
     );
     return;
   }
 
+  const sb = APP.supabase || APP.sb;
+
   const tab = $("#tab-regs");
   const tbody = $("#regsTbody");
   const exportBtn = $("#exportCsvBtn");
-  const refreshBtn = $("#seedRegsBtn"); // HTML dice "Cargar demo" pero acá es Refrescar
+  const refreshBtn = $("#seedRegsBtn");
   const searchEl = $("#search");
 
   if (!tab || !tbody || !exportBtn) return;
@@ -106,6 +106,7 @@
       m.includes("permission") ||
       m.includes("not allowed") ||
       m.includes("row level security") ||
+      m.includes("violates row-level security") ||
       m.includes("new row violates row-level security")
     );
   }
@@ -113,12 +114,6 @@
   function isMissingTable(err) {
     const m = safeStr(err?.message || "").toLowerCase();
     return (m.includes("relation") && m.includes("does not exist")) || m.includes("does not exist");
-  }
-
-  function isMissingColumn(err) {
-    const m = safeStr(err?.message || "").toLowerCase();
-    // PostgREST: column "x" does not exist / Could not find the 'x' column
-    return m.includes("column") && m.includes("does not exist") || m.includes("could not find") && m.includes("column");
   }
 
   function isJoinRelationError(err) {
@@ -189,19 +184,13 @@
   }
 
   // ------------------------------------------------------------
-  // Config DB
+  // Config DB — ALINEADO A TU SCHEMA
   // ------------------------------------------------------------
   const TABLE = "registrations";
 
-  // IMPORTANTE:
-  // - No asumimos que existe event_date_id.
-  // - Intentamos niveles: FULL JOIN (events+event_dates) -> events only -> flat.
-  //
-  // Nota: si tus FK tienen nombres "registrations_event_id_fkey", etc,
-  // el fallback con alias suele funcionar. Pero igual puede variar, por eso hay niveles.
-
-  // Nivel 1: columnas completas + join "simple"
-  const SELECT_FULL_A = `
+  // Estrategias:
+  // A) Join directo (si PostgREST reconoce relaciones)
+  const SELECT_JOIN_A = `
     id,
     event_id,
     event_date_id,
@@ -214,8 +203,9 @@
     event_dates ( label )
   `;
 
-  // Nivel 1b: FULL JOIN con alias por FK name típico
-  const SELECT_FULL_B = `
+  // B) Join por nombre FK típico (más robusto)
+  // (en tu DDL existen constraints registrations_event_id_fkey / registrations_event_date_id_fkey)
+  const SELECT_JOIN_B = `
     id,
     event_id,
     event_date_id,
@@ -228,31 +218,7 @@
     event_dates:event_dates!registrations_event_date_id_fkey ( label )
   `;
 
-  // Nivel 2: SOLO events (si no existe event_date_id o el join a event_dates falla)
-  const SELECT_EVENTS_A = `
-    id,
-    event_id,
-    name,
-    email,
-    phone,
-    marketing_opt_in,
-    created_at,
-    events ( title )
-  `;
-
-  // Nivel 2b: SOLO events con alias por FK
-  const SELECT_EVENTS_B = `
-    id,
-    event_id,
-    name,
-    email,
-    phone,
-    marketing_opt_in,
-    created_at,
-    events:events!registrations_event_id_fkey ( title )
-  `;
-
-  // Nivel 3: sin joins (no rompe nunca)
+  // C) Flat (último recurso) — no depende de relaciones
   const SELECT_FLAT = `
     id,
     event_id,
@@ -272,31 +238,32 @@
     loading: false,
     didBind: false,
     refreshT: null,
-
-    // debug: qué estrategia se usó
-    mode: "unknown", // fullA|fullB|eventsA|eventsB|flat
+    mode: "unknown", // joinA|joinB|flat
   };
 
   // ------------------------------------------------------------
-  // Fetch
+  // Auth check
   // ------------------------------------------------------------
   async function ensureSession() {
     try {
-      const res = await APP.supabase.auth.getSession();
+      const res = await sb.auth.getSession();
       const s = res?.data?.session || null;
       if (!s) {
         toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
         return null;
       }
       return s;
-    } catch (e) {
+    } catch (_) {
       toast("Error", "No se pudo validar sesión con Supabase.", 3200);
       return null;
     }
   }
 
+  // ------------------------------------------------------------
+  // Fetch
+  // ------------------------------------------------------------
   async function fetchRegistrations(selectStr) {
-    const { data, error } = await APP.supabase
+    const { data, error } = await sb
       .from(TABLE)
       .select(selectStr)
       .order("created_at", { ascending: false })
@@ -307,74 +274,42 @@
   }
 
   async function fetchSmart() {
-    // 1) FULL A
+    // A) Join normal
     try {
-      const data = await fetchRegistrations(SELECT_FULL_A);
-      S.mode = "fullA";
+      const data = await fetchRegistrations(SELECT_JOIN_A);
+      S.mode = "joinA";
       return data;
-    } catch (errA) {
-      // si falla por columna missing (ej: no existe event_date_id), nos vamos a nivel 2/3
-      const missingCol = isMissingColumn(errA);
-      const joinErr = isJoinRelationError(errA);
-
-      // 1b) FULL B solo si parece problema de relación/join
-      if (!missingCol && joinErr) {
+    } catch (eA) {
+      // B) Join por FK
+      if (isJoinRelationError(eA)) {
         try {
-          const data = await fetchRegistrations(SELECT_FULL_B);
-          S.mode = "fullB";
+          const data = await fetchRegistrations(SELECT_JOIN_B);
+          S.mode = "joinB";
           return data;
-        } catch (errB) {
-          // seguimos
+        } catch (eB) {
+          // seguimos a FLAT
         }
       }
-
-      // 2) EVENTS A
-      try {
-        const data = await fetchRegistrations(SELECT_EVENTS_A);
-        S.mode = "eventsA";
-        return data;
-      } catch (err2A) {
-        const joinErr2 = isJoinRelationError(err2A);
-        if (joinErr2) {
-          // 2b) EVENTS B
-          try {
-            const data = await fetchRegistrations(SELECT_EVENTS_B);
-            S.mode = "eventsB";
-            return data;
-          } catch (err2B) {
-            // seguimos
-          }
-        }
-      }
-
-      // 3) FLAT (último recurso)
-      const dataFlat = await fetchRegistrations(SELECT_FLAT);
+      // C) Flat
+      const data = await fetchRegistrations(SELECT_FLAT);
       S.mode = "flat";
-      return dataFlat;
+      return data;
     }
   }
 
   function normalizeRow(r) {
-    // FULL/EVENTS: r.events.title
     const evTitle = r?.events?.title || "—";
-
-    // FULL: r.event_dates.label
     const dateLabel = r?.event_dates?.label || "—";
 
     return {
       id: safeStr(r?.id),
-
       eventTitle: safeStr(evTitle),
       dateLabel: safeStr(dateLabel),
-
       name: safeStr(r?.name),
       email: safeStr(r?.email),
       phone: safeStr(r?.phone || ""),
-
       marketing: !!r?.marketing_opt_in,
-
       createdAt: safeStr(r?.created_at || ""),
-
       eventId: safeStr(r?.event_id || ""),
       eventDateId: safeStr(r?.event_date_id || ""),
     };
@@ -394,8 +329,6 @@
   // Render
   // ------------------------------------------------------------
   function render() {
-    if (!tbody) return;
-
     const list = filterList(S.list);
 
     if (!list.length) {
@@ -427,41 +360,47 @@
   }
 
   // ------------------------------------------------------------
-  // Refresh (debounced)
+  // Refresh
   // ------------------------------------------------------------
   async function refreshNow(opts) {
     const silent = !!opts?.silent;
-
     if (S.loading) return;
     S.loading = true;
 
-    if (!silent) toast("Inscripciones", "Cargando registros…", 1200);
+    if (!silent) toast("Inscripciones", "Cargando registros…", 900);
 
     try {
-      const s = await ensureSession();
-      if (!s) return;
+      const session = await ensureSession();
+      if (!session) {
+        S.list = [];
+        render();
+        return;
+      }
 
       const data = await fetchSmart();
       S.list = data.map(normalizeRow);
 
       if (!silent) {
         const tag =
-          S.mode === "fullA" ? "" :
-          S.mode === "fullB" ? " (join full B)" :
-          S.mode === "eventsA" ? " (solo events)" :
-          S.mode === "eventsB" ? " (solo events B)" :
+          S.mode === "joinA" ? "" :
+          S.mode === "joinB" ? " (join por FK)" :
           " (sin joins)";
-        toast("Listo", "Inscripciones actualizadas." + tag, 1400);
+        toast("Listo", "Inscripciones actualizadas." + tag, 1100);
       }
 
       render();
     } catch (err) {
-      console.error(err);
+      console.error("[admin-registrations]", err);
 
       if (isMissingTable(err)) {
         toast("BD", "La tabla registrations no existe en Supabase (public.registrations).", 4200);
       } else if (isRLSError(err)) {
-        toast("RLS", "Acceso bloqueado. Falta policy SELECT para registrations (y sus joins).", 4200);
+        // ✅ Esto es tu caso actual
+        toast(
+          "RLS bloqueando",
+          "No hay permiso para leer registrations. Hay que crear policy SELECT para admins (y para joins).",
+          5200
+        );
       } else {
         toast("Error", prettyError(err), 4200);
       }
@@ -524,11 +463,10 @@
       );
     });
 
-    // BOM para Excel (mejor soporte UTF-8)
     const csv = "\uFEFF" + lines.join("\n");
     const fname = `registrations_${new Date().toISOString().slice(0, 10)}.csv`;
     downloadTextFile(fname, csv, "text/csv;charset=utf-8");
-    toast("Exportar", "CSV generado.", 1400);
+    toast("Exportar", "CSV generado.", 1200);
   }
 
   // ------------------------------------------------------------
@@ -539,9 +477,7 @@
     S.didBind = true;
 
     if (refreshBtn) {
-      try {
-        refreshBtn.textContent = "Refrescar";
-      } catch (_) {}
+      try { refreshBtn.textContent = "Refrescar"; } catch (_) {}
       refreshBtn.addEventListener("click", () => refreshNow({ silent: false }));
     }
 
@@ -550,11 +486,11 @@
     // Filtro global (local)
     searchEl?.addEventListener("input", () => render());
 
-    // Cuando se abre la pestaña regs, refrescamos (suave)
+    // Al abrir tab regs, refrescamos suave
     document.querySelectorAll('.tab[data-tab="regs"]').forEach((btn) => {
       btn.addEventListener("click", () => {
         render();
-        refreshDebounced(150);
+        refreshDebounced(120);
       });
     });
   }
@@ -566,11 +502,9 @@
     bindOnce();
     render();
 
+    // No spamear al cargar: solo si el tab está activo
     if (isRegsTabActive()) {
       await refreshNow({ silent: true });
-    } else {
-      // no spamear: refresca una vez por si ya hay datos y el usuario entra luego
-      refreshDebounced(250);
     }
   })();
 })();

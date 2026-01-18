@@ -1,19 +1,16 @@
-"use strict";
-
-/**
- * admin.js (PRO: SUPABASE CRUD EVENTS)
+/* js/admin.js ✅ PRO (SUPABASE CRUD EVENTS) — FIX 2026-01
  * - NO maneja login/sesión/logout (eso va en admin-auth.js)
- * - Requiere: supabaseClient.js (APP.supabase) cargado antes
+ * - Requiere: Supabase CDN + supabaseClient.js (APP.supabase o APP.sb) antes
  * - Página: admin.html (#appPanel)
  *
- * Meta fase 1:
- * ✅ CRUD real de events contra Supabase (tabla: events)
- * ⏳ event_dates / registrations / media / promos / gallery quedan para siguientes archivos
+ * Schema real events:
+ *  id, title, type, month_key, "desc", img, location, time_range, duration_hours, created_at, updated_at
  *
- * Nota:
- * - Este archivo NO depende de data.js/ECN.
- * - Si RLS bloquea, muestra mensajes claros.
+ * Notas:
+ * - "desc" se maneja como ev["desc"] (y payload: { desc: ... })
+ * - evDuration es SOLO UI (no existe en DB)
  */
+"use strict";
 
 // ============================================================
 // Selectores
@@ -33,7 +30,12 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+// Toast unificado (si existe window.toast, lo reutilizamos)
 function toast(title, msg, timeoutMs = 3600) {
+  try {
+    if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
+  } catch (_) {}
+
   const toastsEl = $("#toasts");
   if (!toastsEl) return;
 
@@ -61,7 +63,7 @@ function setBusy(on, msg) {
   const note = $("#storageNote");
   if (!note) return;
   if (!on && msg == null) return;
-  note.textContent = on ? (msg || "Procesando…") : (msg || note.textContent || "");
+  note.textContent = on ? (msg || "Procesando…") : (msg || "");
 }
 
 // ============================================================
@@ -72,9 +74,9 @@ function cleanSpaces(s) {
 }
 
 const MONTHS = [
-  "ENERO", "FEBRERO", "MARZO", "ABRIL",
-  "MAYO", "JUNIO", "JULIO", "AGOSTO",
-  "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+  "ENERO","FEBRERO","MARZO","ABRIL",
+  "MAYO","JUNIO","JULIO","AGOSTO",
+  "SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"
 ];
 
 function normalizeMonth(m) {
@@ -110,11 +112,22 @@ function buildDurationLabel(timeRange, durationHours) {
 }
 
 // ============================================================
-// Supabase guard
+// Supabase helpers
 // ============================================================
 function getSB() {
-  if (window.APP && window.APP.supabase) return window.APP.supabase;
-  return null;
+  if (!window.APP) return null;
+  return window.APP.supabase || window.APP.sb || null;
+}
+
+async function ensureSession() {
+  const sb = getSB();
+  if (!sb) return null;
+  try {
+    const res = await sb.auth.getSession();
+    return res?.data?.session || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 function isRLSError(err) {
@@ -127,32 +140,32 @@ function isRLSError(err) {
     m.includes("permission") ||
     m.includes("not allowed") ||
     m.includes("row level security") ||
+    m.includes("violates row-level security") ||
     m.includes("new row violates row-level security")
   );
 }
 
 function prettyError(err) {
   const msg = String(err?.message || err || "");
-  if (!msg) return "Ocurrió un error.";
-  return msg;
+  return msg || "Ocurrió un error.";
 }
 
 // ============================================================
-// DB mapping (events)
+// DB mapping (events) — ALINEADO A TU SCHEMA REAL
 // ============================================================
 const EVENTS_TABLE = "events";
-const EVENTS_SELECT = `
+const SELECT_EVENTS = `
   id,
   title,
   type,
   month_key,
+  "desc",
   img,
-  desc,
   location,
   time_range,
   duration_hours,
-  duration,
-  created_at
+  created_at,
+  updated_at
 `;
 
 // ============================================================
@@ -168,7 +181,7 @@ let state = {
 };
 
 // ============================================================
-// Tabs (solo control visual; otros módulos vendrán luego)
+// Tabs
 // ============================================================
 function hideAllTabs() {
   $("#tab-events") && ($("#tab-events").hidden = true);
@@ -199,6 +212,21 @@ function setTab(tab) {
 }
 
 // ============================================================
+// Busy lock
+// ============================================================
+function withLock(fn) {
+  return async function (...args) {
+    if (state.busy) return;
+    state.busy = true;
+    try {
+      return await fn(...args);
+    } finally {
+      state.busy = false;
+    }
+  };
+}
+
+// ============================================================
 // Supabase: CRUD events
 // ============================================================
 async function fetchEvents() {
@@ -213,7 +241,7 @@ async function fetchEvents() {
 
   const { data, error } = await sb
     .from(EVENTS_TABLE)
-    .select(EVENTS_SELECT)
+    .select(SELECT_EVENTS)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -226,6 +254,11 @@ async function fetchEvents() {
   state.mode = "supabase";
   state.events = Array.isArray(data) ? data : [];
   setBusy(false, "");
+
+  // Auto-select: si no hay activo, agarramos el primero
+  if (!state.activeEventId && state.events.length) {
+    state.activeEventId = state.events[0].id;
+  }
 }
 
 async function insertEvent(payload) {
@@ -235,7 +268,7 @@ async function insertEvent(payload) {
   const { data, error } = await sb
     .from(EVENTS_TABLE)
     .insert(payload)
-    .select(EVENTS_SELECT)
+    .select(SELECT_EVENTS)
     .single();
 
   if (error) throw error;
@@ -250,7 +283,7 @@ async function updateEvent(id, payload) {
     .from(EVENTS_TABLE)
     .update(payload)
     .eq("id", id)
-    .select(EVENTS_SELECT)
+    .select(SELECT_EVENTS)
     .single();
 
   if (error) throw error;
@@ -275,8 +308,8 @@ function setEditorVisible(show) {
 
 function clearEditorForm() {
   const ids = [
-    "evTitle", "evType", "evMonth", "evImg", "evDesc",
-    "evLocation", "evTimeRange", "evDurationHours", "evDuration"
+    "evTitle","evType","evMonth","evImg","evDesc",
+    "evLocation","evTimeRange","evDurationHours","evDuration"
   ];
   ids.forEach((id) => {
     const el = document.getElementById(id);
@@ -289,7 +322,7 @@ function clearEditorForm() {
 }
 
 function getFilteredEvents() {
-  const q = state.query.trim().toLowerCase();
+  const q = (state.query || "").trim().toLowerCase();
   return (state.events || []).filter((ev) => {
     if (!q) return true;
     return (
@@ -322,7 +355,7 @@ function renderEventList() {
       <div class="item" style="cursor:default;">
         <div>
           <p class="itemTitle">Acceso bloqueado por RLS</p>
-          <p class="itemMeta">Necesitamos policies para que el admin pueda leer/crear/editar eventos.</p>
+          <p class="itemMeta">Faltan policies para que el admin pueda leer/crear/editar eventos.</p>
         </div>
       </div>`;
     return;
@@ -368,7 +401,8 @@ function renderEventList() {
 }
 
 function renderEventEditor() {
-  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
+  const ev =
+    (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
   if (!ev) {
     clearEditorForm();
@@ -382,48 +416,34 @@ function renderEventEditor() {
   $("#evType") && ($("#evType").value = ev.type || "Cata de vino");
   $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
   $("#evImg") && ($("#evImg").value = ev.img || "");
-  $("#evDesc") && ($("#evDesc").value = ev.desc || "");
-  $("#descCount") && ($("#descCount").textContent = String((ev.desc || "").length));
+
+  const d = ev["desc"] || "";
+  $("#evDesc") && ($("#evDesc").value = d);
+  $("#descCount") && ($("#descCount").textContent = String(String(d).length));
 
   $("#evLocation") && ($("#evLocation").value = ev.location || "");
   $("#evTimeRange") && ($("#evTimeRange").value = ev.time_range || "");
   $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours || "");
 
-  if ($("#evDuration")) {
-    const label =
-      cleanSpaces(ev.duration || "") ||
-      buildDurationLabel(ev.time_range || "", ev.duration_hours || "");
-    $("#evDuration").value = label === "Por confirmar" ? "" : label;
+  // UI only
+  const durInput = $("#evDuration");
+  if (durInput) {
+    const label = buildDurationLabel(ev.time_range || "", ev.duration_hours || "");
+    durInput.value = label === "Por confirmar" ? "" : label;
   }
 
-  // Fechas se conectan en admin-dates.js (event_dates)
+  // Hint para fechas (event_dates se gestiona en admin-dates.js)
   const datesList = $("#datesList");
   if (datesList) {
     datesList.innerHTML = `
       <div class="notice">
         <span class="badge">Fechas</span>
-        <span>
-          Las fechas/cupos se gestionan en la sección <strong>“Fechas”</strong> usando la tabla <code>event_dates</code>.
-        </span>
+        <span>Las fechas/cupos se gestionan en <strong>“Fechas”</strong> (tabla <code>event_dates</code>).</span>
       </div>
     `;
   }
-  $("#soldNotice") && ($("#soldNotice").hidden = true);
-}
 
-// ============================================================
-// Busy lock
-// ============================================================
-function withLock(fn) {
-  return async function (...args) {
-    if (state.busy) return;
-    state.busy = true;
-    try {
-      return await fn(...args);
-    } finally {
-      state.busy = false;
-    }
-  };
+  $("#soldNotice") && ($("#soldNotice").hidden = true);
 }
 
 // ============================================================
@@ -433,6 +453,13 @@ const createNewEvent = withLock(async function () {
   try {
     if (state.mode !== "supabase") {
       toast("Bloqueado", "Primero necesitamos habilitar RLS/policies para admin.");
+      return;
+    }
+
+    // opcional: sesión
+    const s = await ensureSession();
+    if (!s) {
+      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
       return;
     }
 
@@ -447,7 +474,6 @@ const createNewEvent = withLock(async function () {
       location: "Por confirmar",
       time_range: "",
       duration_hours: "",
-      duration: "Por confirmar",
     };
 
     const created = await insertEvent(payload);
@@ -461,12 +487,12 @@ const createNewEvent = withLock(async function () {
     console.error(err);
     if (isRLSError(err)) {
       state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de INSERT para admin.");
+      toast("RLS", "Acceso bloqueado. Falta policy de INSERT para events.", 5200);
     } else {
-      toast("Error", prettyError(err));
+      toast("Error", prettyError(err), 5200);
     }
   } finally {
-    setBusy(false, null);
+    setBusy(false, "");
   }
 });
 
@@ -483,6 +509,12 @@ const duplicateActiveEvent = withLock(async function () {
       return;
     }
 
+    const s = await ensureSession();
+    if (!s) {
+      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
+      return;
+    }
+
     setBusy(true, "Duplicando evento…");
 
     const payload = {
@@ -490,11 +522,10 @@ const duplicateActiveEvent = withLock(async function () {
       type: ev.type || "Cata de vino",
       month_key: normalizeMonth(ev.month_key || "ENERO"),
       img: ev.img || "./assets/img/hero-1.jpg",
-      desc: ev.desc || "",
+      desc: ev["desc"] || "",
       location: ev.location || "",
       time_range: ev.time_range || "",
       duration_hours: ev.duration_hours || "",
-      duration: cleanSpaces(ev.duration || "") || buildDurationLabel(ev.time_range || "", ev.duration_hours || ""),
     };
 
     const created = await insertEvent(payload);
@@ -507,12 +538,12 @@ const duplicateActiveEvent = withLock(async function () {
     console.error(err);
     if (isRLSError(err)) {
       state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de INSERT para admin.");
+      toast("RLS", "Acceso bloqueado. Falta policy de INSERT para events.", 5200);
     } else {
-      toast("Error", prettyError(err));
+      toast("Error", prettyError(err), 5200);
     }
   } finally {
-    setBusy(false, null);
+    setBusy(false, "");
   }
 });
 
@@ -529,12 +560,18 @@ const deleteActiveEvent = withLock(async function () {
       return;
     }
 
+    const s = await ensureSession();
+    if (!s) {
+      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
+      return;
+    }
+
     setBusy(true, "Eliminando evento…");
 
     await deleteEvent(ev.id);
 
     state.events = (state.events || []).filter((x) => String(x.id) !== String(ev.id));
-    state.activeEventId = null;
+    state.activeEventId = state.events[0]?.id || null;
 
     toast("Evento eliminado", "Se eliminó correctamente.");
     renderAll();
@@ -542,12 +579,12 @@ const deleteActiveEvent = withLock(async function () {
     console.error(err);
     if (isRLSError(err)) {
       state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de DELETE para admin.");
+      toast("RLS", "Acceso bloqueado. Falta policy de DELETE para events.", 5200);
     } else {
-      toast("Error", prettyError(err));
+      toast("Error", prettyError(err), 5200);
     }
   } finally {
-    setBusy(false, null);
+    setBusy(false, "");
   }
 });
 
@@ -564,25 +601,21 @@ const saveActiveEvent = withLock(async function () {
   const location = cleanSpaces($("#evLocation")?.value || "");
   const time_range = normalizeTimeRange($("#evTimeRange")?.value || "");
   const duration_hours = parseHoursNumber($("#evDurationHours")?.value || "");
-  const durationManual = cleanSpaces($("#evDuration")?.value || "");
 
   if (!title) {
     toast("Falta el nombre", "Ingresá el nombre del evento.");
     return false;
   }
 
-  const duration = durationManual || buildDurationLabel(time_range, duration_hours);
-
   const payload = {
     title,
     type,
     month_key,
     img: img || "./assets/img/hero-1.jpg",
-    desc,
+    desc, // 👈 columna "desc" real
     location: location || "Por confirmar",
     time_range,
     duration_hours,
-    duration,
   };
 
   try {
@@ -591,11 +624,19 @@ const saveActiveEvent = withLock(async function () {
       return false;
     }
 
+    const s = await ensureSession();
+    if (!s) {
+      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
+      return false;
+    }
+
     setBusy(true, "Guardando cambios…");
 
     const updated = await updateEvent(ev.id, payload);
 
-    state.events = (state.events || []).map((x) => (String(x.id) === String(updated.id) ? updated : x));
+    state.events = (state.events || []).map((x) =>
+      String(x.id) === String(updated.id) ? updated : x
+    );
 
     toast("Guardado", "Evento actualizado en Supabase.");
     renderAll();
@@ -604,13 +645,13 @@ const saveActiveEvent = withLock(async function () {
     console.error(err);
     if (isRLSError(err)) {
       state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de UPDATE para admin.");
+      toast("RLS", "Acceso bloqueado. Falta policy de UPDATE para events.", 5200);
     } else {
-      toast("Error", prettyError(err));
+      toast("Error", prettyError(err), 5200);
     }
     return false;
   } finally {
-    setBusy(false, null);
+    setBusy(false, "");
   }
 });
 
@@ -624,6 +665,7 @@ function wire() {
   // Search
   $("#search")?.addEventListener("input", (e) => {
     state.query = e.target.value || "";
+    // no tocar storageNote aquí: cada tab lo controla
     renderAll();
   });
 
@@ -638,7 +680,7 @@ function wire() {
     $("#descCount") && ($("#descCount").textContent = String(v.length));
   });
 
-  // Auto duration if empty (no pisa manual)
+  // Auto duration (UI only)
   const durInput = $("#evDuration");
   const timeInput = $("#evTimeRange");
   const hoursInput = $("#evDurationHours");
@@ -664,32 +706,31 @@ function wire() {
 
   // Ir a fechas
   $("#addDateBtn")?.addEventListener("click", () => {
-    toast("Fechas", "Ahora pasamos a conectar event_dates en la sección “Fechas”.", 2200);
+    toast("Fechas", "Administrá fechas/cupos en la pestaña “Fechas”.", 1800);
     setTab("dates");
   });
 
-  // Default tab
   setTab("events");
 }
 
 // ============================================================
-// Render all
+// Render
 // ============================================================
 function renderAll() {
-  // SOLO events acá
-  if (state.activeTab === "events") {
-    renderEventList();
-    renderEventEditor();
+  // Solo esta pestaña controla su render
+  if (state.activeTab !== "events") return;
 
-    const note = $("#storageNote");
-    if (note) {
-      if (state.mode === "supabase") {
-        note.textContent = "✅ Eventos guardan en Supabase (CRUD real).";
-      } else if (state.mode === "blocked") {
-        note.textContent = "⚠️ Supabase conectado, pero RLS bloquea. Faltan policies para events.";
-      } else {
-        note.textContent = "⚠️ Falta Supabase Client. Revisá el orden de scripts.";
-      }
+  renderEventList();
+  renderEventEditor();
+
+  const note = $("#storageNote");
+  if (note) {
+    if (state.mode === "supabase") {
+      note.textContent = "✅ Eventos guardan en Supabase (CRUD real).";
+    } else if (state.mode === "blocked") {
+      note.textContent = "⚠️ Supabase conectado, pero RLS bloquea. Faltan policies para events.";
+    } else {
+      note.textContent = "⚠️ Falta Supabase Client. Revisá el orden de scripts.";
     }
   }
 }
@@ -706,7 +747,7 @@ function renderAll() {
     await fetchEvents();
   } catch (err) {
     console.error(err);
-    toast("Supabase", "No se pudieron cargar eventos. Revisá policies/RLS.");
+    toast("Supabase", "No se pudieron cargar eventos. Revisá RLS/policies.", 5200);
   } finally {
     renderAll();
   }

@@ -64,7 +64,7 @@
         </div>
 
         <!-- =====================================================
-             EVENTS
+             EVENTS (ALINEADO con admin.js PRO)
         ====================================================== -->
         <section class="panel" id="tab-events" role="tabpanel">
           <div class="grid2">
@@ -76,16 +76,23 @@
 
               <div class="listHead">
                 <div class="pill">Lista</div>
-                <button class="btn btn--ghost" id="newEventBtn" type="button">Nuevo</button>
+                <div class="actions">
+                  <button class="btn btn--ghost" id="newEventBtn" type="button">Nuevo</button>
+                  <button class="btn btn--ghost" id="dupEventBtn" type="button">Duplicar</button>
+                </div>
               </div>
 
-              <div class="list" id="eventsList" aria-label="Lista de eventos">
+              <!-- ✅ admin.js PRO usa #eventList -->
+              <div class="list" id="eventList" aria-label="Lista de eventos">
                 <!-- JS -->
               </div>
 
               <div class="empty" id="eventsEmpty" hidden>
                 Aún no hay eventos. Creá el primero con “Nuevo”.
               </div>
+
+              <!-- ✅ admin.js PRO escribe aquí estados -->
+              <div class="note" id="storageNote" aria-live="polite"></div>
             </div>
 
             <div class="card">
@@ -94,65 +101,79 @@
                 <div class="mini">Completá la info del evento y guardá cambios.</div>
               </div>
 
-              <form class="form" id="eventForm" autocomplete="off">
+              <!-- ✅ admin.js PRO usa editorEmpty para when no selection -->
+              <div class="empty" id="editorEmpty">
+                Seleccioná un evento de la lista para editarlo.
+              </div>
+
+              <form class="form" id="eventForm" autocomplete="off" hidden>
                 <input type="hidden" id="eventId" />
 
                 <div class="row">
                   <div class="field">
-                    <label class="label" for="eventTitle">Título</label>
-                    <input class="input" id="eventTitle" type="text" required maxlength="80" />
+                    <label class="label" for="evTitle">Título</label>
+                    <input class="input" id="evTitle" type="text" required maxlength="80" />
                   </div>
                   <div class="field">
-                    <label class="label" for="eventType">Tipo</label>
-                    <select class="select" id="eventType" required>
-                      <option value="vino">Vino / Cata</option>
-                      <option value="maridajes">Maridajes</option>
-                      <option value="cocteles">Cocteles</option>
+                    <label class="label" for="evType">Tipo</label>
+                    <select class="select" id="evType" required>
+                      <option value="Cata de vino">Vino / Cata</option>
+                      <option value="Maridajes">Maridajes</option>
+                      <option value="Cocteles">Cocteles</option>
                     </select>
                   </div>
                 </div>
 
                 <div class="row">
                   <div class="field">
-                    <label class="label" for="eventMonthKey">Mes (key)</label>
-                    <input class="input" id="eventMonthKey" type="text" placeholder="ENE / FEB / MAR…" maxlength="8" />
+                    <label class="label" for="evMonth">Mes</label>
+                    <select class="select" id="evMonth" required>
+                      <option>ENERO</option><option>FEBRERO</option><option>MARZO</option><option>ABRIL</option>
+                      <option>MAYO</option><option>JUNIO</option><option>JULIO</option><option>AGOSTO</option>
+                      <option>SEPTIEMBRE</option><option>OCTUBRE</option><option>NOVIEMBRE</option><option>DICIEMBRE</option>
+                    </select>
                   </div>
                   <div class="field">
-                    <label class="label" for="eventImg">Imagen (url)</label>
-                    <input class="input" id="eventImg" type="url" placeholder="https://…" />
+                    <label class="label" for="evImg">Imagen (url)</label>
+                    <input class="input" id="evImg" type="text" placeholder="https://…" />
                   </div>
                 </div>
 
                 <div class="field">
-                  <label class="label" for="eventDesc">Descripción</label>
-                  <textarea class="textarea" id="eventDesc" rows="4" maxlength="520"></textarea>
+                  <label class="label" for="evDesc">Descripción</label>
+                  <textarea class="textarea" id="evDesc" rows="4" maxlength="520"></textarea>
+                  <div class="mini">Caracteres: <span id="descCount">0</span>/520</div>
                 </div>
 
                 <div class="row">
                   <div class="field">
-                    <label class="label" for="eventLocation">Lugar</label>
-                    <input class="input" id="eventLocation" type="text" maxlength="80" />
+                    <label class="label" for="evLocation">Lugar</label>
+                    <input class="input" id="evLocation" type="text" maxlength="80" />
                   </div>
                   <div class="field">
-                    <label class="label" for="eventTimeRange">Horario</label>
-                    <input class="input" id="eventTimeRange" type="text" placeholder="7:00pm - 9:00pm" maxlength="40" />
+                    <label class="label" for="evTimeRange">Horario</label>
+                    <input class="input" id="evTimeRange" type="text" placeholder="7:00pm - 9:00pm" maxlength="40" />
                   </div>
                 </div>
 
                 <div class="row">
                   <div class="field">
-                    <label class="label" for="eventDurationHours">Duración (horas)</label>
-                    <input class="input" id="eventDurationHours" type="number" min="0" step="0.5" />
+                    <label class="label" for="evDurationHours">Duración (horas)</label>
+                    <input class="input" id="evDurationHours" type="text" placeholder="2" maxlength="10" />
                   </div>
                   <div class="field">
-                    <label class="label" for="eventDuration">Duración (texto)</label>
-                    <input class="input" id="eventDuration" type="text" placeholder="2 horas" maxlength="30" />
+                    <label class="label" for="evDuration">Duración (texto)</label>
+                    <input class="input" id="evDuration" type="text" placeholder="2 hrs" maxlength="30" />
                   </div>
                 </div>
+
+                <!-- hint fechas -->
+                <div id="datesList"></div>
 
                 <div class="formActions">
                   <button class="btn primary" id="saveEventBtn" type="submit">Guardar</button>
                   <button class="btn" id="deleteEventBtn" type="button">Eliminar</button>
+                  <button class="btn btn--ghost" id="addDateBtn" type="button">Administrar fechas</button>
                 </div>
 
                 <div class="note" id="eventNote" aria-live="polite"></div>
@@ -162,97 +183,78 @@
         </section>
 
         <!-- =====================================================
-             DATES
+             DATES (ALINEADO con admin-dates.js PRO “UI nueva”)
         ====================================================== -->
         <section class="panel" id="tab-dates" role="tabpanel" hidden>
-          <div class="card">
-            <div class="cardHead">
-              <h3 class="h3">Fechas por evento</h3>
-              <div class="mini">Administrá fechas, cupos y etiquetas.</div>
-            </div>
-
-            <div class="toolbar">
-              <button class="btn primary" id="newDateBtn" type="button">Nueva fecha</button>
-              <button class="btn" id="seedDatesBtn" type="button">Refrescar</button>
-            </div>
-
-            <div class="tableWrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>Evento</th>
-                    <th>Label</th>
-                    <th>Fecha</th>
-                    <th>Cupos</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody id="datesTbody">
-                  <!-- JS -->
-                </tbody>
-              </table>
-            </div>
-
-            <div class="empty" id="datesEmpty" hidden>No hay fechas aún.</div>
-          </div>
-
-          <div class="modal" id="dateModal" hidden aria-hidden="true">
-            <div class="modal__card" role="dialog" aria-modal="true" aria-label="Editar fecha">
-              <div class="modal__head">
-                <h3 class="h3">Fecha</h3>
-                <button class="iconBtn" id="closeDateModal" type="button" aria-label="Cerrar">✕</button>
+          <div class="grid2">
+            <div class="card">
+              <div class="cardHead">
+                <h3 class="h3">Eventos</h3>
+                <div class="mini">Seleccioná un evento para ver/crear fechas.</div>
               </div>
 
-              <form class="form" id="dateForm" autocomplete="off">
-                <input type="hidden" id="dateId" />
+              <div class="toolbar">
+                <button class="btn" id="datesRefreshBtn" type="button">Refrescar</button>
+              </div>
 
-                <div class="field">
-                  <label class="label" for="dateEvent">Evento</label>
-                  <select class="select" id="dateEvent" required>
-                    <option value="" disabled selected>Seleccioná un evento</option>
-                    <!-- JS -->
-                  </select>
-                </div>
+              <div class="note" id="datesNote" aria-live="polite"></div>
 
-                <div class="row">
+              <!-- ✅ admin-dates.js PRO usa #datesEventList -->
+              <div class="list" id="datesEventList"></div>
+            </div>
+
+            <div class="card">
+              <div class="cardHead">
+                <h3 class="h3" id="datesEventTitle">Fechas</h3>
+                <div class="mini" id="datesEventMeta">—</div>
+              </div>
+
+              <div class="toolbar">
+                <button class="btn primary" id="datesNewBtn" type="button">+ Nueva fecha</button>
+              </div>
+
+              <!-- estado -->
+              <div class="empty" id="datesEmpty">
+                Seleccioná un evento a la izquierda para administrar sus fechas.
+              </div>
+
+              <!-- ✅ editor (admin-dates.js PRO usa #datesEditor) -->
+              <div id="datesEditor" hidden>
+                <div class="list" id="datesListByEvent"></div>
+
+                <form class="form" id="dateForm" autocomplete="off">
+                  <input type="hidden" id="dateId" />
+
                   <div class="field">
                     <label class="label" for="dateLabel">Label</label>
-                    <input class="input" id="dateLabel" type="text" placeholder="18-19 enero" maxlength="40" required />
+                    <input class="input" id="dateLabel" type="text" placeholder="Sábado 18 • 7pm" maxlength="40" required />
                   </div>
-                  <div class="field">
-                    <label class="label" for="dateISO">Fecha</label>
-                    <input class="input" id="dateISO" type="date" />
-                  </div>
-                </div>
 
-                <div class="row">
-                  <div class="field">
-                    <label class="label" for="dateCapacity">Cupos</label>
-                    <input class="input" id="dateCapacity" type="number" min="0" step="1" />
+                  <div class="row">
+                    <div class="field">
+                      <label class="label" for="dateSeatsTotal">Cupos totales</label>
+                      <input class="input" id="dateSeatsTotal" type="number" min="0" step="1" value="0" />
+                    </div>
+                    <div class="field">
+                      <label class="label" for="dateSeatsAvailable">Cupos disponibles</label>
+                      <input class="input" id="dateSeatsAvailable" type="number" min="0" step="1" value="0" />
+                    </div>
                   </div>
-                  <div class="field">
-                    <label class="label" for="dateStatus">Estado</label>
-                    <select class="select" id="dateStatus">
-                      <option value="open">Abierto</option>
-                      <option value="closed">Cerrado</option>
-                      <option value="soldout">Agotado</option>
-                    </select>
+
+                  <div class="formActions">
+                    <button class="btn primary" id="dateSaveBtn" type="submit">Guardar</button>
+                    <button class="btn" id="dateClearBtn" type="button">Nueva</button>
+                    <button class="btn" id="dateDeleteBtn" type="button" disabled>Eliminar</button>
                   </div>
-                </div>
+                </form>
+              </div>
 
-                <div class="formActions">
-                  <button class="btn primary" id="saveDateBtn" type="submit">Guardar</button>
-                  <button class="btn" id="deleteDateBtn" type="button">Eliminar</button>
-                </div>
-
-                <div class="note" id="dateNote" aria-live="polite"></div>
-              </form>
             </div>
           </div>
         </section>
 
         <!-- =====================================================
-             REGISTRATIONS
+             REGISTRATIONS (ALINEADO con admin-registrations.js PRO)
         ====================================================== -->
         <section class="panel" id="tab-regs" role="tabpanel" hidden>
           <div class="card">
@@ -327,9 +329,7 @@
                     <th>Acciones</th>
                   </tr>
                 </thead>
-                <tbody id="galleryTbody">
-                  <!-- JS -->
-                </tbody>
+                <tbody id="galleryTbody"></tbody>
               </table>
             </div>
           </div>
@@ -342,7 +342,7 @@
           <div class="card">
             <div class="cardHead">
               <h3 class="h3">Promos</h3>
-              <div class="mini">Administración de promos (placeholder / luego BD).</div>
+              <div class="mini">Administración de promos.</div>
             </div>
 
             <div class="toolbar">
@@ -361,9 +361,7 @@
                     <th>Acciones</th>
                   </tr>
                 </thead>
-                <tbody id="promosTbody">
-                  <!-- JS -->
-                </tbody>
+                <tbody id="promosTbody"></tbody>
               </table>
             </div>
           </div>
