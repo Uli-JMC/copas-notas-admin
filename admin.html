@@ -281,15 +281,84 @@
         </section>
 
         <!-- =====================================================
-             MEDIA (placeholder)
+             MEDIA (Storage: bucket "media" PUBLIC)
         ====================================================== -->
         <section class="panel" id="tab-media" role="tabpanel" hidden>
-          <div class="card">
-            <div class="cardHead">
-              <h3 class="h3">Medios</h3>
-              <div class="mini">Placeholder: luego se conecta a Storage.</div>
+          <div class="grid2">
+
+            <!-- Subida -->
+            <div class="card">
+              <div class="cardHead">
+                <h3 class="h3">Medios</h3>
+                <div class="mini">Subí imágenes al bucket <b>media</b> y copiá la URL para usarla en Eventos/Promos.</div>
+              </div>
+
+              <form class="form" id="mediaForm" autocomplete="off">
+                <div class="field">
+                  <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP)</label>
+                  <input class="input" id="mediaFile" type="file" accept="image/*" required />
+                  <div class="mini">Recomendado: &lt; 6MB. Se genera URL pública automáticamente.</div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="mediaFolder">Carpeta</label>
+                    <select class="select" id="mediaFolder">
+                      <option value="events">events</option>
+                      <option value="promos">promos</option>
+                      <option value="gallery">gallery</option>
+                      <option value="misc">misc</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label class="label" for="mediaName">Nombre (opcional)</label>
+                    <input class="input" id="mediaName" type="text" placeholder="hero-enero" maxlength="80" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="field">
+                    <label class="label" for="mediaUrl">URL pública</label>
+                    <input class="input" id="mediaUrl" type="text" readonly placeholder="(se llena al subir)" />
+                  </div>
+                  <div class="field">
+                    <label class="label">&nbsp;</label>
+                    <div class="formActions" style="justify-content:flex-start;">
+                      <button class="btn primary" id="mediaUploadBtn" type="submit">Subir</button>
+                      <button class="btn" id="mediaCopyBtn" type="button">Copiar URL</button>
+                      <button class="btn btn--ghost" id="mediaResetBtn" type="button">Limpiar</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="note" id="mediaNote" aria-live="polite"></div>
+              </form>
             </div>
-            <div class="empty">Próximo: subida de imágenes y gestión de rutas.</div>
+
+            <!-- Preview + lista -->
+            <div class="card">
+              <div class="cardHead">
+                <h3 class="h3">Vista previa</h3>
+                <div class="mini">Verificá la imagen y luego copiá la URL.</div>
+              </div>
+
+              <div class="empty" id="mediaPreviewEmpty">Seleccioná una imagen para previsualizar.</div>
+
+              <div id="mediaPreview" hidden>
+                <img id="mediaPreviewImg" alt="Preview" style="width:100%; height:auto; border:1px solid rgba(255,255,255,.10);" />
+                <div class="note" id="mediaPreviewMeta"></div>
+              </div>
+
+              <div class="toolbar" style="margin-top:12px;">
+                <button class="btn" id="mediaRefreshBtn" type="button">Refrescar lista</button>
+              </div>
+
+              <div class="list" id="mediaList" aria-label="Lista de medios">
+                <!-- JS -->
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -370,6 +439,9 @@
   <script src="./js/admin.js" defer></script>
   <script src="./js/admin-dates.js" defer></script>
   <script src="./js/admin-registrations.js" defer></script>
+
+  <script src="./js/admin-media.js" defer></script> <!-- ✅ NUEVO -->
+
   <script src="./js/admin-gallery.js" defer></script>
   <script src="./js/admin-promos.js" defer></script>
 </body>
