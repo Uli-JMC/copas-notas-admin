@@ -5,13 +5,21 @@
  * - Conecta logout SIEMPRE que exista el botón (aunque haya fallos en módulos)
  * - Dispara window event "admin:ready" cuando el gate pasa
  * - Marca APP.adminReady = true
+ * - Evita doble binding de listeners (dataset.wired)
+ * - Maneja return URL seguro (r=admin.html)
  */
 (function () {
   const $ = (sel) => document.querySelector(sel);
 
+  // ------------------------------------------------------------
+  // Config
+  // ------------------------------------------------------------
   const LOGIN_URL = "./admin-login.html";
   const ADMIN_URL = "./admin.html";
 
+  // ------------------------------------------------------------
+  // UI helpers
+  // ------------------------------------------------------------
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -22,6 +30,11 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
+    // Si existe toast global, úsalo
+    try {
+      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
+    } catch (_) {}
+
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
 
@@ -41,6 +54,7 @@
       el.style.transform = "translateY(-6px)";
       setTimeout(() => el.remove(), 180);
     };
+
     el.querySelector(".close")?.addEventListener("click", kill, { once: true });
     setTimeout(kill, timeoutMs);
   }
@@ -53,12 +67,36 @@
     return String(x ?? "");
   }
 
+  // ------------------------------------------------------------
+  // Return URL safety
+  // ------------------------------------------------------------
+  function getReturnUrl() {
+    try {
+      const u = new URL(window.location.href);
+      const r = u.searchParams.get("r");
+      return r ? String(r) : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function sanitizeReturnFile(r) {
+    // Solo permite "admin.html" o "algo-1.html"
+    const s = String(r || "").trim();
+    return /^[a-z0-9-]+\.html$/i.test(s) ? s : "";
+  }
+
+  // ------------------------------------------------------------
+  // Supabase guard
+  // ------------------------------------------------------------
   function hasSupabase() {
     return !!(window.APP && window.APP.supabase && window.APP.supabase.auth);
   }
 
   function hardFail(msg) {
-    console.error("[admin-auth]", msg);
+    try {
+      console.error("[admin-auth]", msg);
+    } catch (_) {}
     toast("Error", msg, 5200);
   }
 
@@ -104,12 +142,14 @@
     );
   }
 
-  // ✅ logout SIEMPRE (si existe el botón)
+  // ------------------------------------------------------------
+  // ✅ Logout SIEMPRE (si existe el botón)
+  // ------------------------------------------------------------
   function wireLogout() {
     const btn = $("#logoutBtn");
     if (!btn) return;
 
-    // evita duplicar listeners si el script se re-ejecuta por hot reload/caches
+    // Evita duplicar listeners
     if (btn.dataset.wired === "1") return;
     btn.dataset.wired = "1";
 
@@ -125,6 +165,9 @@
     });
   }
 
+  // ------------------------------------------------------------
+  // Ready event
+  // ------------------------------------------------------------
   function fireReady() {
     try {
       window.APP = window.APP || {};
@@ -134,6 +177,9 @@
     } catch (_) {}
   }
 
+  // ------------------------------------------------------------
+  // Admin Gate (usa APP.isAdmin() que vive en supabaseClient.js)
+  // ------------------------------------------------------------
   async function requireAdminOrKick(session) {
     const userId = session?.user?.id || "";
     const email = session?.user?.email || "";
@@ -169,7 +215,7 @@
     console.info("[admin-auth] isAdmin =", ok);
 
     if (ok) {
-      fireReady(); // ✅ dispara READY para módulos
+      fireReady();
       return true;
     }
 
@@ -179,9 +225,15 @@
     return false;
   }
 
+  // ------------------------------------------------------------
+  // Page detection
+  // ------------------------------------------------------------
   const isLoginPage = !!$("#loginForm");
   const isAdminPage = !!$("#appPanel") || !!$("#logoutBtn");
 
+  // ------------------------------------------------------------
+  // Guard (admin.html)
+  // ------------------------------------------------------------
   async function guardAdminPage() {
     const session = await getSession();
     if (!session) {
@@ -192,6 +244,9 @@
     return await requireAdminOrKick(session);
   }
 
+  // ------------------------------------------------------------
+  // Auth state listener
+  // ------------------------------------------------------------
   function wireAuthListener() {
     try {
       window.APP.supabase.auth.onAuthStateChange(async (event, session) => {
@@ -200,6 +255,7 @@
           go(`${LOGIN_URL}?r=${back}`);
           return;
         }
+
         if (isAdminPage && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
           await requireAdminOrKick(session);
         }
@@ -207,6 +263,9 @@
     } catch (_) {}
   }
 
+  // ------------------------------------------------------------
+  // Login (admin-login.html)
+  // ------------------------------------------------------------
   async function initLoginPage() {
     const existing = await getSession();
     if (existing) {
@@ -257,11 +316,16 @@
 
       try {
         const session = await signIn(email, pass);
+
         const okAdmin = await requireAdminOrKick(session);
         if (!okAdmin) return;
 
         toast("Acceso OK", "Entrando al panel…", 1100);
-        setTimeout(() => go(ADMIN_URL), 450);
+
+        const r = sanitizeReturnFile(getReturnUrl());
+        const target = r ? `./${r.replace(/^\.?\//, "")}` : ADMIN_URL;
+
+        setTimeout(() => go(target), 450);
       } catch (err) {
         toast("Login falló", mapAuthError(err), 3200);
       } finally {
@@ -270,6 +334,9 @@
     });
   }
 
+  // ------------------------------------------------------------
+  // Boot
+  // ------------------------------------------------------------
   (async function boot() {
     if (!hasSupabase()) {
       hardFail("APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js");
