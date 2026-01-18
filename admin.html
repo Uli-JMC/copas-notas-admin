@@ -114,7 +114,6 @@
                   <div class="field">
                     <label class="label" for="evType">Tipo</label>
                     <select class="select" id="evType" required>
-                      <!-- ⚠️ Estos values deben coincidir con lo que guardás en DB -->
                       <option value="Cata de vino">Vino / Cata</option>
                       <option value="Maridajes">Maridajes</option>
                       <option value="Cocteles">Cocteles</option>
@@ -281,7 +280,9 @@
         </section>
 
         <!-- =====================================================
-             MEDIA (Storage: bucket "media" PUBLIC)
+             MEDIA (Storage: bucket "media" PUBLIC) — uploader simple
+             ✅ Mantiene tu UI
+             ✅ Agrega IDs compatibles para evitar null errors
         ====================================================== -->
         <section class="panel" id="tab-media" role="tabpanel" hidden>
           <div class="grid2">
@@ -293,7 +294,15 @@
                 <div class="mini">Subí imágenes al bucket <b>media</b> y copiá la URL para usarla en Eventos/Promos.</div>
               </div>
 
+              <!-- ✅ Compat: algunos JS esperan mediaId/mediaTitle/mediaKind/mediaTags -->
+              <div id="mediaEditorEmpty" class="empty" hidden>Seleccioná un ítem o subí uno nuevo.</div>
+
               <form class="form" id="mediaForm" autocomplete="off">
+                <input type="hidden" id="mediaId" value="" />
+                <input type="hidden" id="mediaTitle" value="" />
+                <input type="hidden" id="mediaKind" value="image" />
+                <input type="hidden" id="mediaTags" value="" />
+
                 <div class="field">
                   <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP)</label>
                   <input class="input" id="mediaFile" type="file" accept="image/*" required />
@@ -322,12 +331,16 @@
                     <label class="label" for="mediaUrl">URL pública</label>
                     <input class="input" id="mediaUrl" type="text" readonly placeholder="(se llena al subir)" />
                   </div>
+
                   <div class="field">
                     <label class="label">&nbsp;</label>
                     <div class="formActions" style="justify-content:flex-start;">
                       <button class="btn primary" id="mediaUploadBtn" type="submit">Subir</button>
                       <button class="btn" id="mediaCopyBtn" type="button">Copiar URL</button>
                       <button class="btn btn--ghost" id="mediaResetBtn" type="button">Limpiar</button>
+
+                      <!-- ✅ Compat: si algún JS busca deleteMediaBtn -->
+                      <button class="btn" id="deleteMediaBtn" type="button" hidden>Eliminar</button>
                     </div>
                   </div>
                 </div>
@@ -440,8 +453,7 @@
   <script src="./js/admin-dates.js" defer></script>
   <script src="./js/admin-registrations.js" defer></script>
 
-  <script src="./js/admin-media.js" defer></script> <!-- ✅ NUEVO -->
-
+  <script src="./js/admin-media.js" defer></script>
   <script src="./js/admin-gallery.js" defer></script>
   <script src="./js/admin-promos.js" defer></script>
 </body>
