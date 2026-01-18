@@ -1,19 +1,15 @@
 "use strict";
 
 /**
- * admin-auth.js ✅ PRO+READY (Supabase Auth + Admin Gate + Ready Event)
- * - Conecta logout SIEMPRE que exista el botón (aunque haya fallos en módulos)
+ * admin-auth.js ✅ PRO+READY+LOGOUT-ROBUST (Supabase Auth + Admin Gate + Ready Event)
+ * - Logout SIEMPRE via delegación (no depende del timing del DOM)
+ * - Diagnóstico: logs + verificación de session antes/después
  * - Dispara window event "admin:ready" cuando el gate pasa
  * - Marca APP.adminReady = true
- * - Evita doble binding de listeners (dataset.wired)
- * - Maneja return URL seguro (r=admin.html)
  */
 (function () {
   const $ = (sel) => document.querySelector(sel);
 
-  // ------------------------------------------------------------
-  // Config
-  // ------------------------------------------------------------
   const LOGIN_URL = "./admin-login.html";
   const ADMIN_URL = "./admin.html";
 
@@ -30,11 +26,6 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
-    // Si existe toast global, úsalo
-    try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
-    } catch (_) {}
-
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
 
@@ -54,7 +45,6 @@
       el.style.transform = "translateY(-6px)";
       setTimeout(() => el.remove(), 180);
     };
-
     el.querySelector(".close")?.addEventListener("click", kill, { once: true });
     setTimeout(kill, timeoutMs);
   }
@@ -68,35 +58,14 @@
   }
 
   // ------------------------------------------------------------
-  // Return URL safety
-  // ------------------------------------------------------------
-  function getReturnUrl() {
-    try {
-      const u = new URL(window.location.href);
-      const r = u.searchParams.get("r");
-      return r ? String(r) : "";
-    } catch (_) {
-      return "";
-    }
-  }
-
-  function sanitizeReturnFile(r) {
-    // Solo permite "admin.html" o "algo-1.html"
-    const s = String(r || "").trim();
-    return /^[a-z0-9-]+\.html$/i.test(s) ? s : "";
-  }
-
-  // ------------------------------------------------------------
-  // Supabase guard
+  // Supabase guards
   // ------------------------------------------------------------
   function hasSupabase() {
     return !!(window.APP && window.APP.supabase && window.APP.supabase.auth);
   }
 
   function hardFail(msg) {
-    try {
-      console.error("[admin-auth]", msg);
-    } catch (_) {}
+    console.error("[admin-auth]", msg);
     toast("Error", msg, 5200);
   }
 
@@ -117,8 +86,14 @@
 
   async function signOut() {
     try {
-      await window.APP.supabase.auth.signOut();
-    } catch (_) {}
+      const res = await window.APP.supabase.auth.signOut();
+      // supabase-js v2 devuelve { error } en algunas rutas
+      if (res?.error) throw res.error;
+      return true;
+    } catch (err) {
+      console.error("[admin-auth] signOut error:", err);
+      return false;
+    }
   }
 
   function mapAuthError(err) {
@@ -132,7 +107,10 @@
 
   function looksLikeRLSError(err) {
     const m = safeStr(err?.message).toLowerCase();
+    const code = safeStr(err?.code).toLowerCase();
     return (
+      code === "42501" ||
+      m.includes("42501") ||
       m.includes("rls") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
@@ -143,30 +121,58 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ Logout SIEMPRE (si existe el botón)
+  // Logout robusto (delegación)
   // ------------------------------------------------------------
-  function wireLogout() {
-    const btn = $("#logoutBtn");
-    if (!btn) return;
+  function wireLogoutDelegated() {
+    if (window.__ECN_LOGOUT_WIRED__) return;
+    window.__ECN_LOGOUT_WIRED__ = true;
 
-    // Evita duplicar listeners
-    if (btn.dataset.wired === "1") return;
-    btn.dataset.wired = "1";
+    document.addEventListener(
+      "click",
+      async (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest("#logoutBtn") : null;
+        if (!btn) return;
 
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      try {
-        await signOut();
-        toast("Sesión cerrada", "Volviendo al login…", 1100);
-        setTimeout(() => go(LOGIN_URL), 450);
-      } finally {
-        setTimeout(() => (btn.disabled = false), 1200);
-      }
-    });
+        e.preventDefault();
+        e.stopPropagation();
+
+        console.info("[admin-auth] 🔘 logout click capturado");
+
+        // Deshabilitar botón mientras procesa
+        btn.disabled = true;
+
+        try {
+          const before = await getSession();
+          console.info("[admin-auth] session BEFORE logout:", !!before, before?.user?.email || "");
+
+          const ok = await signOut();
+
+          const after = await getSession();
+          console.info("[admin-auth] signOut ok =", ok, "| session AFTER logout:", !!after);
+
+          if (!ok) {
+            toast("Logout", "No se pudo cerrar sesión. Revisá consola.", 4200);
+            return;
+          }
+
+          toast("Sesión cerrada", "Volviendo al login…", 1100);
+          setTimeout(() => go(LOGIN_URL), 450);
+        } finally {
+          setTimeout(() => {
+            try {
+              btn.disabled = false;
+            } catch (_) {}
+          }, 1200);
+        }
+      },
+      true // capture = true (más robusto si hay overlays)
+    );
+
+    console.info("[admin-auth] ✅ Logout delegado cableado");
   }
 
   // ------------------------------------------------------------
-  // Ready event
+  // READY event
   // ------------------------------------------------------------
   function fireReady() {
     try {
@@ -178,7 +184,7 @@
   }
 
   // ------------------------------------------------------------
-  // Admin Gate (usa APP.isAdmin() que vive en supabaseClient.js)
+  // Admin gate
   // ------------------------------------------------------------
   async function requireAdminOrKick(session) {
     const userId = session?.user?.id || "";
@@ -231,9 +237,6 @@
   const isLoginPage = !!$("#loginForm");
   const isAdminPage = !!$("#appPanel") || !!$("#logoutBtn");
 
-  // ------------------------------------------------------------
-  // Guard (admin.html)
-  // ------------------------------------------------------------
   async function guardAdminPage() {
     const session = await getSession();
     if (!session) {
@@ -244,9 +247,6 @@
     return await requireAdminOrKick(session);
   }
 
-  // ------------------------------------------------------------
-  // Auth state listener
-  // ------------------------------------------------------------
   function wireAuthListener() {
     try {
       window.APP.supabase.auth.onAuthStateChange(async (event, session) => {
@@ -255,7 +255,6 @@
           go(`${LOGIN_URL}?r=${back}`);
           return;
         }
-
         if (isAdminPage && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
           await requireAdminOrKick(session);
         }
@@ -263,9 +262,6 @@
     } catch (_) {}
   }
 
-  // ------------------------------------------------------------
-  // Login (admin-login.html)
-  // ------------------------------------------------------------
   async function initLoginPage() {
     const existing = await getSession();
     if (existing) {
@@ -316,16 +312,11 @@
 
       try {
         const session = await signIn(email, pass);
-
         const okAdmin = await requireAdminOrKick(session);
         if (!okAdmin) return;
 
         toast("Acceso OK", "Entrando al panel…", 1100);
-
-        const r = sanitizeReturnFile(getReturnUrl());
-        const target = r ? `./${r.replace(/^\.?\//, "")}` : ADMIN_URL;
-
-        setTimeout(() => go(target), 450);
+        setTimeout(() => go(ADMIN_URL), 450);
       } catch (err) {
         toast("Login falló", mapAuthError(err), 3200);
       } finally {
@@ -338,22 +329,19 @@
   // Boot
   // ------------------------------------------------------------
   (async function boot() {
+    // ✅ Logout primero (no depende de supabase)
+    wireLogoutDelegated();
+
     if (!hasSupabase()) {
       hardFail("APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js");
       return;
     }
-
-    // ✅ SIEMPRE intenta cablear logout
-    wireLogout();
 
     wireAuthListener();
 
     if (isAdminPage) {
       const ok = await guardAdminPage();
       if (!ok) return;
-
-      // Por si el botón aparece después (o el DOM cambió)
-      wireLogout();
     }
 
     if (isLoginPage) {
