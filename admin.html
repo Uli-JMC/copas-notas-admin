@@ -82,7 +82,6 @@
                 </div>
               </div>
 
-              <!-- ✅ admin.js PRO usa #eventList -->
               <div class="list" id="eventList" aria-label="Lista de eventos">
                 <!-- JS -->
               </div>
@@ -91,7 +90,6 @@
                 Aún no hay eventos. Creá el primero con “Nuevo”.
               </div>
 
-              <!-- ✅ admin.js PRO escribe aquí estados -->
               <div class="note" id="storageNote" aria-live="polite"></div>
             </div>
 
@@ -101,7 +99,6 @@
                 <div class="mini">Completá la info del evento y guardá cambios.</div>
               </div>
 
-              <!-- ✅ admin.js PRO usa editorEmpty para when no selection -->
               <div class="empty" id="editorEmpty">
                 Seleccioná un evento de la lista para editarlo.
               </div>
@@ -117,6 +114,7 @@
                   <div class="field">
                     <label class="label" for="evType">Tipo</label>
                     <select class="select" id="evType" required>
+                      <!-- ⚠️ Estos values deben coincidir con lo que guardás en DB -->
                       <option value="Cata de vino">Vino / Cata</option>
                       <option value="Maridajes">Maridajes</option>
                       <option value="Cocteles">Cocteles</option>
@@ -167,7 +165,6 @@
                   </div>
                 </div>
 
-                <!-- hint fechas -->
                 <div id="datesList"></div>
 
                 <div class="formActions">
@@ -183,7 +180,7 @@
         </section>
 
         <!-- =====================================================
-             DATES (ALINEADO con admin-dates.js PRO “UI nueva”)
+             DATES
         ====================================================== -->
         <section class="panel" id="tab-dates" role="tabpanel" hidden>
           <div class="grid2">
@@ -198,8 +195,6 @@
               </div>
 
               <div class="note" id="datesNote" aria-live="polite"></div>
-
-              <!-- ✅ admin-dates.js PRO usa #datesEventList -->
               <div class="list" id="datesEventList"></div>
             </div>
 
@@ -213,12 +208,10 @@
                 <button class="btn primary" id="datesNewBtn" type="button">+ Nueva fecha</button>
               </div>
 
-              <!-- estado -->
               <div class="empty" id="datesEmpty">
                 Seleccioná un evento a la izquierda para administrar sus fechas.
               </div>
 
-              <!-- ✅ editor (admin-dates.js PRO usa #datesEditor) -->
               <div id="datesEditor" hidden>
                 <div class="list" id="datesListByEvent"></div>
 
@@ -254,7 +247,7 @@
         </section>
 
         <!-- =====================================================
-             REGISTRATIONS (ALINEADO con admin-registrations.js PRO)
+             REGISTRATIONS
         ====================================================== -->
         <section class="panel" id="tab-regs" role="tabpanel" hidden>
           <div class="card">
@@ -281,16 +274,14 @@
                     <th>Creado</th>
                   </tr>
                 </thead>
-                <tbody id="regsTbody">
-                  <!-- JS -->
-                </tbody>
+                <tbody id="regsTbody"></tbody>
               </table>
             </div>
           </div>
         </section>
 
         <!-- =====================================================
-             MEDIA
+             MEDIA (placeholder)
         ====================================================== -->
         <section class="panel" id="tab-media" role="tabpanel" hidden>
           <div class="card">
@@ -372,14 +363,14 @@
   </main>
 
   <!-- SCRIPTS (ORDEN CRÍTICO) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./js/supabaseClient.js"></script>
-  <script src="./js/admin-auth.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="./js/supabaseClient.js" defer></script>
+  <script src="./js/admin-auth.js" defer></script>
 
-  <script src="./js/admin.js"></script>
-  <script src="./js/admin-dates.js"></script>
-  <script src="./js/admin-registrations.js"></script>
-  <script src="./js/admin-gallery.js"></script>
-  <script src="./js/admin-promos.js"></script>
+  <script src="./js/admin.js" defer></script>
+  <script src="./js/admin-dates.js" defer></script>
+  <script src="./js/admin-registrations.js" defer></script>
+  <script src="./js/admin-gallery.js" defer></script>
+  <script src="./js/admin-promos.js" defer></script>
 </body>
 </html>
