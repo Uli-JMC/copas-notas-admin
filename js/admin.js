@@ -1,26 +1,22 @@
-/* js/admin.js ✅ PRO (SUPABASE CRUD EVENTS) — FIX 2026-01
- * - NO maneja login/sesión/logout (eso va en admin-auth.js)
- * - Requiere: Supabase CDN + supabaseClient.js (APP.supabase o APP.sb) antes
- * - Página: admin.html (#appPanel)
- *
- * Schema real events:
- *  id, title, type, month_key, "desc", img, location, time_range, duration_hours, created_at, updated_at
- *
- * Notas:
- * - "desc" se maneja como ev["desc"] (y payload: { desc: ... })
- * - evDuration es SOLO UI (no existe en DB)
- */
 "use strict";
 
-// ============================================================
-// Selectores
-// ============================================================
+/**
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — ALINEADO A TU HTML REAL (IDs: evTitle/eventList)
+ * - NO maneja login/sesión/logout (eso va en admin-auth.js)
+ * - Requiere: supabaseClient.js (APP.supabase) cargado antes
+ * - Corre en: admin.html (#appPanel)
+ *
+ * Tablas:
+ * - public.events (id, title, type, month_key, "desc", img, location, time_range, duration_hours, created_at, updated_at)
+ *
+ * Notas:
+ * - "desc" se lee como ev["desc"]
+ */
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-// ============================================================
-// UI helpers
-// ============================================================
+// ---------------- UI helpers ----------------
 function escapeHtml(str) {
   return String(str ?? "")
     .replaceAll("&", "&amp;")
@@ -30,8 +26,7 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-// Toast unificado (si existe window.toast, lo reutilizamos)
-function toast(title, msg, timeoutMs = 3600) {
+function toast(title, msg, timeoutMs = 3200) {
   try {
     if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
   } catch (_) {}
@@ -66,17 +61,14 @@ function setBusy(on, msg) {
   note.textContent = on ? (msg || "Procesando…") : (msg || "");
 }
 
-// ============================================================
-// Utils
-// ============================================================
+// ---------------- Utils ----------------
 function cleanSpaces(s) {
   return String(s ?? "").replace(/\s+/g, " ").trim();
 }
 
 const MONTHS = [
-  "ENERO","FEBRERO","MARZO","ABRIL",
-  "MAYO","JUNIO","JULIO","AGOSTO",
-  "SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"
+  "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
+  "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"
 ];
 
 function normalizeMonth(m) {
@@ -90,14 +82,8 @@ function parseHoursNumber(input) {
   const m = raw.replace(",", ".").match(/(\d+(\.\d+)?)/);
   if (!m) return "";
   const n = Number(m[1]);
-  if (!Number.isFinite(n) || n <= 0) return "";
+  if (!Number.isFinite(n) || n < 0) return "";
   return String(n);
-}
-
-function humanizeDurationFromHours(hoursStr) {
-  const h = parseHoursNumber(hoursStr);
-  if (!h) return "";
-  return `${h} hrs`;
 }
 
 function normalizeTimeRange(s) {
@@ -106,28 +92,14 @@ function normalizeTimeRange(s) {
 
 function buildDurationLabel(timeRange, durationHours) {
   const t = normalizeTimeRange(timeRange);
-  const d = humanizeDurationFromHours(durationHours);
-  if (t && d) return `${t} · ${d}`;
-  return t || d || "Por confirmar";
+  const h = parseHoursNumber(durationHours);
+  if (t && h) return `${t} · ${h} hrs`;
+  return t || (h ? `${h} hrs` : "Por confirmar");
 }
 
-// ============================================================
-// Supabase helpers
-// ============================================================
+// ---------------- Supabase helpers ----------------
 function getSB() {
-  if (!window.APP) return null;
-  return window.APP.supabase || window.APP.sb || null;
-}
-
-async function ensureSession() {
-  const sb = getSB();
-  if (!sb) return null;
-  try {
-    const res = await sb.auth.getSession();
-    return res?.data?.session || null;
-  } catch (_) {
-    return null;
-  }
+  return window.APP && (window.APP.supabase || window.APP.sb) ? (window.APP.supabase || window.APP.sb) : null;
 }
 
 function isRLSError(err) {
@@ -140,19 +112,15 @@ function isRLSError(err) {
     m.includes("permission") ||
     m.includes("not allowed") ||
     m.includes("row level security") ||
-    m.includes("violates row-level security") ||
     m.includes("new row violates row-level security")
   );
 }
 
 function prettyError(err) {
-  const msg = String(err?.message || err || "");
-  return msg || "Ocurrió un error.";
+  return String(err?.message || err || "") || "Ocurrió un error.";
 }
 
-// ============================================================
-// DB mapping (events) — ALINEADO A TU SCHEMA REAL
-// ============================================================
+// ---------------- DB mapping ----------------
 const EVENTS_TABLE = "events";
 const SELECT_EVENTS = `
   id,
@@ -168,10 +136,8 @@ const SELECT_EVENTS = `
   updated_at
 `;
 
-// ============================================================
-// State
-// ============================================================
-let state = {
+// ---------------- State ----------------
+const state = {
   activeTab: "events",
   query: "",
   activeEventId: null,
@@ -180,9 +146,7 @@ let state = {
   busy: false,
 };
 
-// ============================================================
-// Tabs
-// ============================================================
+// ---------------- Tabs ----------------
 function hideAllTabs() {
   $("#tab-events") && ($("#tab-events").hidden = true);
   $("#tab-dates") && ($("#tab-dates").hidden = true);
@@ -211,24 +175,7 @@ function setTab(tab) {
   renderAll();
 }
 
-// ============================================================
-// Busy lock
-// ============================================================
-function withLock(fn) {
-  return async function (...args) {
-    if (state.busy) return;
-    state.busy = true;
-    try {
-      return await fn(...args);
-    } finally {
-      state.busy = false;
-    }
-  };
-}
-
-// ============================================================
-// Supabase: CRUD events
-// ============================================================
+// ---------------- Supabase CRUD ----------------
 async function fetchEvents() {
   const sb = getSB();
   if (!sb) {
@@ -254,11 +201,6 @@ async function fetchEvents() {
   state.mode = "supabase";
   state.events = Array.isArray(data) ? data : [];
   setBusy(false, "");
-
-  // Auto-select: si no hay activo, agarramos el primero
-  if (!state.activeEventId && state.events.length) {
-    state.activeEventId = state.events[0].id;
-  }
 }
 
 async function insertEvent(payload) {
@@ -298,31 +240,24 @@ async function deleteEvent(id) {
   if (error) throw error;
 }
 
-// ============================================================
-// Render: Events list + editor
-// ============================================================
+// ---------------- Render ----------------
 function setEditorVisible(show) {
   $("#editorEmpty") && ($("#editorEmpty").hidden = show);
   $("#eventForm") && ($("#eventForm").hidden = !show);
 }
 
 function clearEditorForm() {
-  const ids = [
-    "evTitle","evType","evMonth","evImg","evDesc",
-    "evLocation","evTimeRange","evDurationHours","evDuration"
-  ];
+  const ids = ["evTitle","evType","evMonth","evImg","evDesc","evLocation","evTimeRange","evDurationHours","evDuration"];
   ids.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
   $("#descCount") && ($("#descCount").textContent = "0");
-  const datesList = $("#datesList");
-  if (datesList) datesList.innerHTML = "";
   $("#soldNotice") && ($("#soldNotice").hidden = true);
 }
 
 function getFilteredEvents() {
-  const q = (state.query || "").trim().toLowerCase();
+  const q = cleanSpaces(state.query).toLowerCase();
   return (state.events || []).filter((ev) => {
     if (!q) return true;
     return (
@@ -366,29 +301,24 @@ function renderEventList() {
       <div class="item" style="cursor:default;">
         <div>
           <p class="itemTitle">Sin eventos</p>
-          <p class="itemMeta">Creá el primer evento con “+ Nuevo evento”.</p>
+          <p class="itemMeta">Creá el primer evento con “Nuevo”.</p>
         </div>
       </div>`;
     return;
   }
 
   box.innerHTML = "";
-
   filtered.forEach((ev) => {
     const item = document.createElement("div");
     item.className = "item";
-    if (state.activeEventId && String(ev.id) === String(state.activeEventId)) {
-      item.classList.add("active");
-    }
+    if (state.activeEventId && String(ev.id) === String(state.activeEventId)) item.classList.add("active");
 
     item.innerHTML = `
       <div>
         <p class="itemTitle">${escapeHtml(ev.title || "—")}</p>
         <p class="itemMeta">${escapeHtml(ev.type || "—")} • ${escapeHtml(ev.month_key || "—")}</p>
       </div>
-      <div class="pills">
-        <span class="pill">SUPABASE</span>
-      </div>
+      <div class="pills"><span class="pill">SUPABASE</span></div>
     `;
 
     item.addEventListener("click", () => {
@@ -401,8 +331,7 @@ function renderEventList() {
 }
 
 function renderEventEditor() {
-  const ev =
-    (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
+  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
   if (!ev) {
     clearEditorForm();
@@ -425,41 +354,33 @@ function renderEventEditor() {
   $("#evTimeRange") && ($("#evTimeRange").value = ev.time_range || "");
   $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours || "");
 
-  // UI only
-  const durInput = $("#evDuration");
-  if (durInput) {
+  const dur = $("#evDuration");
+  if (dur) {
     const label = buildDurationLabel(ev.time_range || "", ev.duration_hours || "");
-    durInput.value = label === "Por confirmar" ? "" : label;
-  }
-
-  // Hint para fechas (event_dates se gestiona en admin-dates.js)
-  const datesList = $("#datesList");
-  if (datesList) {
-    datesList.innerHTML = `
-      <div class="notice">
-        <span class="badge">Fechas</span>
-        <span>Las fechas/cupos se gestionan en <strong>“Fechas”</strong> (tabla <code>event_dates</code>).</span>
-      </div>
-    `;
+    dur.value = label === "Por confirmar" ? "" : label;
   }
 
   $("#soldNotice") && ($("#soldNotice").hidden = true);
 }
 
-// ============================================================
-// Actions: Events (Supabase)
-// ============================================================
+// ---------------- Busy lock ----------------
+function withLock(fn) {
+  return async function (...args) {
+    if (state.busy) return;
+    state.busy = true;
+    try {
+      return await fn(...args);
+    } finally {
+      state.busy = false;
+    }
+  };
+}
+
+// ---------------- Actions ----------------
 const createNewEvent = withLock(async function () {
   try {
     if (state.mode !== "supabase") {
       toast("Bloqueado", "Primero necesitamos habilitar RLS/policies para admin.");
-      return;
-    }
-
-    // opcional: sesión
-    const s = await ensureSession();
-    if (!s) {
-      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
       return;
     }
 
@@ -473,75 +394,19 @@ const createNewEvent = withLock(async function () {
       desc: "",
       location: "Por confirmar",
       time_range: "",
-      duration_hours: "",
-    };
-
-    const created = await insertEvent(payload);
-
-    state.events.unshift(created);
-    state.activeEventId = created.id;
-
-    toast("Evento creado", "Ya podés editarlo y guardarlo.");
-    renderAll();
-  } catch (err) {
-    console.error(err);
-    if (isRLSError(err)) {
-      state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de INSERT para events.", 5200);
-    } else {
-      toast("Error", prettyError(err), 5200);
-    }
-  } finally {
-    setBusy(false, "");
-  }
-});
-
-const duplicateActiveEvent = withLock(async function () {
-  const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
-  if (!ev) {
-    toast("Seleccioná un evento", "Abrí un evento para poder duplicarlo.");
-    return;
-  }
-
-  try {
-    if (state.mode !== "supabase") {
-      toast("Bloqueado", "Primero necesitamos habilitar RLS/policies para admin.");
-      return;
-    }
-
-    const s = await ensureSession();
-    if (!s) {
-      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
-      return;
-    }
-
-    setBusy(true, "Duplicando evento…");
-
-    const payload = {
-      title: `${ev.title || "Evento"} (Copia)`,
-      type: ev.type || "Cata de vino",
-      month_key: normalizeMonth(ev.month_key || "ENERO"),
-      img: ev.img || "./assets/img/hero-1.jpg",
-      desc: ev["desc"] || "",
-      location: ev.location || "",
-      time_range: ev.time_range || "",
-      duration_hours: ev.duration_hours || "",
+      duration_hours: ""
     };
 
     const created = await insertEvent(payload);
     state.events.unshift(created);
     state.activeEventId = created.id;
 
-    toast("Evento duplicado", "Se creó una copia para editar rápidamente.");
+    toast("Evento creado", "Ya podés editarlo y guardarlo.", 1800);
     renderAll();
   } catch (err) {
     console.error(err);
-    if (isRLSError(err)) {
-      state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de INSERT para events.", 5200);
-    } else {
-      toast("Error", prettyError(err), 5200);
-    }
+    toast(isRLSError(err) ? "RLS" : "Error", isRLSError(err) ? "Falta policy INSERT para events." : prettyError(err), 4200);
+    if (isRLSError(err)) state.mode = "blocked";
   } finally {
     setBusy(false, "");
   }
@@ -549,7 +414,10 @@ const duplicateActiveEvent = withLock(async function () {
 
 const deleteActiveEvent = withLock(async function () {
   const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
-  if (!ev) return;
+  if (!ev) {
+    toast("Eliminar", "Seleccioná un evento primero.");
+    return;
+  }
 
   const ok = confirm(`Eliminar evento:\n\n${ev.title}\n\nEsta acción no se puede deshacer.`);
   if (!ok) return;
@@ -560,29 +428,18 @@ const deleteActiveEvent = withLock(async function () {
       return;
     }
 
-    const s = await ensureSession();
-    if (!s) {
-      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
-      return;
-    }
-
     setBusy(true, "Eliminando evento…");
-
     await deleteEvent(ev.id);
 
     state.events = (state.events || []).filter((x) => String(x.id) !== String(ev.id));
-    state.activeEventId = state.events[0]?.id || null;
+    state.activeEventId = null;
 
-    toast("Evento eliminado", "Se eliminó correctamente.");
+    toast("Evento eliminado", "Se eliminó correctamente.", 1800);
     renderAll();
   } catch (err) {
     console.error(err);
-    if (isRLSError(err)) {
-      state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de DELETE para events.", 5200);
-    } else {
-      toast("Error", prettyError(err), 5200);
-    }
+    toast(isRLSError(err) ? "RLS" : "Error", isRLSError(err) ? "Falta policy DELETE para events." : prettyError(err), 4200);
+    if (isRLSError(err)) state.mode = "blocked";
   } finally {
     setBusy(false, "");
   }
@@ -612,10 +469,10 @@ const saveActiveEvent = withLock(async function () {
     type,
     month_key,
     img: img || "./assets/img/hero-1.jpg",
-    desc, // 👈 columna "desc" real
+    desc,
     location: location || "Por confirmar",
     time_range,
-    duration_hours,
+    duration_hours
   };
 
   try {
@@ -624,40 +481,25 @@ const saveActiveEvent = withLock(async function () {
       return false;
     }
 
-    const s = await ensureSession();
-    if (!s) {
-      toast("Sesión", "No hay sesión activa. Iniciá sesión en el panel Admin.", 4200);
-      return false;
-    }
-
     setBusy(true, "Guardando cambios…");
-
     const updated = await updateEvent(ev.id, payload);
 
-    state.events = (state.events || []).map((x) =>
-      String(x.id) === String(updated.id) ? updated : x
-    );
+    state.events = (state.events || []).map((x) => (String(x.id) === String(updated.id) ? updated : x));
 
-    toast("Guardado", "Evento actualizado en Supabase.");
+    toast("Guardado", "Evento actualizado en Supabase.", 1600);
     renderAll();
     return true;
   } catch (err) {
     console.error(err);
-    if (isRLSError(err)) {
-      state.mode = "blocked";
-      toast("RLS", "Acceso bloqueado. Falta policy de UPDATE para events.", 5200);
-    } else {
-      toast("Error", prettyError(err), 5200);
-    }
+    toast(isRLSError(err) ? "RLS" : "Error", isRLSError(err) ? "Falta policy UPDATE para events." : prettyError(err), 4200);
+    if (isRLSError(err)) state.mode = "blocked";
     return false;
   } finally {
     setBusy(false, "");
   }
 });
 
-// ============================================================
-// Wiring
-// ============================================================
+// ---------------- Wiring ----------------
 function wire() {
   // Tabs
   $$(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
@@ -665,14 +507,38 @@ function wire() {
   // Search
   $("#search")?.addEventListener("input", (e) => {
     state.query = e.target.value || "";
-    // no tocar storageNote aquí: cada tab lo controla
     renderAll();
   });
 
-  // Events buttons
+  // Buttons
   $("#newEventBtn")?.addEventListener("click", createNewEvent);
-  $("#dupEventBtn")?.addEventListener("click", duplicateActiveEvent);
   $("#deleteEventBtn")?.addEventListener("click", deleteActiveEvent);
+
+  // (Opcional) duplicar si existe
+  $("#dupEventBtn")?.addEventListener("click", async () => {
+    const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
+    if (!ev) return toast("Duplicar", "Seleccioná un evento primero.");
+    try {
+      const payload = {
+        title: `${ev.title || "Evento"} (Copia)`,
+        type: ev.type || "Cata de vino",
+        month_key: normalizeMonth(ev.month_key || "ENERO"),
+        img: ev.img || "./assets/img/hero-1.jpg",
+        desc: ev["desc"] || "",
+        location: ev.location || "",
+        time_range: ev.time_range || "",
+        duration_hours: ev.duration_hours || ""
+      };
+      const created = await insertEvent(payload);
+      state.events.unshift(created);
+      state.activeEventId = created.id;
+      toast("Duplicado", "Copia creada.", 1500);
+      renderAll();
+    } catch (err) {
+      console.error(err);
+      toast("Error", prettyError(err), 4200);
+    }
+  });
 
   // Desc counter
   $("#evDesc")?.addEventListener("input", () => {
@@ -680,21 +546,17 @@ function wire() {
     $("#descCount") && ($("#descCount").textContent = String(v.length));
   });
 
-  // Auto duration (UI only)
+  // Auto duration (solo UI)
   const durInput = $("#evDuration");
   const timeInput = $("#evTimeRange");
   const hoursInput = $("#evDurationHours");
-
   function autoFillDurationIfEmpty() {
     if (!durInput) return;
     const manual = cleanSpaces(durInput.value || "");
     if (manual) return;
-    const t = normalizeTimeRange(timeInput?.value || "");
-    const h = parseHoursNumber(hoursInput?.value || "");
-    const label = buildDurationLabel(t, h);
+    const label = buildDurationLabel(timeInput?.value || "", hoursInput?.value || "");
     durInput.value = label === "Por confirmar" ? "" : label;
   }
-
   timeInput?.addEventListener("input", autoFillDurationIfEmpty);
   hoursInput?.addEventListener("input", autoFillDurationIfEmpty);
 
@@ -704,40 +566,17 @@ function wire() {
     saveActiveEvent();
   });
 
-  // Ir a fechas
-  $("#addDateBtn")?.addEventListener("click", () => {
-    toast("Fechas", "Administrá fechas/cupos en la pestaña “Fechas”.", 1800);
-    setTab("dates");
-  });
-
   setTab("events");
 }
 
-// ============================================================
-// Render
-// ============================================================
 function renderAll() {
-  // Solo esta pestaña controla su render
-  if (state.activeTab !== "events") return;
-
-  renderEventList();
-  renderEventEditor();
-
-  const note = $("#storageNote");
-  if (note) {
-    if (state.mode === "supabase") {
-      note.textContent = "✅ Eventos guardan en Supabase (CRUD real).";
-    } else if (state.mode === "blocked") {
-      note.textContent = "⚠️ Supabase conectado, pero RLS bloquea. Faltan policies para events.";
-    } else {
-      note.textContent = "⚠️ Falta Supabase Client. Revisá el orden de scripts.";
-    }
+  if (state.activeTab === "events") {
+    renderEventList();
+    renderEventEditor();
   }
 }
 
-// ============================================================
-// Init
-// ============================================================
+// ---------------- Init ----------------
 (async function init() {
   if (!$("#appPanel")) return;
 
@@ -747,7 +586,7 @@ function renderAll() {
     await fetchEvents();
   } catch (err) {
     console.error(err);
-    toast("Supabase", "No se pudieron cargar eventos. Revisá RLS/policies.", 5200);
+    toast("Supabase", "No se pudieron cargar eventos. Revisá RLS/policies.", 4200);
   } finally {
     renderAll();
   }
