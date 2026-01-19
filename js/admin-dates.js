@@ -19,11 +19,12 @@
  * Tablas:
  * - public.events (id, title, type, month_key, created_at, ...)
  * - public.event_dates (id, event_id, label, seats_total, seats_available, created_at)
+ * - public.registrations (event_date_id, ...)  ✅ para calcular booked (si RLS lo permite)
  */
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-18.3";
+  const VERSION = "2026-01-19.2";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -136,6 +137,7 @@
   // ------------------------------------------------------------
   const EVENTS_TABLE = "events";
   const EVENT_DATES_TABLE = "event_dates";
+  const REGS_TABLE = "registrations"; // ✅ para booked count (si RLS lo permite)
 
   const EVENTS_SELECT = `id, title, type, month_key, created_at`;
   const DATES_SELECT = `id, event_id, label, seats_total, seats_available, created_at`;
@@ -156,6 +158,8 @@
     didLoadOnce: false,
 
     lastLoadAt: 0, // throttle
+    bookedByDateId: Object.create(null), // { [dateId]: number }
+    canReadRegs: true, // si RLS bloquea registrations, cae a false
   };
 
   function withLock(fn) {
@@ -231,6 +235,40 @@
     S.dates = Array.isArray(data) ? data : [];
   }
 
+  // ✅ booked count por dateId (si RLS lo permite)
+  async function fetchBookedCountForDate(dateId) {
+    const sb = getSB();
+    if (!sb) return 0;
+    if (!S.canReadRegs) return 0;
+
+    try {
+      const { count, error } = await sb
+        .from(REGS_TABLE)
+        .select("id", { count: "exact", head: true })
+        .eq("event_date_id", dateId);
+
+      if (error) throw error;
+      return Number(count || 0) || 0;
+    } catch (err) {
+      // si falla por RLS, degradamos para no spamear errores
+      if (isRLSError(err)) S.canReadRegs = false;
+      return 0;
+    }
+  }
+
+  async function refreshBookedCacheForCurrentDates() {
+    if (!S.canReadRegs) return;
+
+    const ids = (S.dates || []).map((d) => String(d.id));
+    if (!ids.length) return;
+
+    // Secuencial (simple, seguro). Si querés optimizar, lo hacemos batch con Promise.all.
+    for (const id of ids) {
+      const c = await fetchBookedCountForDate(id);
+      S.bookedByDateId[id] = c;
+    }
+  }
+
   // ------------------------------------------------------------
   // CRUD
   // ------------------------------------------------------------
@@ -244,7 +282,7 @@
       event_id: eventId,
       label: cleanSpaces(label) || "Por definir",
       seats_total,
-      seats_available: seats_total,
+      seats_available: seats_total, // al crear: todo disponible
     };
 
     const { data, error } = await sb
@@ -335,14 +373,26 @@
     return S.dates.find((x) => String(x.id) === String(S.activeDateId)) || null;
   }
 
+  function computeAvailFromBooked(total, booked) {
+    const t = clampInt(total, 0, 1000000);
+    const b = clampInt(booked, 0, 1000000);
+    return Math.max(0, t - b);
+  }
+
   function fillFormFromDate(d) {
     const r = R();
     if (!d) return;
 
+    const id = String(d.id);
     const total = clampInt(d.seats_total, 0, 1000000);
-    const avail = clampInt(d.seats_available, 0, total);
 
-    S.activeDateId = String(d.id);
+    const booked = S.canReadRegs ? clampInt(S.bookedByDateId[id] ?? 0, 0, 1000000) : null;
+    const avail =
+      booked == null
+        ? clampInt(d.seats_available, 0, total)
+        : computeAvailFromBooked(total, booked);
+
+    S.activeDateId = id;
 
     if (r.dateId) r.dateId.value = S.activeDateId;
     if (r.label) r.label.value = d.label || "";
@@ -445,6 +495,9 @@
             setNote("Cargando fechas…");
             await fetchDatesForEvent(S.activeEventId);
 
+            // booked cache (si se puede)
+            await refreshBookedCacheForCurrentDates();
+
             setEditorVisible(true);
             setFormMode(null);
             setNote("Listo.");
@@ -470,7 +523,19 @@
     if (!ev) return;
 
     if (r.eventTitle) r.eventTitle.textContent = ev.title || "—";
-    if (r.eventMeta) r.eventMeta.textContent = `${ev.type || "—"} • ${fmtMonthKey(ev.month_key)} • ${S.dates.length} fecha(s)`;
+
+    // meta con resumen
+    const totalDates = (S.dates || []).length;
+    const bookedSum = S.canReadRegs
+      ? (S.dates || []).reduce((acc, d) => acc + (Number(S.bookedByDateId[String(d.id)] || 0) || 0), 0)
+      : null;
+
+    const meta =
+      bookedSum == null
+        ? `${ev.type || "—"} • ${fmtMonthKey(ev.month_key)} • ${totalDates} fecha(s)`
+        : `${ev.type || "—"} • ${fmtMonthKey(ev.month_key)} • ${totalDates} fecha(s) • Reservas: ${bookedSum}`;
+
+    if (r.eventMeta) r.eventMeta.textContent = meta;
   }
 
   function renderDatesList() {
@@ -499,13 +564,24 @@
 
       if (S.activeDateId && String(d.id) === String(S.activeDateId)) row.classList.add("active");
 
+      const id = String(d.id);
       const total = clampInt(d.seats_total, 0, 1000000);
-      const avail = clampInt(d.seats_available, 0, total);
+
+      const booked = S.canReadRegs ? clampInt(S.bookedByDateId[id] ?? 0, 0, 1000000) : null;
+      const avail =
+        booked == null
+          ? clampInt(d.seats_available, 0, total)
+          : computeAvailFromBooked(total, booked);
 
       row.innerHTML = `
         <div>
           <p class="itemTitle">${escapeHtml(d.label || "—")}</p>
-          <p class="itemMeta">Cupos: ${escapeHtml(String(avail))}/${escapeHtml(String(total))}</p>
+          <p class="itemMeta">
+            ${booked == null
+              ? `Cupos: ${escapeHtml(String(avail))}/${escapeHtml(String(total))}`
+              : `Cupos: ${escapeHtml(String(avail))}/${escapeHtml(String(total))} • Reservas: ${escapeHtml(String(booked))}`
+            }
+          </p>
         </div>
         <div class="pills">
           <span class="pill">TOTAL ${escapeHtml(String(total))}</span>
@@ -520,7 +596,7 @@
       row.addEventListener("click", () => {
         fillFormFromDate(d);
         renderDatesList();
-        toast("Editando", "Ajustá etiqueta y cupos. Guardá para aplicar cambios.", 1800);
+        toast("Editando", "Ajustá etiqueta y cupo total. Guardá para aplicar cambios.", 1800);
       });
 
       frag.appendChild(row);
@@ -571,6 +647,7 @@
       if (S.activeEventId) {
         setNote("Cargando fechas…");
         await fetchDatesForEvent(S.activeEventId);
+        await refreshBookedCacheForCurrentDates();
       }
 
       setFormMode(null);
@@ -595,7 +672,7 @@
     const total = clampInt(r.seatsTotal?.value || 0, 0, 1000000);
     if (r.seatsAvail) r.seatsAvail.value = String(total);
 
-    toast("Nueva fecha", "Completá la etiqueta y cupos, luego Guardar.", 2000);
+    toast("Nueva fecha", "Completá la etiqueta y cupo total, luego Guardar.", 2000);
   });
 
   const actionSaveDate = withLock(async function (e) {
@@ -622,12 +699,19 @@
         return;
       }
 
+      // ✅ Create
       if (!S.activeDateId) {
         setNote("Creando fecha…");
         const created = await createDate(S.activeEventId, label, total);
 
-        S.dates.unshift(created);
-        fillFormFromDate(created);
+        // refrescar fechas y booked cache (mejor consistencia)
+        await fetchDatesForEvent(S.activeEventId);
+        await refreshBookedCacheForCurrentDates();
+
+        // seleccionar la nueva
+        S.activeDateId = String(created.id);
+        const latest = getActiveDate();
+        if (latest) fillFormFromDate(latest);
 
         setNote("Fecha creada.");
         toast("Listo", "Fecha creada.", 1200);
@@ -635,10 +719,22 @@
         return;
       }
 
-      const current = getActiveDate();
-      const currTotal = clampInt(current?.seats_total, 0, 1000000);
-      const currAvail = clampInt(current?.seats_available, 0, currTotal);
-      const nextAvail = Math.min(currAvail, total);
+      // ✅ Update (cupos correctos)
+      const id = String(S.activeDateId);
+
+      // booked actual (si se puede)
+      const booked = await fetchBookedCountForDate(id);
+      S.bookedByDateId[id] = booked;
+
+      // seats_available SIEMPRE consistente si se puede leer regs
+      const nextAvail = S.canReadRegs
+        ? computeAvailFromBooked(total, booked)
+        : clampInt(r.seatsAvail ? r.seatsAvail.value : 0, 0, total);
+
+      if (S.canReadRegs && r.seatsAvail) {
+        // reflejar en UI lo que realmente se guardará
+        r.seatsAvail.value = String(nextAvail);
+      }
 
       setNote("Guardando cambios…");
       const updated = await updateDate(S.activeDateId, {
@@ -651,7 +747,13 @@
       fillFormFromDate(updated);
 
       setNote("Guardado.");
-      toast("Guardado", "Fecha actualizada.", 1200);
+      toast(
+        "Guardado",
+        S.canReadRegs
+          ? "Fecha actualizada (cupos recalculados por reservas)."
+          : "Fecha actualizada.",
+        1400
+      );
       renderAll();
     } catch (err) {
       console.error(err);
@@ -674,6 +776,16 @@
     const current = getActiveDate();
     const label = current?.label ? String(current.label) : "esta fecha";
 
+    // Si podemos leer regs, prevenimos borrar si hay reservas (evita orfandad)
+    const id = String(S.activeDateId);
+    const booked = await fetchBookedCountForDate(id);
+    S.bookedByDateId[id] = booked;
+
+    if (S.canReadRegs && booked > 0) {
+      toast("No permitido", `Esta fecha tiene ${booked} reserva(s). Primero eliminá/mové esas inscripciones.`, 5200);
+      return;
+    }
+
     const ok = safeConfirm(`¿Eliminar ${label}?\n\nEsta acción no se puede deshacer.`);
     if (!ok) return;
 
@@ -688,6 +800,8 @@
       await deleteDate(S.activeDateId);
 
       S.dates = S.dates.filter((d) => String(d.id) !== String(S.activeDateId));
+      delete S.bookedByDateId[id];
+
       S.activeDateId = null;
       setFormMode(null);
 
@@ -716,58 +830,14 @@
   });
 
   // ------------------------------------------------------------
-  // Bind once
-  // ------------------------------------------------------------
-  function onAdminTab(e) {
-    const t = e?.detail?.tab;
-    if (t === "dates") ensureLoaded(true);
-  }
-
-  function bindOnce() {
-    if (S.didBind) return;
-    S.didBind = true;
-
-    const r = R();
-
-    r.btnRefresh?.addEventListener("click", actionRefreshAll);
-    r.btnNew?.addEventListener("click", actionNewDate);
-
-    r.form?.addEventListener("submit", actionSaveDate);
-    r.btnSave?.addEventListener("click", actionSaveDate);
-    r.btnClear?.addEventListener("click", actionClearForm);
-    r.btnDelete?.addEventListener("click", actionDeleteDate);
-
-    r.seatsTotal?.addEventListener("input", () => {
-      const total = clampInt(r.seatsTotal.value, 0, 1000000);
-
-      if (!S.activeDateId) {
-        if (r.seatsAvail) r.seatsAvail.value = String(total);
-        return;
-      }
-
-      const curr = getActiveDate();
-      const currTotal = clampInt(curr?.seats_total, 0, 1000000);
-      const currAvail = clampInt(curr?.seats_available, 0, currTotal);
-      const nextAvail = Math.min(currAvail, total);
-
-      if (r.seatsAvail) r.seatsAvail.value = String(nextAvail);
-    });
-
-    r.search?.addEventListener("input", () => {
-      renderEventsList();
-    });
-
-    window.addEventListener("admin:tab", onAdminTab);
-  }
-
-  // ------------------------------------------------------------
   // Load-on-demand (solo cuando tab “dates” se abre)
   // ------------------------------------------------------------
-  const ensureLoaded = withLock(async function (force) {
+  async function ensureLoaded(force) {
     bindOnce();
 
     const now = Date.now();
     if (!force && now - S.lastLoadAt < 600) return;
+    if (force && now - S.lastLoadAt < 250) return; // anti doble-disparo por click+event
     S.lastLoadAt = now;
 
     const isHidden = !!$("#tab-dates")?.hidden;
@@ -811,6 +881,7 @@
 
       setNote("Cargando fechas…");
       await fetchDatesForEvent(S.activeEventId);
+      await refreshBookedCacheForCurrentDates();
 
       setFormMode(null);
       S.didLoadOnce = true;
@@ -827,7 +898,62 @@
         toast("Error", prettyError(err), 4200);
       }
     }
-  });
+  }
+
+  // ------------------------------------------------------------
+  // Bind once
+  // ------------------------------------------------------------
+  function onAdminTab(e) {
+    const t = e?.detail?.tab;
+    if (t === "dates") ensureLoaded(true);
+  }
+
+  function bindOnce() {
+    if (S.didBind) return;
+    S.didBind = true;
+
+    const r = R();
+
+    r.btnRefresh?.addEventListener("click", actionRefreshAll);
+    r.btnNew?.addEventListener("click", actionNewDate);
+
+    r.form?.addEventListener("submit", actionSaveDate);
+    r.btnSave?.addEventListener("click", actionSaveDate);
+    r.btnClear?.addEventListener("click", actionClearForm);
+    r.btnDelete?.addEventListener("click", actionDeleteDate);
+
+    // UX: al cambiar total, actualizamos available según reservas si podemos
+    r.seatsTotal?.addEventListener("input", async () => {
+      const total = clampInt(r.seatsTotal.value, 0, 1000000);
+
+      if (!S.activeDateId) {
+        if (r.seatsAvail) r.seatsAvail.value = String(total);
+        return;
+      }
+
+      if (!S.canReadRegs) {
+        // fallback: mantener avail <= total
+        const currAvail = clampInt(r.seatsAvail ? r.seatsAvail.value : 0, 0, total);
+        if (r.seatsAvail) r.seatsAvail.value = String(currAvail);
+        return;
+      }
+
+      const booked = await fetchBookedCountForDate(String(S.activeDateId));
+      S.bookedByDateId[String(S.activeDateId)] = booked;
+
+      const nextAvail = computeAvailFromBooked(total, booked);
+      if (r.seatsAvail) r.seatsAvail.value = String(nextAvail);
+
+      renderSelectedEventHeader();
+      renderDatesList();
+    });
+
+    r.search?.addEventListener("input", () => {
+      renderEventsList();
+    });
+
+    window.addEventListener("admin:tab", onAdminTab);
+  }
 
   // ------------------------------------------------------------
   // Boot: esperar admin:ready

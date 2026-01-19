@@ -1,5 +1,5 @@
 /* ============================================================
-   admin-promos.js ✅ PRO (DOM REAL + CRUD Supabase) — 2026-01 FIX alineado
+   admin-promos.js ✅ PRO (DOM REAL + CRUD Supabase) — 2026-01 PATCH alineado
    UI REAL (admin.html):
    - Tab:          #tab-promos
    - Buttons:      #newPromoBtn #refreshPromosBtn
@@ -8,21 +8,17 @@
    ✅ NUEVO (sin recargar, alineado con admin-auth):
    - Espera admin:ready / APP.__adminReady
    - Wake on tab (admin:tab)
-   - Bind/Load protegidos (sin duplicados)
-   - Realtime se cablea 1 sola vez
+   - Bind/Load protegidos (sin duplicados + throttle)
+   - Realtime se cablea 1 sola vez (y usa el sb correcto)
 
 ============================================================ */
 (function () {
   "use strict";
 
+  const VERSION = "2026-01-19.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
-
-  if (!window.APP || !APP.supabase) {
-    console.error("[admin-promos] APP.supabase no existe. Orden: Supabase CDN -> supabaseClient.js -> admin-promos.js");
-    return;
-  }
 
   // DOM real
   const panel = $("#tab-promos");
@@ -41,7 +37,6 @@
 
   const ENABLE_REALTIME = true;
   const REALTIME_DEBOUNCE_MS = 250;
-  let realtimeChannel = null;
 
   // ---------------------------
   // Toast
@@ -56,12 +51,8 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
-    try {
-      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
-    } catch (_) {}
-    try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
-    } catch (_) {}
+    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs); } catch (_) {}
+    try { if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs); } catch (_) {}
 
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
@@ -140,21 +131,6 @@
     return "#";
   }
 
-  async function ensureSession() {
-    try {
-      const res = await APP.supabase.auth.getSession();
-      const s = res?.data?.session || null;
-      if (!s) {
-        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
-        return null;
-      }
-      return s;
-    } catch (_) {
-      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
-      return null;
-    }
-  }
-
   function stableSort(arr) {
     return (arr || []).slice().sort((a, b) => {
       const pa = Number(a?.priority) || 0;
@@ -175,6 +151,38 @@
     });
   }
 
+  // ---------------------------
+  // Supabase helpers (APP.supabase OR APP.sb)
+  // ---------------------------
+  function getSB() {
+    if (!window.APP) return null;
+    return window.APP.supabase || window.APP.sb || null;
+  }
+
+  async function ensureSession() {
+    const sb = getSB();
+    if (!sb) {
+      toast("Supabase", "APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-promos.js", 5200);
+      return null;
+    }
+
+    try {
+      const res = await sb.auth.getSession();
+      const s = res?.data?.session || null;
+      if (!s) {
+        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
+        return null;
+      }
+      return s;
+    } catch (_) {
+      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
+      return null;
+    }
+  }
+
+  // ---------------------------
+  // Mapping
+  // ---------------------------
   function mapDbRow(r) {
     const row = r || {};
     return {
@@ -221,7 +229,8 @@
   // CRUD Supabase
   // ---------------------------
   async function fetchPromos() {
-    const { data, error } = await APP.supabase
+    const sb = getSB();
+    const { data, error } = await sb
       .from(TABLE)
       .select("*")
       .eq("target", TARGET_DEFAULT)
@@ -235,19 +244,22 @@
   }
 
   async function insertPromo(payloadDb) {
-    const { data, error } = await APP.supabase.from(TABLE).insert(payloadDb).select("*").single();
+    const sb = getSB();
+    const { data, error } = await sb.from(TABLE).insert(payloadDb).select("*").single();
     if (error) throw error;
     return mapDbRow(data);
   }
 
   async function updatePromo(id, payloadDb) {
-    const { data, error } = await APP.supabase.from(TABLE).update(payloadDb).eq("id", id).select("*").single();
+    const sb = getSB();
+    const { data, error } = await sb.from(TABLE).update(payloadDb).eq("id", id).select("*").single();
     if (error) throw error;
     return mapDbRow(data);
   }
 
   async function deletePromo(id) {
-    const { error } = await APP.supabase.from(TABLE).delete().eq("id", id);
+    const sb = getSB();
+    const { error } = await sb.from(TABLE).delete().eq("id", id);
     if (error) throw error;
     return true;
   }
@@ -263,6 +275,8 @@
     busy: false,
     items: [],
     refreshT: null,
+    lastLoadAt: 0, // throttle ensureLoaded
+    realtimeChannel: null,
   };
 
   function setBusy(on) {
@@ -444,9 +458,7 @@
     document.body.appendChild(m);
 
     const close = () => (m.style.display = "none");
-    m.addEventListener("click", (e) => {
-      if (e.target === m) close();
-    });
+    m.addEventListener("click", (e) => { if (e.target === m) close(); });
     m.querySelector("#ecnPromoClose")?.addEventListener("click", close);
 
     const form = m.querySelector("#ecnPromoForm");
@@ -607,6 +619,7 @@
       m.querySelector("#ecnTitle")?.dispatchEvent(ev);
     } catch (_) {}
 
+    renderPreview();
     return m;
   }
 
@@ -623,7 +636,7 @@
   }
 
   // ---------------------------
-  // Refresh (con silent + debounce opcional)
+  // Refresh
   // ---------------------------
   async function refresh(opts) {
     const silent = !!opts?.silent;
@@ -639,7 +652,6 @@
       state.didLoadOnce = true;
 
       if (!silent) toast("Promos", "Actualizadas.", 1200);
-
       renderTable();
     } catch (err) {
       console.error("[admin-promos] fetch error:", err);
@@ -647,11 +659,8 @@
       state.didLoadOnce = true;
       renderTable();
 
-      if (looksLikeRLSError(err)) {
-        toast("RLS BLOQUEANDO", "No hay permiso para leer promos. Policy SELECT para admins.", 5200);
-      } else {
-        toast("Error", "No se pudo cargar promos. Revisá tabla/policies.", 5200);
-      }
+      if (looksLikeRLSError(err)) toast("RLS BLOQUEANDO", "No hay permiso para leer promos. Policy SELECT para admins.", 5200);
+      else toast("Error", "No se pudo cargar promos. Revisá tabla/policies.", 5200);
     } finally {
       setBusy(false);
     }
@@ -678,10 +687,7 @@
 
     const action = safeStr(btn.dataset.action || "");
 
-    if (action === "edit") {
-      openEditModal(p);
-      return;
-    }
+    if (action === "edit") return openEditModal(p);
 
     if (action === "toggle") {
       setBusy(true);
@@ -726,20 +732,23 @@
   }
 
   // ---------------------------
-  // Realtime (1 sola vez)
+  // Realtime (1 sola vez, usa sb correcto)
   // ---------------------------
   function wireRealtimeOnce() {
     if (!ENABLE_REALTIME) return;
     if (state.didRealtime) return;
     state.didRealtime = true;
 
+    const sb = getSB();
+    if (!sb || typeof sb.channel !== "function") return;
+
     try {
-      if (realtimeChannel) {
-        try { APP.supabase.removeChannel(realtimeChannel); } catch (_) {}
-        realtimeChannel = null;
+      if (state.realtimeChannel) {
+        try { sb.removeChannel(state.realtimeChannel); } catch (_) {}
+        state.realtimeChannel = null;
       }
 
-      realtimeChannel = APP.supabase
+      state.realtimeChannel = sb
         .channel("admin-promos-realtime")
         .on("postgres_changes", { event: "*", schema: "public", table: TABLE }, () => {
           refreshDebounced(REALTIME_DEBOUNCE_MS);
@@ -770,6 +779,12 @@
     const isHidden = !!$("#tab-promos")?.hidden;
     if (!force && isHidden) return;
 
+    // throttle anti doble-disparo (admin:tab + click)
+    const now = Date.now();
+    if (!force && now - state.lastLoadAt < 600) return;
+    if (force && now - state.lastLoadAt < 250) return;
+    state.lastLoadAt = now;
+
     if (state.didLoadOnce && !force) {
       renderTable();
       return;
@@ -785,6 +800,8 @@
   function boot() {
     if (state.didBoot) return;
     state.didBoot = true;
+
+    console.log("[admin-promos] boot", { VERSION, TABLE });
 
     const wake = () => {
       bindOnce();
@@ -810,5 +827,6 @@
   window.ECN_ADMIN_PROMOS = {
     refresh: () => refresh({ silent: false }),
     openNewModal,
+    ensureLoaded: () => ensureLoaded(true),
   };
 })();

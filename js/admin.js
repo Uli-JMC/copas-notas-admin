@@ -13,7 +13,7 @@
  */
 
 (function () {
-  const VERSION = "2026-01-18.3";
+  const VERSION = "2026-01-19.1";
 
   // ============================================================
   // Selectores
@@ -519,7 +519,7 @@
       toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
       renderAll();
 
-      // refetch suave (solo una vez)
+      // refetch suave
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
@@ -750,10 +750,10 @@
     console.log("[admin.js] boot", { VERSION });
 
     bindOnce();
-    setTab("events"); // también emite admin:tab("events")
 
-    // Cargar events solo cuando ya hay auth OK
-    ensureEventsLoaded(true);
+    // ✅ IMPORTANTE: setTab("events") YA dispara carga on-demand.
+    // Evitamos el doble fetch inicial.
+    setTab("events");
   }
 
   if (window.APP && APP.__adminReady) {

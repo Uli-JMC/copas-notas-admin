@@ -1,11 +1,16 @@
 "use strict";
 
 /**
- * admin-gallery.js ✅ PRO (DOM REAL 2026-01) — 2026-01 FIX alineado
+ * admin-gallery.js ✅ PRO (DOM REAL 2026-01) — 2026-01 PATCH alineado
  * ✅ Sin recargar:
  * - Espera admin:ready (admin-auth.js) o APP.__adminReady
  * - Carga SOLO al abrir tab "gallery" vía evento admin:tab
- * - Bind/Load protegidos (sin duplicados)
+ * - Bind/Load protegidos (sin duplicados + throttle)
+ *
+ * Requiere:
+ * - #appPanel
+ * - #tab-gallery, #galleryTbody, #newGalleryBtn, #refreshGalleryBtn
+ * - #search (filtro local)
  */
 
 (function () {
@@ -13,14 +18,9 @@
   // Helpers DOM
   // ---------------------------
   const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+  // Guard: solo corre dentro del admin real
   if (!$("#appPanel")) return;
-
-  if (!window.APP || !APP.supabase) {
-    console.error("[admin-gallery] APP.supabase no existe. Orden: Supabase CDN -> supabaseClient.js -> admin-gallery.js");
-    return;
-  }
 
   const panel = $("#tab-gallery");
   const tbody = $("#galleryTbody");
@@ -33,6 +33,7 @@
   // ---------------------------
   // Config
   // ---------------------------
+  const VERSION = "2026-01-18.4";
   const TABLE = "gallery_items";
   const BUCKET = "gallery";
   const TARGET_DEFAULT = "home";
@@ -107,7 +108,9 @@
     try {
       const d = new Date(safeStr(iso));
       if (isNaN(d.getTime())) return "—";
-      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+      return d
+        .toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" })
+        .replace(".", "");
     } catch (_) {
       return "—";
     }
@@ -156,9 +159,23 @@
       .replace(/^\-|\-$/g, "");
   }
 
+  // ---------------------------
+  // Supabase helpers (APP.supabase OR APP.sb)
+  // ---------------------------
+  function getSB() {
+    if (!window.APP) return null;
+    return window.APP.supabase || window.APP.sb || null;
+  }
+
   async function ensureSession() {
+    const sb = getSB();
+    if (!sb) {
+      toast("Supabase", "APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-gallery.js", 5200);
+      return null;
+    }
+
     try {
-      const res = await APP.supabase.auth.getSession();
+      const res = await sb.auth.getSession();
       const s = res?.data?.session || null;
       if (!s) {
         toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
@@ -172,10 +189,11 @@
   }
 
   function publicUrlFromPath(path) {
+    const sb = getSB();
     const p = cleanSpaces(path);
-    if (!p) return "";
+    if (!sb || !p) return "";
     try {
-      const res = APP.supabase.storage.from(BUCKET).getPublicUrl(p);
+      const res = sb.storage.from(BUCKET).getPublicUrl(p);
       return res?.data?.publicUrl || "";
     } catch (_) {
       return "";
@@ -191,6 +209,7 @@
     didLoadOnce: false,
     busy: false,
     items: [],
+    lastLoadAt: 0, // throttle
   };
 
   function setBusy(on) {
@@ -221,7 +240,10 @@
   }
 
   async function fetchItems() {
-    const { data, error } = await APP.supabase
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const { data, error } = await sb
       .from(TABLE)
       .select("*")
       .eq("target", TARGET_DEFAULT)
@@ -232,19 +254,28 @@
   }
 
   async function insertDbRow(payload) {
-    const { data, error } = await APP.supabase.from(TABLE).insert(payload).select("*").single();
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const { data, error } = await sb.from(TABLE).insert(payload).select("*").single();
     if (error) throw error;
     return mapDbRow(data);
   }
 
   async function deleteDbRow(id) {
-    const { data, error } = await APP.supabase.from(TABLE).delete().eq("id", id).select("id,image_path").single();
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const { data, error } = await sb.from(TABLE).delete().eq("id", id).select("id,image_path").single();
     if (error) throw error;
     return data || null;
   }
 
   async function uploadToStorage(file, path) {
-    const { error } = await APP.supabase.storage.from(BUCKET).upload(path, file, {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const { error } = await sb.storage.from(BUCKET).upload(path, file, {
       cacheControl: "3600",
       upsert: false,
     });
@@ -253,9 +284,12 @@
   }
 
   async function deleteStorageObject(path) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
     const p = cleanSpaces(path);
     if (!p) return;
-    const { error } = await APP.supabase.storage.from(BUCKET).remove([p]);
+    const { error } = await sb.storage.from(BUCKET).remove([p]);
     if (error) throw error;
   }
 
@@ -263,9 +297,8 @@
   // Render (table)
   // ---------------------------
   function renderTable() {
-    if (!tbody) return;
-
     const q = cleanSpaces($("#search")?.value || "").toLowerCase();
+
     const items = (state.items || []).filter((it) => {
       if (!q) return true;
       return (
@@ -336,7 +369,6 @@
       state.didLoadOnce = true;
 
       if (!silent) toast("Galería", "Actualizada.", 1200);
-
       renderTable();
     } catch (err) {
       console.error("[admin-gallery] fetch error:", err);
@@ -616,6 +648,12 @@
     const isHidden = !!$("#tab-gallery")?.hidden;
     if (!force && isHidden) return;
 
+    // throttle anti doble-disparo (click + admin:tab)
+    const now = Date.now();
+    if (!force && now - state.lastLoadAt < 600) return;
+    if (force && now - state.lastLoadAt < 250) return;
+    state.lastLoadAt = now;
+
     if (state.didLoadOnce && !force) {
       renderTable();
       return;
@@ -631,16 +669,18 @@
     if (state.didBoot) return;
     state.didBoot = true;
 
+    console.log("[admin-gallery] boot", { VERSION, TABLE, BUCKET });
+
     const wake = () => {
       bindOnce();
 
-      // admin:tab
+      // admin:tab (on-demand)
       window.addEventListener("admin:tab", (e) => {
         const t = e?.detail?.tab;
         if (t === "gallery") ensureLoaded(true);
       });
 
-      // fallback: si ya está visible (debug)
+      // fallback: si ya está visible (hard refresh)
       try {
         if ($("#tab-gallery") && $("#tab-gallery").hidden === false) ensureLoaded(true);
       } catch (_) {}
@@ -656,5 +696,6 @@
   window.ECN_ADMIN_GALLERY = {
     refresh: () => refresh({ silent: false }),
     openNewModal,
+    ensureLoaded: () => ensureLoaded(true),
   };
 })();

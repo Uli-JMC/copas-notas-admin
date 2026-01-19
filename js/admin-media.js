@@ -1,19 +1,20 @@
 /* ============================================================
-   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-01 FIX
+   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-01 FIX + AUTO COMPRESS + SETTINGS UI
    - Bucket: "media" (PUBLIC recomendado)
    - Sube imágenes y genera URL pública
    - Lista objetos del bucket (por carpeta)
    - Preview + copiar URL + eliminar
-   - No usa DB (ideal para "copiar y pegar URL" en Eventos/Promos/Galería)
-   - Requiere: Supabase CDN -> supabaseClient.js -> admin-auth.js -> admin-media.js
-   - Corre SOLO cuando:
-       1) admin:ready (sesión OK + admin OK)
-       2) tab "media" está activo (admin:tab)
+   - No usa DB (ideal para "copiar y pegar URL")
+   - ✅ Settings PRO (sin editar HTML):
+       - Toggle Optimizar
+       - Forzar WebP (si el navegador soporta)
+       - Slider calidad
+       - Guarda en localStorage
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-18.2";
+  const VERSION = "2026-01-19.5";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -31,6 +32,20 @@
   const MAX_MB = 6;
   const MAX_BYTES = MAX_MB * 1024 * 1024;
   const LIST_LIMIT = 60;
+
+  // ✅ Auto-compress config (default)
+  const COMPRESS_MAX_DIM_DEFAULT = 1920;
+  const COMPRESS_QUALITY_DEFAULT = 0.82;
+  const COMPRESS_MIN_BYTES = 900 * 1024;
+  const COMPRESS_TIMEOUT_MS = 12000;
+
+  // ✅ Settings localStorage keys
+  const LS_KEYS = {
+    optimize: "admin_media_optimize",
+    forceWebp: "admin_media_force_webp",
+    quality: "admin_media_quality",
+    maxDim: "admin_media_max_dim",
+  };
 
   // ------------------------------------------------------------
   // Toast / Note
@@ -77,6 +92,22 @@
   function safeStr(x) { return String(x ?? ""); }
   function cleanSpaces(s) { return safeStr(s).replace(/\s+/g, " ").trim(); }
 
+  function clampNum(n, min, max) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return min;
+    return Math.max(min, Math.min(max, x));
+  }
+
+  function sanitizeFolder(folder) {
+    let f = cleanSpaces(folder || "events").toLowerCase();
+    f = f.replace(/\\/g, "/");
+    f = f.replace(/\.\./g, "");
+    f = f.replace(/\/+/g, "/");
+    f = f.replace(/^\/|\/$/g, "");
+    if (!f) f = "events";
+    return f;
+  }
+
   function slugify(s) {
     return cleanSpaces(s)
       .toLowerCase()
@@ -93,9 +124,10 @@
     const fromName = (name.split(".").pop() || "").toLowerCase();
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
 
-    if (m.includes("png")) return "png";
     if (m.includes("webp")) return "webp";
+    if (m.includes("png")) return "png";
     if (m.includes("gif")) return "gif";
+    if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
     return "jpg";
   }
 
@@ -172,6 +204,177 @@
   }
 
   // ------------------------------------------------------------
+  // ✅ Settings (localStorage)
+  // ------------------------------------------------------------
+  function readLS(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v == null) return fallback;
+      return v;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeLS(key, value) {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch (_) {}
+  }
+
+  function loadSettings() {
+    const optimize = readLS(LS_KEYS.optimize, "1") !== "0";
+    const forceWebp = readLS(LS_KEYS.forceWebp, "0") === "1";
+    const quality = clampNum(Number(readLS(LS_KEYS.quality, String(COMPRESS_QUALITY_DEFAULT))), 0.55, 0.95);
+    const maxDim = Math.round(clampNum(Number(readLS(LS_KEYS.maxDim, String(COMPRESS_MAX_DIM_DEFAULT))), 800, 4096));
+    return { optimize, forceWebp, quality, maxDim };
+  }
+
+  // ------------------------------------------------------------
+  // ✅ Auto-compress helpers (Canvas -> WebP/JPG)
+  // ------------------------------------------------------------
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("timeout")), ms);
+      promise
+        .then((v) => { clearTimeout(t); resolve(v); })
+        .catch((e) => { clearTimeout(t); reject(e); });
+    });
+  }
+
+  function canvasToBlob(canvas, mime, quality) {
+    return new Promise((resolve) => {
+      try {
+        canvas.toBlob((blob) => resolve(blob || null), mime, quality);
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  function supportsWebP() {
+    try {
+      const c = document.createElement("canvas");
+      if (!c.getContext) return false;
+      return c.toDataURL("image/webp").startsWith("data:image/webp");
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function loadImageFromFile(file) {
+    if (typeof createImageBitmap === "function") {
+      try {
+        const bmp = await createImageBitmap(file);
+        return { kind: "bitmap", img: bmp, width: bmp.width, height: bmp.height };
+      } catch (_) {}
+    }
+
+    return await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ kind: "img", img, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+      };
+      img.onerror = () => {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+        reject(new Error("image_load_failed"));
+      };
+      img.src = url;
+    });
+  }
+
+  function computeTargetSize(w, h, maxDim) {
+    const W = Number(w || 0), H = Number(h || 0);
+    if (!W || !H) return { tw: W, th: H, scale: 1 };
+    const maxSide = Math.max(W, H);
+    if (maxSide <= maxDim) return { tw: W, th: H, scale: 1 };
+    const scale = maxDim / maxSide;
+    return { tw: Math.max(1, Math.round(W * scale)), th: Math.max(1, Math.round(H * scale)), scale };
+  }
+
+  async function compressImageSmart(originalFile, opts) {
+    const file = originalFile;
+
+    const enabled = !!opts?.optimize;
+    if (!enabled) return { file, changed: false, note: "" };
+
+    const quality = clampNum(Number(opts?.quality ?? COMPRESS_QUALITY_DEFAULT), 0.55, 0.95);
+    const maxDim = Math.round(clampNum(Number(opts?.maxDim ?? COMPRESS_MAX_DIM_DEFAULT), 800, 4096));
+    const forceWebp = !!opts?.forceWebp;
+
+    // Solo imágenes
+    if (!file || !/^image\//.test(file.type)) return { file, changed: false, note: "" };
+
+    const size = Number(file.size || 0);
+    const maybeSkipBySize = size > 0 && size < COMPRESS_MIN_BYTES;
+
+    let info;
+    try {
+      info = await withTimeout(loadImageFromFile(file), COMPRESS_TIMEOUT_MS);
+    } catch (_) {
+      return { file, changed: false, note: "" };
+    }
+
+    const w = info.width, h = info.height;
+    const { tw, th, scale } = computeTargetSize(w, h, maxDim);
+
+    // si no requiere resize y además pesa poco -> no tocar
+    if (scale === 1 && maybeSkipBySize) {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      return { file, changed: false, note: "" };
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = tw || w;
+    canvas.height = th || h;
+
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      return { file, changed: false, note: "" };
+    }
+
+    try {
+      ctx.drawImage(info.img, 0, 0, canvas.width, canvas.height);
+    } catch (_) {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      return { file, changed: false, note: "" };
+    } finally {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+    }
+
+    const webpOK = supportsWebP();
+    const useWebP = forceWebp ? webpOK : webpOK;
+    const mime = useWebP ? "image/webp" : "image/jpeg";
+
+    let blob = await withTimeout(canvasToBlob(canvas, mime, quality), COMPRESS_TIMEOUT_MS).catch(() => null);
+    if (!blob) return { file, changed: false, note: "" };
+
+    // Si recompress salió más pesada y no hubo resize, devolvemos original
+    if (Number(blob.size || 0) >= size && scale === 1) {
+      return { file, changed: false, note: "" };
+    }
+
+    const baseName = (file.name || "img").replace(/\.[a-z0-9]+$/i, "");
+    const ext = useWebP ? "webp" : "jpg";
+    const newName = `${baseName}.${ext}`;
+    const out = new File([blob], newName, { type: mime, lastModified: Date.now() });
+
+    const note = useWebP
+      ? (forceWebp ? "Optimizada a WebP (forzado)" : "Optimizada a WebP")
+      : "Optimizada a JPG";
+
+    return {
+      file: out,
+      changed: true,
+      note,
+      meta: { from: { w, h, size }, to: { w: canvas.width, h: canvas.height, size: out.size }, quality, maxDim },
+    };
+  }
+
+  // ------------------------------------------------------------
   // DOM refs (solo dentro del panel)
   // ------------------------------------------------------------
   function R() {
@@ -216,19 +419,154 @@
     list: [],
     currentFolder: "events",
     lastLoadedAt: 0,
+    lastTabLoadAt: 0,
+
+    settings: loadSettings(),
   };
 
   function setBusy(on) {
     S.busy = !!on;
     const r = R();
+
+    // ✅ NO bloquear URL/copy: se ocupa copiar aunque esté subiendo
     try {
       const els = panel.querySelectorAll("input, select, button, textarea");
-      els.forEach((el) => (el.disabled = S.busy));
+      els.forEach((el) => {
+        const id = (el && el.id) ? el.id : "";
+        const keepEnabled = (id === "mediaUrl" || id === "mediaCopyBtn");
+        el.disabled = S.busy ? !keepEnabled : false;
+      });
     } catch (_) {}
 
     try {
       if (r.uploadBtn) r.uploadBtn.textContent = S.busy ? "Subiendo…" : "Subir";
     } catch (_) {}
+  }
+
+  // ------------------------------------------------------------
+  // ✅ Settings UI injection (sin tocar HTML)
+  // ------------------------------------------------------------
+  function ensureSettingsUI() {
+    if (panel.querySelector('[data-media-settings="1"]')) return;
+
+    const r = R();
+    const anchor = r.formEl || panel;
+
+    const wrap = document.createElement("div");
+    wrap.setAttribute("data-media-settings", "1");
+    wrap.style.margin = "12px 0";
+    wrap.style.padding = "10px 12px";
+    wrap.style.border = "1px solid rgba(255,255,255,.10)";
+    wrap.style.background = "rgba(255,255,255,.03)";
+    wrap.style.borderRadius = "10px";
+
+    const webpOK = supportsWebP();
+
+    wrap.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="mediaOptToggle" ${S.settings.optimize ? "checked" : ""}>
+            <span style="opacity:.95;">Optimizar antes de subir</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; opacity:${webpOK ? "1" : ".55"};">
+            <input type="checkbox" id="mediaForceWebp" ${S.settings.forceWebp ? "checked" : ""} ${webpOK ? "" : "disabled"}>
+            <span>Forzar WebP</span>
+            <span style="font-size:12px; opacity:.75;">${webpOK ? "" : "(no soportado)"}</span>
+          </label>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="opacity:.85; font-size:12px;">Calidad</span>
+          <input type="range" id="mediaQuality" min="55" max="95" step="1" value="${Math.round(S.settings.quality * 100)}" style="width:160px;">
+          <span id="mediaQualityVal" style="min-width:36px; text-align:right; font-variant-numeric:tabular-nums;">${Math.round(S.settings.quality * 100)}</span>
+        </div>
+      </div>
+
+      <div style="margin-top:8px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="opacity:.75; font-size:12px;">
+          Resize máx: <b id="mediaMaxDimVal">${S.settings.maxDim}</b>px ·
+          <span style="opacity:.75;">(automático)</span>
+        </div>
+
+        <button type="button" class="btn" id="mediaResetSettingsBtn" style="white-space:nowrap;">Reset settings</button>
+      </div>
+    `;
+
+    // Insertar arriba del form (sin romper layout)
+    try {
+      if (r.formEl && r.formEl.parentNode) r.formEl.parentNode.insertBefore(wrap, r.formEl);
+      else panel.insertBefore(wrap, panel.firstChild);
+    } catch (_) {
+      panel.insertBefore(wrap, panel.firstChild);
+    }
+
+    const optToggle = wrap.querySelector("#mediaOptToggle");
+    const forceWebp = wrap.querySelector("#mediaForceWebp");
+    const quality = wrap.querySelector("#mediaQuality");
+    const qualityVal = wrap.querySelector("#mediaQualityVal");
+    const resetBtn = wrap.querySelector("#mediaResetSettingsBtn");
+
+    function syncUI() {
+      const webp = supportsWebP();
+      if (forceWebp) {
+        forceWebp.disabled = !webp;
+        forceWebp.parentElement.style.opacity = webp ? "1" : ".55";
+        if (!webp) {
+          forceWebp.checked = false;
+          S.settings.forceWebp = false;
+          writeLS(LS_KEYS.forceWebp, "0");
+        }
+      }
+      if (quality && qualityVal) {
+        const q = clampNum(Number(quality.value) / 100, 0.55, 0.95);
+        qualityVal.textContent = String(Math.round(q * 100));
+      }
+    }
+
+    optToggle?.addEventListener("change", () => {
+      S.settings.optimize = !!optToggle.checked;
+      writeLS(LS_KEYS.optimize, S.settings.optimize ? "1" : "0");
+      toast("Media", S.settings.optimize ? "Optimización activada." : "Optimización desactivada.", 1200);
+    });
+
+    forceWebp?.addEventListener("change", () => {
+      S.settings.forceWebp = !!forceWebp.checked;
+      writeLS(LS_KEYS.forceWebp, S.settings.forceWebp ? "1" : "0");
+      toast("Media", S.settings.forceWebp ? "Forzar WebP activado." : "Forzar WebP desactivado.", 1200);
+    });
+
+    quality?.addEventListener("input", () => {
+      const q = clampNum(Number(quality.value) / 100, 0.55, 0.95);
+      S.settings.quality = q;
+      writeLS(LS_KEYS.quality, String(q));
+      if (qualityVal) qualityVal.textContent = String(Math.round(q * 100));
+    });
+
+    resetBtn?.addEventListener("click", () => {
+      S.settings = {
+        optimize: true,
+        forceWebp: false,
+        quality: COMPRESS_QUALITY_DEFAULT,
+        maxDim: COMPRESS_MAX_DIM_DEFAULT,
+      };
+      writeLS(LS_KEYS.optimize, "1");
+      writeLS(LS_KEYS.forceWebp, "0");
+      writeLS(LS_KEYS.quality, String(COMPRESS_QUALITY_DEFAULT));
+      writeLS(LS_KEYS.maxDim, String(COMPRESS_MAX_DIM_DEFAULT));
+
+      if (optToggle) optToggle.checked = true;
+      if (forceWebp) forceWebp.checked = false;
+      if (quality) quality.value = String(Math.round(COMPRESS_QUALITY_DEFAULT * 100));
+      const md = wrap.querySelector("#mediaMaxDimVal");
+      if (md) md.textContent = String(COMPRESS_MAX_DIM_DEFAULT);
+
+      syncUI();
+      toast("Media", "Settings reiniciados.", 1200);
+    });
+
+    syncUI();
   }
 
   // ------------------------------------------------------------
@@ -278,7 +616,7 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
-    const f = cleanSpaces(folder) || "events";
+    const f = sanitizeFolder(folder);
 
     const { data, error } = await sb.storage
       .from(BUCKET)
@@ -291,11 +629,12 @@
       .filter((x) => x && x.name && !String(x.name).endsWith("/"))
       .map((x) => {
         const path = `${f}/${x.name}`;
+        const updated = x.updated_at || x.created_at || x.last_accessed_at || "";
         return {
           name: x.name,
           path,
           url: publicUrlFromPath(path),
-          updated_at: x.updated_at || x.created_at || "",
+          updated_at: updated,
           size: x.metadata?.size || 0,
           mime: x.metadata?.mimetype || "",
         };
@@ -307,7 +646,7 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
-    const f = cleanSpaces(folder) || "events";
+    const f = sanitizeFolder(folder);
     const ext = extFromNameOrMime(file);
 
     const base =
@@ -401,7 +740,6 @@
 
     if (S.busy) return;
 
-    // throttle 600ms para evitar spam (folder change + tab click)
     const now = Date.now();
     if (!force && now - S.lastLoadedAt < 600) return;
     S.lastLoadedAt = now;
@@ -412,7 +750,7 @@
       if (!s) return;
 
       const r = R();
-      const folder = cleanSpaces(r.folderSel?.value) || S.currentFolder || "events";
+      const folder = sanitizeFolder(r.folderSel?.value || S.currentFolder || "events");
       S.currentFolder = folder;
 
       if (!silent) toast("Media", "Cargando…", 800);
@@ -431,6 +769,42 @@
       } else {
         toast("Error", "No se pudo cargar la lista del bucket media.", 4200);
       }
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Clipboard (fallback PRO)
+  // ------------------------------------------------------------
+  async function copyUrl(text) {
+    const t = cleanSpaces(text || "");
+    if (!t) {
+      toast("Sin URL", "Primero subí o seleccioná un archivo de la lista.");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(t);
+        toast("Copiado", "URL copiada al portapapeles.", 1800);
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      toast("Copiado", ok ? "URL copiada al portapapeles." : "Copiala manualmente.", 2200);
+      return;
+    } catch (_) {
+      toast("Copiar", "No pude acceder al portapapeles. Copiala manualmente.", 2800);
     }
   }
 
@@ -463,23 +837,57 @@
     if (e && typeof e.preventDefault === "function") e.preventDefault();
 
     const r = R();
-    const file = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
+    const originalFile = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
 
-    if (!file) {
+    if (!originalFile) {
       toast("Falta imagen", "Seleccioná una imagen antes de subir.");
       return;
     }
 
-    const folder = cleanSpaces(r.folderSel?.value) || "events";
+    const folder = sanitizeFolder(r.folderSel?.value || "events");
     const customName = cleanSpaces(r.nameInp?.value || "");
 
     setBusy(true);
     try {
+      setNote("Optimizando imagen…", "info");
+
+      let fileToUpload = originalFile;
+
+      // ✅ compresión automática con settings
+      try {
+        const out = await compressImageSmart(originalFile, S.settings);
+        if (out && out.file) {
+          fileToUpload = out.file;
+          if (out.changed) {
+            const from = out?.meta?.from;
+            const to = out?.meta?.to;
+            const q = Math.round((out?.meta?.quality || S.settings.quality) * 100);
+            const md = out?.meta?.maxDim || S.settings.maxDim;
+
+            const msg =
+              `${out.note} · Q${q} · Max ${md}px ` +
+              `(${humanKB(from?.size)} → ${humanKB(to?.size)} | ${from?.w}×${from?.h} → ${to?.w}×${to?.h})`;
+
+            setNote(msg, "ok");
+          } else {
+            setNote("Imagen lista (sin cambios).", "ok");
+          }
+        }
+      } catch (_) {
+        setNote("Imagen lista (sin optimización).", "ok");
+      }
+
+      if (Number(fileToUpload.size || 0) > MAX_BYTES) {
+        toast("Muy pesada", `Luego de optimizar, pesa ${humanKB(fileToUpload.size)}. Probá con otra imagen.`, 4200);
+        setNote("⚠️ Archivo excede el límite.", "warn");
+        return;
+      }
+
       setNote("Subiendo a Supabase…", "info");
       const s = await ensureSession();
       if (!s) return;
 
-      const path = await uploadFile(file, folder, customName);
+      const path = await uploadFile(fileToUpload, folder, customName);
       const url = publicUrlFromPath(path);
 
       S.lastUploadedPath = path;
@@ -490,7 +898,6 @@
 
       await refreshList({ silent: true, force: true });
 
-      // limpia input file (pero deja URL)
       try { r.fileInp.value = ""; } catch (_) {}
       resetPreview();
     } catch (err) {
@@ -506,20 +913,6 @@
       }
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function copyUrl(text) {
-    const t = cleanSpaces(text || "");
-    if (!t) {
-      toast("Sin URL", "Primero subí o seleccioná un archivo de la lista.");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(t);
-      toast("Copiado", "URL copiada al portapapeles.", 1800);
-    } catch (_) {
-      toast("Copiar", "No pude acceder al portapapeles. Copiala manualmente.", 2800);
     }
   }
 
@@ -607,6 +1000,9 @@
       return;
     }
 
+    // ✅ Settings UI (sin editar HTML)
+    ensureSettingsUI();
+
     r.fileInp.addEventListener("change", onFileChange);
     r.folderSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
     r.refreshBtn.addEventListener("click", () => refreshList({ silent: false, force: true }));
@@ -619,6 +1015,8 @@
 
     resetPreview();
     setNote("", "");
+
+    S.currentFolder = sanitizeFolder(r.folderSel?.value || "events");
   }
 
   // ------------------------------------------------------------
@@ -634,11 +1032,8 @@
       return;
     }
 
-    // folder inicial
-    try {
-      const r = R();
-      S.currentFolder = cleanSpaces(r.folderSel?.value) || "events";
-    } catch (_) {}
+    // refrescar settings en cada boot
+    S.settings = loadSettings();
 
     bindOnce();
     console.log("[admin-media] boot", { VERSION, BUCKET });
@@ -648,13 +1043,19 @@
   // Activación por tab (admin:tab)
   // ------------------------------------------------------------
   async function onTab(e) {
-    const tab = e?.detail?.tab || "";
-    if (tab !== "media") return;
+    const t = e?.detail?.tab || "";
+    if (t !== "media") return;
 
-    // solo cuando el panel ya está visible
     try { if (panel.hidden) return; } catch (_) {}
 
-    // refresh on-demand
+    const now = Date.now();
+    if (now - S.lastTabLoadAt < 300) return;
+    S.lastTabLoadAt = now;
+
+    // por si cambió algo en otro refresh
+    S.settings = loadSettings();
+    ensureSettingsUI();
+
     await refreshList({ silent: true, force: false });
   }
 
