@@ -6,14 +6,19 @@
  * - Requiere: supabaseClient.js (APP.supabase) cargado antes
  * - Corre en: admin.html (#appPanel)
  *
- * ✅ NUEVO (sin recargas / sin duplicados):
+ * ✅ PRO (sin recargas / sin duplicados):
  *  - Espera admin:ready antes de boot
  *  - Emite admin:tab cuando cambia pestaña (para módulos)
  *  - Carga eventos on-demand (al abrir tab "events")
+ *
+ * ✅ FIXES 2026-01-19.2
+ *  - No re-render de events si no estás en tab "events"
+ *  - No re-dispatch si clickeas el tab activo
+ *  - Oculta paneles dinámicamente (role="tabpanel")
  */
 
 (function () {
-  const VERSION = "2026-01-19.1";
+  const VERSION = "2026-01-19.2";
 
   // ============================================================
   // Selectores
@@ -202,12 +207,8 @@
   // Tabs
   // ============================================================
   function hideAllTabs() {
-    $("#tab-events") && ($("#tab-events").hidden = true);
-    $("#tab-dates") && ($("#tab-dates").hidden = true);
-    $("#tab-regs") && ($("#tab-regs").hidden = true);
-    $("#tab-media") && ($("#tab-media").hidden = true);
-    $("#tab-gallery") && ($("#tab-gallery").hidden = true);
-    $("#tab-promos") && ($("#tab-promos").hidden = true);
+    // ✅ dinámico: cualquier panel con role="tabpanel" dentro del appPanel
+    $$('[role="tabpanel"]', appPanel).forEach((p) => { p.hidden = true; });
   }
 
   function emitTab(tabName) {
@@ -217,27 +218,28 @@
   }
 
   function setTab(tabName) {
-    state.activeTab = tabName || "events";
+    const next = tabName || "events";
+    if (next === state.activeTab) return; // ✅ evita re-emits y re-renders
 
-    $$(".tab").forEach((t) => {
+    state.activeTab = next;
+
+    $$(".tab", appPanel).forEach((t) => {
       t.setAttribute("aria-selected", t.dataset.tab === state.activeTab ? "true" : "false");
     });
 
     hideAllTabs();
 
-    if (state.activeTab === "events") $("#tab-events") && ($("#tab-events").hidden = false);
-    if (state.activeTab === "dates") $("#tab-dates") && ($("#tab-dates").hidden = false);
-    if (state.activeTab === "regs") $("#tab-regs") && ($("#tab-regs").hidden = false);
-    if (state.activeTab === "media") $("#tab-media") && ($("#tab-media").hidden = false);
-    if (state.activeTab === "gallery") $("#tab-gallery") && ($("#tab-gallery").hidden = false);
-    if (state.activeTab === "promos") $("#tab-promos") && ($("#tab-promos").hidden = false);
+    const panel = $("#tab-" + state.activeTab);
+    if (panel) panel.hidden = false;
 
     // 🔥 clave: avisar a módulos
     emitTab(state.activeTab);
 
-    // Render / load on-demand
-    if (state.activeTab === "events") ensureEventsLoaded(false);
-    renderAll();
+    // on-demand (solo events acá)
+    if (state.activeTab === "events") {
+      ensureEventsLoaded(false);
+      renderAll();
+    }
   }
 
   // ============================================================
@@ -424,7 +426,6 @@
     $("#eventId") && ($("#eventId").value = String(ev.id || ""));
     $("#evTitle") && ($("#evTitle").value = ev.title || "");
 
-    // ✅ type TEXTO (alineado al HTML)
     const typeEl = $("#evType");
     if (typeEl) {
       const dbType = String(ev.type || "Cata de vino");
@@ -454,10 +455,9 @@
   }
 
   function renderAll() {
-    if (state.activeTab === "events") {
-      renderEventList();
-      renderEventEditor();
-    }
+    if (state.activeTab !== "events") return; // ✅ clave
+    renderEventList();
+    renderEventEditor();
   }
 
   // ============================================================
@@ -466,7 +466,6 @@
   async function ensureEventsLoaded(force) {
     if (state.mode === "missing") return;
 
-    // si ya cargó y no forzamos: no refetch
     if (state.didLoadOnce && !force) return;
 
     try {
@@ -519,7 +518,6 @@
       toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
       renderAll();
 
-      // refetch suave
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
@@ -620,7 +618,7 @@
     if (!ev) return false;
 
     const title = cleanSpaces($("#evTitle")?.value || "");
-    const type = cleanSpaces($("#evType")?.value || "Cata de vino"); // ✅ TEXTO
+    const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
     const img = cleanSpaces($("#evImg")?.value || "");
     const desc = cleanSpaces($("#evDesc")?.value || "");
@@ -679,14 +677,14 @@
   });
 
   // ============================================================
-  // Wiring (HIT)
+  // Wiring
   // ============================================================
   function bindOnce() {
     if (state.didBind) return;
     state.didBind = true;
 
-    // Tabs + emit admin:tab
-    $$(".tab").forEach((t) => {
+    // Tabs
+    $$(".tab", appPanel).forEach((t) => {
       t.addEventListener("click", () => setTab(t.dataset.tab));
     });
 
@@ -736,7 +734,8 @@
     // Ir a fechas
     $("#addDateBtn")?.addEventListener("click", () => {
       toast("Fechas", "Abrí la pestaña “Fechas” para administrar cupos por evento.", 1800);
-      setTab("dates");
+      // ✅ en vez de setTab (que ahora no cambia si ya estaba), forzamos cambio real:
+      if (state.activeTab !== "dates") setTab("dates");
     });
   }
 
@@ -751,8 +750,9 @@
 
     bindOnce();
 
-    // ✅ IMPORTANTE: setTab("events") YA dispara carga on-demand.
-    // Evitamos el doble fetch inicial.
+    // Mostrar tab inicial sin re-emit raro:
+    // setTab ahora ignora si es el mismo tab, así que ponemos state primero:
+    state.activeTab = "__init__";
     setTab("events");
   }
 
