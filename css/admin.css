@@ -1,59 +1,106 @@
+/* ============================================================
+   admin.css ✅ PRO UI (2026-01)
+   - Mantiene tus clases/IDs (NO rompe JS)
+   - Mejora jerarquía visual: cards, grids, tabs, tablas, forms
+============================================================ */
+
 :root{
   --bg:#0b0b0c;
+  --bg2:#07090f;
+
   --text: rgba(255,255,255,.92);
   --muted: rgba(255,255,255,.62);
-  --line: rgba(255,255,255,.14);
-  --focus: rgba(255,255,255,.28);
+  --muted2: rgba(255,255,255,.52);
+
+  --line: rgba(255,255,255,.12);
+  --line2: rgba(255,255,255,.18);
+
+  --focus: rgba(124,92,255,.32);
+
   --max: 1200px;
   --radius: 18px;
+  --radius2: 22px;
+
   --shadow: 0 18px 60px rgba(0,0,0,.55);
+  --shadow2: 0 12px 30px rgba(0,0,0,.35);
+
   --btnBg: rgba(255,255,255,.10);
   --btnBgHover: rgba(255,255,255,.14);
 
-  /* ✅ NUEVO (login-only page) */
+  --brand: #7c5cff;
+  --brand2:#2dd4bf;
+  --danger:#ff4d6d;
+
+  /* login-only page */
   --topbarH: 86px;
 }
 
 *{box-sizing:border-box}
 html,body{height:100%}
+
 body{
   margin:0;
-  background: var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", Helvetica, sans-serif;
   letter-spacing:.2px;
+  background:
+    radial-gradient(1100px 900px at 20% -10%, rgba(124,92,255,.18), transparent 60%),
+    radial-gradient(1000px 900px at 90% 0%, rgba(45,212,191,.10), transparent 55%),
+    linear-gradient(180deg, var(--bg2), var(--bg));
 }
+
 a{color:inherit}
 .container{ width: min(var(--max), calc(100% - 40px)); margin:0 auto; }
 
-/* Topbar */
+::selection{ background: rgba(124,92,255,.35); }
+
+/* ============================================================
+   TOPBAR
+============================================================ */
 .topbar{
   position: sticky; top:0; z-index: 50;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(0,0,0,.55);
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(0,0,0,.45);
+  border-bottom: 1px solid rgba(255,255,255,.08);
 }
+
 .nav{
   display:flex; align-items:center; justify-content:space-between;
   gap:14px; padding: 14px 0;
 }
+
 .brand{
   display:flex; align-items:center; gap:10px;
   text-decoration:none;
+  padding: 6px 8px;
+  border-radius: 14px;
+  transition: background .15s ease;
 }
-.brand img{ width:34px; height:34px; object-fit:contain; }
+.brand:hover{ background: rgba(255,255,255,.04); }
+
+.brand img{
+  width:34px; height:34px; object-fit:contain;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  padding: 4px;
+}
 .brand span{
   font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight:650; letter-spacing:.04em;
+  font-weight:700;
+  letter-spacing:.03em;
   white-space:nowrap;
 }
+
 .navRight{ display:flex; gap:10px; align-items:center; }
 
-/* Buttons */
+/* ============================================================
+   BUTTONS
+============================================================ */
 .btn{
   border: 1px solid var(--line);
-  background: transparent;
+  background: rgba(255,255,255,.04);
   color: var(--text);
   padding: 11px 14px;
   border-radius: 999px;
@@ -65,238 +112,253 @@ a{color:inherit}
   align-items:center;
   justify-content:center;
   gap:10px;
-  transition: transform .15s ease, background .15s ease, border-color .15s ease;
+  transition: transform .10s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
   outline:none;
   cursor:pointer;
   user-select:none;
   white-space:nowrap;
 }
+
 .btn:hover{
   transform: translateY(-1px);
-  border-color: rgba(255,255,255,.28);
+  border-color: rgba(255,255,255,.26);
   background: rgba(255,255,255,.06);
 }
-.btn:focus-visible{ box-shadow: 0 0 0 4px var(--focus); }
+
+.btn:focus-visible{
+  box-shadow: 0 0 0 4px var(--focus);
+  border-color: rgba(124,92,255,.45);
+}
+
 .btn.primary{
-  background: var(--btnBg);
-  border-color: rgba(255,255,255,.22);
+  background: linear-gradient(135deg, rgba(124,92,255,.95), rgba(124,92,255,.55));
+  border-color: rgba(124,92,255,.55);
+  box-shadow: 0 10px 28px rgba(124,92,255,.18);
 }
 .btn.primary:hover{
-  background: var(--btnBgHover);
-  border-color: rgba(255,255,255,.32);
+  background: linear-gradient(135deg, rgba(124,92,255,1), rgba(124,92,255,.62));
+  border-color: rgba(124,92,255,.70);
 }
 
-.page{ padding: 22px 0 58px; }
+.btn.btn--ghost{
+  background: transparent;
+  border-color: rgba(255,255,255,.14);
+}
+.btn.btn--ghost:hover{
+  background: rgba(255,255,255,.05);
+}
+
+.btn.sm{
+  padding: 9px 11px;
+  min-height: 36px;
+  font-size: 12px;
+}
 
 /* ============================================================
-   ✅ Login-only page refinements (admin-login.html)
-   - centra sin depender de topbar (porque no hay topbar)
-   ============================================================ */
-body.adminLoginPage .page{
-  min-height: 100vh;
-  display:flex;
-  align-items:center;
-  padding: 26px 0;
-}
-body.adminLoginPage .login{
-  min-height: auto;
-  width: 100%;
-}
+   PAGE / HEAD
+============================================================ */
+.page{ padding: 22px 0 58px; }
 
-/* Login */
-.login{
-  display:flex; justify-content:center; align-items:center;
-  min-height: calc(100vh - var(--topbarH));
-}
-.loginCard{
-  width: min(520px, 100%);
-  border-radius: calc(var(--radius) + 6px);
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.55);
-  box-shadow: var(--shadow);
-  padding: 18px;
-}
-
-/* ✅ nuevo bloque brand para admin-login.html */
-.loginBrand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin-bottom: 10px;
-}
-.loginBrand img{
-  width:44px;
-  height:44px;
-  object-fit:contain;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.04);
-  padding: 6px;
-}
-
-.kicker{
-  margin:0 0 8px;
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing:.18em;
-  text-transform: uppercase;
-}
-.h1{
-  margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight: 650;
-  letter-spacing:.02em;
-  font-size: 30px;
-}
-.h2{
-  margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight: 650;
-  letter-spacing:.02em;
-  font-size: 26px;
-}
-.sub{
-  margin: 10px 0 0;
-  color: rgba(255,255,255,.78);
-  line-height: 1.6;
-  font-size: 14px;
-}
-.loginForm{
-  margin-top: 14px;
-  display:flex;
-  flex-direction:column;
-  gap: 12px;
-}
-.field{
-  padding: 12px;
-}
-label{
-  display:block;
-  margin:0 0 8px;
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing:.14em;
-  text-transform: uppercase;
-}
-input, select, textarea{
-  width:100%;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.35);
-  color: var(--text);
-  padding: 12px 12px;
-  outline:none;
-  font-size: 14px;
-}
-textarea{ resize: vertical; }
-input:focus, select:focus, textarea:focus{ box-shadow: 0 0 0 4px var(--focus); }
-
-.fine{
-  margin: 12px 0 0;
-  color: rgba(255,255,255,.62);
-  font-size:12px;
-  line-height:1.55;
-}
-.hint{
-  margin: 8px 0 0;
-  color: rgba(255,255,255,.62);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.counter{
-  margin-top: 8px;
-  display:flex;
-  justify-content:flex-end;
-  color: rgba(255,255,255,.62);
-  font-size: 12px;
-  letter-spacing:.08em;
-}
-
-/* App */
 .app .head{
   display:flex;
   gap: 14px;
   justify-content:space-between;
   align-items:flex-end;
   flex-wrap:wrap;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
+
+.kicker{
+  margin:0 0 8px;
+  color: rgba(255,255,255,.56);
+  font-size: 12px;
+  letter-spacing:.18em;
+  text-transform: uppercase;
+}
+
+.h1{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight: 750;
+  letter-spacing:.02em;
+  font-size: 30px;
+}
+.h2{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight: 750;
+  letter-spacing:.02em;
+  font-size: 26px;
+}
+.h3{
+  margin:0;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-weight: 750;
+  letter-spacing:.02em;
+  font-size: 20px;
+}
+
+.sub{
+  margin: 10px 0 0;
+  color: rgba(255,255,255,.78);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
 .headActions{ display:flex; gap:10px; align-items:center; }
+
 .search{
-  width: min(420px, 100%);
+  width: min(460px, 100%);
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.35);
+  background: rgba(0,0,0,.30);
   padding: 12px 14px;
   color: var(--text);
   outline:none;
+  transition: box-shadow .15s ease, border-color .15s ease;
 }
-.search:focus{ box-shadow: 0 0 0 4px var(--focus); }
+.search:focus{
+  box-shadow: 0 0 0 4px var(--focus);
+  border-color: rgba(124,92,255,.45);
+}
 
-/* Tabs */
+/* ============================================================
+   TABS (más pro)
+============================================================ */
 .tabs{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
-  margin: 14px 0;
+  margin: 14px 0 16px;
 }
+
 .tab{
-  border:1px solid var(--line);
+  border:1px solid rgba(255,255,255,.12);
   background: rgba(255,255,255,.04);
-  color: var(--text);
+  color: rgba(255,255,255,.86);
   padding: 10px 12px;
   border-radius: 999px;
   font-size: 12px;
   letter-spacing:.16em;
   text-transform: uppercase;
   cursor:pointer;
-}
-.tab[aria-selected="true"]{
-  background: rgba(255,255,255,.10);
-  border-color: rgba(255,255,255,.28);
+  position: relative;
+  transition: background .15s ease, border-color .15s ease, transform .10s ease;
 }
 
-/* Panel */
+.tab:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.06);
+}
+
+.tab[aria-selected="true"]{
+  border-color: rgba(124,92,255,.55);
+  background: linear-gradient(135deg, rgba(124,92,255,.22), rgba(45,212,191,.10));
+}
+
+.tab[aria-selected="true"]::after{
+  content:"";
+  position:absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -6px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(124,92,255,.95), rgba(45,212,191,.80));
+  opacity: .95;
+}
+
+/* ============================================================
+   PANELS / CARDS / GRIDS
+============================================================ */
 .panel{
-  border-radius: calc(var(--radius) + 6px);
+  border-radius: var(--radius2);
   border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.55);
-  box-shadow: var(--shadow);
+  background: rgba(0,0,0,.42);
+  box-shadow: var(--shadow2);
   padding: 18px;
 }
-.panelTop{
+
+.grid2{
+  display:grid;
+  grid-template-columns: 1fr 1.12fr;
+  gap: 14px;
+}
+
+.card{
+  border-radius: var(--radius2);
+  border: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  box-shadow: var(--shadow2);
+  padding: 16px;
+  min-width: 0;
+}
+
+.cardHead{
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
-  gap:14px;
-  flex-wrap:wrap;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
-.panelTitle h3{
-  margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight:650;
-  letter-spacing:.02em;
-  font-size: 22px;
-}
-.panelTitle p{
-  margin:8px 0 0;
-  color: rgba(255,255,255,.76);
-  line-height: 1.6;
-  font-size: 14px;
+.mini{
+  color: rgba(255,255,255,.62);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.split{
-  display:grid;
-  grid-template-columns: 1fr 1.1fr;
-  gap: 14px;
-}
-.list{
+.toolbar{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin: 10px 0 14px;
+  padding: 10px;
   border-radius: 16px;
   border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.05);
+  background: rgba(0,0,0,.28);
+}
+
+.note{
+  margin-top: 12px;
+  color: rgba(255,255,255,.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.empty{
+  margin-top: 12px;
+  color: rgba(255,255,255,.72);
+  border: 1px dashed rgba(255,255,255,.18);
+  border-radius: 16px;
+  padding: 14px;
+  line-height: 1.6;
+}
+
+/* Events list head (tu HTML) */
+.listHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin: 10px 0 12px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.26);
+}
+
+/* ============================================================
+   LIST / ITEM
+============================================================ */
+.list{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.24);
   overflow:hidden;
 }
+
 .item{
   padding: 14px;
   border-bottom: 1px solid rgba(255,255,255,.08);
@@ -305,12 +367,26 @@ input:focus, select:focus, textarea:focus{ box-shadow: 0 0 0 4px var(--focus); }
   gap:10px;
   justify-content:space-between;
   align-items:flex-start;
+  transition: background .15s ease;
 }
 .item:last-child{ border-bottom:0; }
 .item:hover{ background: rgba(255,255,255,.04); }
-.itemTitle{ margin:0; font-weight:650; }
-.itemMeta{ margin:6px 0 0; color: rgba(255,255,255,.72); font-size: 12px; letter-spacing:.10em; text-transform: uppercase; }
-.pills{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
+.itemTitle{ margin:0; font-weight:750; }
+.itemMeta{
+  margin:6px 0 0;
+  color: rgba(255,255,255,.70);
+  font-size: 12px;
+  letter-spacing:.10em;
+  text-transform: uppercase;
+}
+
+.pills{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
 .pill{
   border:1px solid rgba(255,255,255,.14);
   background: rgba(255,255,255,.06);
@@ -321,138 +397,110 @@ input:focus, select:focus, textarea:focus{ box-shadow: 0 0 0 4px var(--focus); }
   text-transform: uppercase;
   white-space:nowrap;
 }
+
 .pill.danger{
-  border-color: rgba(255,255,255,.22);
-  background: rgba(255,255,255,.10);
+  border-color: rgba(255,77,109,.35);
+  background: rgba(255,77,109,.12);
 }
 
-.editor{
-  border-radius: 16px;
-  padding: 14px;
-}
-.editorEmpty{
-  color: rgba(255,255,255,.70);
-  border: 1px dashed rgba(255,255,255,.16);
-  border-radius: 16px;
-  padding: 16px;
-  line-height: 1.6;
-}
-.editorForm .row{
+/* ============================================================
+   FORMS (tu HTML usa: .form .row .field .label .input .select .textarea)
+============================================================ */
+.form{ display:block; }
+
+.row{
   display:grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
-.divider{
-  margin: 14px 0;
-  height: 1px;
-  background: rgba(255,255,255,.08);
-  border-radius: 999px;
-}
 
-/* Dates */
-.datesBox h4{
-  margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight:650;
-  letter-spacing:.02em;
-  font-size: 18px;
-}
-.datesBox p{
-  margin:8px 0 0;
-  color: rgba(255,255,255,.76);
-  line-height: 1.6;
-  font-size: 13px;
-}
-.datesTop{
-  display:flex;
-  justify-content:space-between;
-  gap:12px;
-  align-items:flex-start;
-  flex-wrap:wrap;
-}
-.datesList{
-  margin-top: 12px;
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
-.dateRow{
-  display:grid;
-  grid-template-columns: 1.3fr .7fr auto;
-  gap: 10px;
-  align-items:center;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.32);
-}
-.dateRow input{
-  background: rgba(0,0,0,.35);
-}
-.badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  border:1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.06);
-  font-size: 11px;
+.field{ padding: 0; margin: 0; }
+
+.label{
+  display:block;
+  margin:0 0 8px;
+  color: rgba(255,255,255,.58);
+  font-size: 12px;
   letter-spacing:.14em;
   text-transform: uppercase;
-  color: var(--text);
-  white-space:nowrap;
-}
-.notice{
-  margin-top: 12px;
-  display:flex;
-  gap:10px;
-  align-items:center;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.32);
-  color: rgba(255,255,255,.78);
-  font-size: 13px;
 }
 
-.actions{
+.input, .select, .textarea,
+input, select, textarea{
+  width:100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.28);
+  color: var(--text);
+  padding: 12px 12px;
+  outline:none;
+  font-size: 14px;
+  transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
+}
+.textarea{ resize: vertical; }
+
+.input:focus, .select:focus, .textarea:focus,
+input:focus, select:focus, textarea:focus{
+  box-shadow: 0 0 0 4px var(--focus);
+  border-color: rgba(124,92,255,.45);
+  background: rgba(0,0,0,.34);
+}
+
+.formActions{
   margin-top: 14px;
   display:flex;
   gap:10px;
   flex-wrap:wrap;
+  align-items:center;
 }
 
-/* Table */
+/* ============================================================
+   TABLE
+============================================================ */
 .tableWrap{
   overflow:auto;
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.05);
+  background: rgba(0,0,0,.22);
 }
+
 .table{
   width:100%;
   border-collapse: collapse;
   min-width: 900px;
 }
+
 th,td{
   text-align:left;
   padding: 12px 12px;
   border-bottom: 1px solid rgba(255,255,255,.08);
   vertical-align: top;
 }
+
 th{
-  color: var(--muted);
+  color: rgba(255,255,255,.58);
   font-size: 12px;
   letter-spacing:.14em;
   text-transform: uppercase;
   position: sticky;
   top:0;
-  background: rgba(0,0,0,.75);
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(8px);
 }
-td{ color: rgba(255,255,255,.82); font-size: 13px; line-height:1.4; }
 
-/* Toasts */
+td{
+  color: rgba(255,255,255,.84);
+  font-size: 13px;
+  line-height:1.4;
+}
+
+tbody tr:hover td{
+  background: rgba(255,255,255,.03);
+}
+
+/* ============================================================
+   TOASTS
+============================================================ */
 .toasts{
   position: fixed;
   right: 14px;
@@ -463,15 +511,16 @@ td{ color: rgba(255,255,255,.82); font-size: 13px; line-height:1.4; }
   z-index: 999;
   pointer-events:none;
 }
+
 .toast{
   pointer-events:auto;
   min-width: 280px;
-  max-width: 360px;
-  border-radius: 14px;
+  max-width: 380px;
+  border-radius: 16px;
   border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.72);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(15,20,32,.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding: 12px 12px;
   box-shadow: 0 20px 60px rgba(0,0,0,.55);
   display:flex;
@@ -482,6 +531,7 @@ td{ color: rgba(255,255,255,.82); font-size: 13px; line-height:1.4; }
   animation: toastIn .22s ease forwards;
 }
 @keyframes toastIn{ to{ transform: translateY(0); opacity:1; } }
+
 .toast .tTitle{
   margin:0;
   font-size: 12px;
@@ -508,23 +558,76 @@ td{ color: rgba(255,255,255,.82); font-size: 13px; line-height:1.4; }
 }
 .toast .close:hover{ background: rgba(255,255,255,.10); }
 
-@media (max-width: 980px){
-  .split{ grid-template-columns: 1fr; }
-  .editorForm .row{ grid-template-columns: 1fr; }
-  .dateRow{ grid-template-columns: 1fr; }
-  body.adminLoginPage .page{ padding: 22px 0; }
-  .container{ width: calc(100% - 28px); }
+/* ============================================================
+   LOGIN PAGE (tu CSS ya lo tenía; lo mantengo y lo hago más pro)
+============================================================ */
+body.adminLoginPage .page{
+  min-height: 100vh;
+  display:flex;
+  align-items:center;
+  padding: 26px 0;
+}
+
+.login{
+  display:flex; justify-content:center; align-items:center;
+  min-height: calc(100vh - var(--topbarH));
+}
+
+.loginCard{
+  width: min(520px, 100%);
+  border-radius: calc(var(--radius) + 8px);
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.48);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.loginBrand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom: 10px;
+}
+.loginBrand img{
+  width:44px;
+  height:44px;
+  object-fit:contain;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  padding: 6px;
+}
+
+.fine{
+  margin: 12px 0 0;
+  color: rgba(255,255,255,.62);
+  font-size:12px;
+  line-height:1.55;
+}
+
+.hint{
+  margin: 8px 0 0;
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.counter{
+  margin-top: 8px;
+  display:flex;
+  justify-content:flex-end;
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  letter-spacing:.08em;
 }
 
 /* ============================================================
-   ✅ GALLERY (Admin) - estilos mínimos para:
-   - preview de imagen
-   - lista con miniatura + tags + acciones
+   GALLERY + PROMOS (tus ajustes, con pequeños fixes)
 ============================================================ */
 #galPreview{
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.32);
+  background: rgba(0,0,0,.26);
   padding: 12px;
 }
 
@@ -534,170 +637,164 @@ td{ color: rgba(255,255,255,.82); font-size: 13px; line-height:1.4; }
   gap: 12px;
   align-items:start;
 }
+
 .galThumb{
-  width:96px;
-  height:96px;
-  border-radius: 14px;
+  width:96px; height:96px;
+  border-radius: 16px;
   border: 1px solid rgba(255,255,255,.12);
   overflow:hidden;
   background: rgba(255,255,255,.06);
 }
-.galThumb img{
-  width:100%;
-  height:100%;
-  object-fit: cover;
-  display:block;
-}
-.galPreviewMeta{
-  display:flex;
-  flex-direction:column;
-  gap: 6px;
-}
-.galTitle{
-  margin:0;
-  font-weight:650;
-}
-.galSub{
-  margin:0;
-  color: rgba(255,255,255,.72);
-  font-size: 12px;
-  letter-spacing:.10em;
-  text-transform: uppercase;
-}
+.galThumb img{ width:100%; height:100%; object-fit: cover; display:block; }
 
-.galPills{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  margin-top: 7px;
-}
+.galPreviewMeta{ display:flex; flex-direction:column; gap: 6px; }
+.galTitle{ margin:0; font-weight:750; }
+.galSub{ margin:0; color: rgba(255,255,255,.72); font-size: 12px; letter-spacing:.10em; text-transform: uppercase; }
 
-.galleryListEmpty{
-  padding: 14px;
-  color: rgba(255,255,255,.72);
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
+.galPills{ display:flex; gap:8px; flex-wrap:wrap; margin-top: 7px; }
 
-.galleryItem{
-  padding: 14px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-  display:grid;
-  grid-template-columns: 56px 1fr auto;
-  gap: 12px;
-  align-items:start;
-}
-.galleryItem:last-child{ border-bottom:0; }
+.galleryItemActions{ display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
 
-.galleryItemThumb{
-  width:56px;
-  height:56px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  overflow:hidden;
-  background: rgba(255,255,255,.06);
-}
-.galleryItemThumb img{
-  width:100%;
-  height:100%;
-  object-fit: cover;
-  display:block;
-}
-
-.galleryItemMain{
-  display:flex;
-  flex-direction:column;
-  gap: 6px;
-  min-width: 0;
-}
-.galleryItemTitle{
-  margin:0;
-  font-weight:650;
-  overflow:hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.galleryItemMeta{
-  margin:0;
-  color: rgba(255,255,255,.72);
-  font-size: 12px;
-  letter-spacing:.10em;
-  text-transform: uppercase;
-}
-
-.galleryItemActions{
-  display:flex;
-  gap:8px;
-  align-items:center;
-  justify-content:flex-end;
-  flex-wrap:wrap;
-}
-
-.btn.sm{
-  padding: 9px 11px;
-  min-height: 36px;
-  font-size: 12px;
-}
-
-@media (max-width: 980px){
-  .galPreviewRow{ grid-template-columns: 84px 1fr; }
-  .galThumb{ width:84px; height:84px; }
-  .galleryItem{ grid-template-columns: 56px 1fr; }
-  .galleryItemActions{ grid-column: 1 / -1; justify-content:flex-start; }
-}
-
-/* ============================================================
-   ✅ PROMOS (Admin) - ajustes mínimos para que quede pro
-   - Corrige spacing en grids (quita margin interno del .field)
-   - Preview estilo similar a Galería
-   - Listado y acciones consistentes
-============================================================ */
-
-/* 1) FIX: el margin en .field rompe la grilla (ya existe gap) */
-.editorForm .row .field{
-  margin: 5px 0; /* sobreescribe tu .field{ margin:5px } solo dentro del grid */
-}
-
-/* Cuando el field NO está en row (solo), mantenemos aire */
-.editorForm > .field{
-  margin: 5px 0 0;
-}
-
-/* 2) Preview Promos */
+/* PROMOS */
 #promoPreview{
-  border-radius: 5px;
+  border-radius: 18px;
   border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.32);
+  background: rgba(0,0,0,.26);
   padding: 12px;
 }
 
-/* Que los pills del preview se vean igual */
-#promoPreview .pills{
-  justify-content: flex-start;
-}
+#promoPreview .pills{ justify-content: flex-start; }
 
-/* 3) Listado Promos */
-#promosList .item{
-  cursor: default; /* el click lo manejan los botones */
-}
+/* Si promosList existe (compat), que no parezca “apagado” */
+#promosList .item{ cursor: default; }
 
-#promosList .item .btn{
-  padding: 9px 11px;
-  min-height: 36px;
-  font-size: 12px;
-}
-
-/* Botonera más compacta en desktop */
-#promosList .pills{
-  gap: 8px;
-}
-
-/* En mobile, que los botones bajen ordenados */
+/* ============================================================
+   RESPONSIVE
+============================================================ */
 @media (max-width: 980px){
-  #promosList .item{
-    flex-direction: column;
-    align-items: stretch;
+  .grid2{ grid-template-columns: 1fr; }
+  .row{ grid-template-columns: 1fr; }
+  .container{ width: calc(100% - 28px); }
+  body.adminLoginPage .page{ padding: 22px 0; }
+}
+
+/* ============================================================
+   ✅ Sidebar Pro Layout (pegar al final del admin.css)
+============================================================ */
+
+.adminLayout{
+  display:grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  align-items:start;
+  margin-top: 6px;
+}
+
+.adminSide{
+  position: sticky;
+  top: 96px; /* abajo de la topbar */
+  align-self:start;
+}
+
+.sideCard{
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  padding: 14px;
+}
+
+.sideTitle{
+  padding: 8px 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  margin-bottom: 10px;
+}
+
+.sideKicker{
+  color: rgba(255,255,255,.55);
+  font-size: 12px;
+  letter-spacing:.18em;
+  text-transform: uppercase;
+}
+
+.sideHint{
+  margin-top: 6px;
+  color: rgba(255,255,255,.82);
+  font-weight: 700;
+  letter-spacing:.01em;
+}
+
+.sideTabs{
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 12px 0 10px;
+}
+
+.sideTabs .tab{
+  width: 100%;
+  justify-content: flex-start;
+  text-align:left;
+  padding: 12px 14px;
+  border-radius: 16px;
+  letter-spacing: .12em;
+}
+
+.sideTabs .tab[aria-selected="true"]::after{
+  display:none; /* en sidebar se ve mejor sin underline abajo */
+}
+
+.sideTabs .tab[aria-selected="true"]{
+  border-color: rgba(124,92,255,.60);
+  background: linear-gradient(135deg, rgba(124,92,255,.22), rgba(45,212,191,.10));
+  box-shadow: inset 0 0 0 1px rgba(124,92,255,.18);
+}
+
+.sideFooter{
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.22);
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.sideChip{
+  border: 1px solid rgba(124,92,255,.40);
+  background: rgba(124,92,255,.14);
+  color: rgba(255,255,255,.92);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+  white-space:nowrap;
+}
+
+.sideFootText{
+  color: rgba(255,255,255,.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Responsive: sidebar pasa arriba */
+@media (max-width: 980px){
+  .adminLayout{
+    grid-template-columns: 1fr;
   }
-  #promosList .item .pills{
-    justify-content: flex-start;
+  .adminSide{
+    position: static;
+    top: auto;
+  }
+  .sideTabs{
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .sideTabs .tab{
+    width: auto;
+    border-radius: 999px;
+    padding: 10px 12px;
   }
 }
