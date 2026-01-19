@@ -1,25 +1,11 @@
 "use strict";
 
 /**
- * admin-gallery.js ✅ PRO (DOM REAL 2026-01)
- * - UI REAL (admin.html):
- *   - Tab:          #tab-gallery
- *   - Buttons:      #newGalleryBtn #refreshGalleryBtn
- *   - Table body:   #galleryTbody
- *
- * - Supabase:
- *   - Table: public.gallery_items
- *     Campos esperados (mínimo):
- *       id (uuid), type (text), name (text), tags (text[]), image_url (text), image_path (text), target (text),
- *       created_at, updated_at
- *   - Storage bucket: "gallery" (opcional en MVP, pero soportado)
- *
- * - Fixes:
- *   ✅ Se inicializa SOLO cuando abrís el tab (event: admin:tab)
- *   ✅ Botones funcionan sin refresh
- *   ✅ Render en tabla (#galleryTbody)
- *   ✅ "Nuevo ítem" abre modal simple (sin tocar HTML) + upload a storage + insert DB
- *   ✅ Manejo RLS claro en toasts
+ * admin-gallery.js ✅ PRO (DOM REAL 2026-01) — 2026-01 FIX alineado
+ * ✅ Sin recargar:
+ * - Espera admin:ready (admin-auth.js) o APP.__adminReady
+ * - Carga SOLO al abrir tab "gallery" vía evento admin:tab
+ * - Bind/Load protegidos (sin duplicados)
  */
 
 (function () {
@@ -67,8 +53,12 @@
 
   function toast(title, msg, timeoutMs = 3200) {
     try {
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
+    } catch (_) {}
+    try {
       if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
     } catch (_) {}
+
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
 
@@ -197,10 +187,10 @@
   // ---------------------------
   const state = {
     didBind: false,
-    didInit: false,
+    didBoot: false,
+    didLoadOnce: false,
     busy: false,
     items: [],
-    lastTabVisible: false,
   };
 
   function setBusy(on) {
@@ -291,7 +281,7 @@
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td colspan="6" style="opacity:.85; padding:16px;">
-          No hay ítems en la galería. Usá <b>“Nuevo ítem”</b>.
+          ${state.didLoadOnce ? "No hay ítems en la galería. Usá <b>“Nuevo ítem”</b>." : "Cargando…"}
         </td>`;
       tbody.appendChild(tr);
       return;
@@ -332,7 +322,9 @@
   // ---------------------------
   // Refresh
   // ---------------------------
-  const refresh = async () => {
+  async function refresh(opts) {
+    const silent = !!opts?.silent;
+
     if (state.busy) return;
     setBusy(true);
 
@@ -341,18 +333,26 @@
       if (!s) return;
 
       state.items = await fetchItems();
+      state.didLoadOnce = true;
+
+      if (!silent) toast("Galería", "Actualizada.", 1200);
+
       renderTable();
     } catch (err) {
       console.error("[admin-gallery] fetch error:", err);
+      state.items = [];
+      state.didLoadOnce = true;
+      renderTable();
+
       if (looksLikeRLSError(err)) {
-        toast("RLS BLOQUEANDO", "No hay permiso para leer gallery_items. Hay que crear policy SELECT para admins.", 5200);
+        toast("RLS BLOQUEANDO", "No hay permiso para leer gallery_items. Policy SELECT para admins.", 5200);
       } else {
         toast("Error", "No se pudo cargar la galería. Revisá tabla/policies.", 5200);
       }
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   // ---------------------------
   // Modal Nuevo (sin tocar HTML)
@@ -512,7 +512,7 @@
         m.style.display = "none";
 
         // refresh UI
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         console.error("[admin-gallery] upload/insert error:", err);
         if (looksLikeRLSError(err)) {
@@ -580,7 +580,7 @@
         }
 
         toast("Eliminado", "Se eliminó correctamente.", 1800);
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         console.error("[admin-gallery] delete error:", err);
         if (looksLikeRLSError(err)) {
@@ -595,46 +595,66 @@
   }
 
   // ---------------------------
-  // Bind / Init on tab
+  // Bind / Load (alineado con el resto)
   // ---------------------------
   function bindOnce() {
     if (state.didBind) return;
     state.didBind = true;
 
-    btnRefresh?.addEventListener("click", refresh);
+    btnRefresh?.addEventListener("click", () => refresh({ silent: false }));
     btnNew?.addEventListener("click", openNewModal);
 
     tbody?.addEventListener("click", onTableClick);
 
-    // búsqueda global
+    // búsqueda global (local)
     $("#search")?.addEventListener("input", () => renderTable());
   }
 
-  async function initIfNeeded() {
+  async function ensureLoaded(force) {
     bindOnce();
-    if (state.didInit) return;
-    state.didInit = true;
-    await refresh();
+
+    const isHidden = !!$("#tab-gallery")?.hidden;
+    if (!force && isHidden) return;
+
+    if (state.didLoadOnce && !force) {
+      renderTable();
+      return;
+    }
+
+    await refresh({ silent: true });
   }
 
-  // “Wake on tab”
-  window.addEventListener("admin:tab", (e) => {
-    const tab = e?.detail?.tab;
-    if (tab !== "gallery") return;
-    // solo init cuando de verdad se muestra el tab
-    const hidden = $("#tab-gallery")?.hidden;
-    if (hidden) return;
-    initIfNeeded();
-  });
+  // ---------------------------
+  // Boot: esperar admin:ready
+  // ---------------------------
+  function boot() {
+    if (state.didBoot) return;
+    state.didBoot = true;
 
-  // fallback: si el tab ya está visible al cargar (por debug)
-  try {
-    if ($("#tab-gallery") && $("#tab-gallery").hidden === false) initIfNeeded();
-  } catch (_) {}
+    const wake = () => {
+      bindOnce();
+
+      // admin:tab
+      window.addEventListener("admin:tab", (e) => {
+        const t = e?.detail?.tab;
+        if (t === "gallery") ensureLoaded(true);
+      });
+
+      // fallback: si ya está visible (debug)
+      try {
+        if ($("#tab-gallery") && $("#tab-gallery").hidden === false) ensureLoaded(true);
+      } catch (_) {}
+    };
+
+    if (window.APP && APP.__adminReady) wake();
+    else window.addEventListener("admin:ready", wake, { once: true });
+  }
+
+  boot();
 
   // API debug
   window.ECN_ADMIN_GALLERY = {
-    refresh,
+    refresh: () => refresh({ silent: false }),
     openNewModal,
   };
 })();

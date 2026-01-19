@@ -1,33 +1,23 @@
 /* ============================================================
-   admin-promos.js ✅ PRO (DOM REAL + CRUD Supabase) — 2026-01
+   admin-promos.js ✅ PRO (DOM REAL + CRUD Supabase) — 2026-01 FIX alineado
    UI REAL (admin.html):
    - Tab:          #tab-promos
    - Buttons:      #newPromoBtn #refreshPromosBtn
    - Table body:   #promosTbody
 
-   Supabase:
-   - Table: public.promos (RLS)
-     Campos esperados (mínimo recomendado):
-       id (uuid), active (bool), kind (text: BANNER|MODAL),
-       target (text), priority (int),
-       badge (text), title (text), description (text), note (text),
-       cta_label (text), cta_href (text), media_img (text),
-       dismiss_days (int),
-       start_at (timestamptz nullable), end_at (timestamptz nullable),
-       created_at, updated_at
+   ✅ NUEVO (sin recargar, alineado con admin-auth):
+   - Espera admin:ready / APP.__adminReady
+   - Wake on tab (admin:tab)
+   - Bind/Load protegidos (sin duplicados)
+   - Realtime se cablea 1 sola vez
 
-   Features:
-   ✅ Wake on tab (admin:tab)
-   ✅ Render table (#promosTbody)
-   ✅ Modal editor (sin tocar HTML)
-   ✅ CRUD + toggle active
-   ✅ Sanitiza CTA href
-   ✅ Mensajes claros para RLS
 ============================================================ */
 (function () {
   "use strict";
 
   const $ = (sel, root = document) => root.querySelector(sel);
+
+  if (!document.getElementById("appPanel")) return;
 
   if (!window.APP || !APP.supabase) {
     console.error("[admin-promos] APP.supabase no existe. Orden: Supabase CDN -> supabaseClient.js -> admin-promos.js");
@@ -67,8 +57,12 @@
 
   function toast(title, msg, timeoutMs = 3200) {
     try {
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
+    } catch (_) {}
+    try {
       if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
     } catch (_) {}
+
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
 
@@ -263,9 +257,12 @@
   // ---------------------------
   const state = {
     didBind: false,
-    didInit: false,
+    didBoot: false,
+    didLoadOnce: false,
+    didRealtime: false,
     busy: false,
     items: [],
+    refreshT: null,
   };
 
   function setBusy(on) {
@@ -297,7 +294,7 @@
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td colspan="5" style="opacity:.85; padding:16px;">
-          No hay promos todavía. Usá <b>“Nueva promo”</b>.
+          ${state.didLoadOnce ? 'No hay promos todavía. Usá <b>“Nueva promo”</b>.' : "Cargando…"}
         </td>`;
       tbody.appendChild(tr);
       return;
@@ -447,10 +444,11 @@
     document.body.appendChild(m);
 
     const close = () => (m.style.display = "none");
-    m.addEventListener("click", (e) => { if (e.target === m) close(); });
+    m.addEventListener("click", (e) => {
+      if (e.target === m) close();
+    });
     m.querySelector("#ecnPromoClose")?.addEventListener("click", close);
 
-    // live preview
     const form = m.querySelector("#ecnPromoForm");
     const idEl = m.querySelector("#ecnPromoId");
     const kindEl = m.querySelector("#ecnKind");
@@ -572,7 +570,7 @@
           toast("Guardado", "Promo creada.", 1800);
         }
 
-        await refresh();
+        await refresh({ silent: true });
         m.style.display = "none";
       } catch (err) {
         console.error("[admin-promos] save error:", err);
@@ -583,7 +581,6 @@
       }
     });
 
-    // expose helpers on modal
     m._fill = (p) => {
       m.querySelector("#ecnPromoId").value = safeStr(p?.id || "");
       m.querySelector("#ecnKind").value = fromKind(p?.kind || "BANNER");
@@ -597,13 +594,14 @@
       m.querySelector("#ecnMediaImg").value = safeStr(p?.media_img || "");
       m.querySelector("#ecnDismiss").value = String(Number(p?.dismiss_days) || 7);
       m.querySelector("#ecnNote").value = safeStr(p?.note || "");
-      // trigger preview
-      const ev = new Event("input");
-      m.querySelector("#ecnDesc")?.dispatchEvent(ev);
-      m.querySelector("#ecnTitle")?.dispatchEvent(ev);
+
+      try {
+        const ev = new Event("input");
+        m.querySelector("#ecnDesc")?.dispatchEvent(ev);
+        m.querySelector("#ecnTitle")?.dispatchEvent(ev);
+      } catch (_) {}
     };
 
-    // initial preview
     try {
       const ev = new Event("input");
       m.querySelector("#ecnTitle")?.dispatchEvent(ev);
@@ -614,7 +612,6 @@
 
   function openNewModal() {
     const m = ensureModal();
-    // reset default
     m.querySelector("#ecnPromoReset")?.click();
     m.style.display = "flex";
   }
@@ -626,9 +623,11 @@
   }
 
   // ---------------------------
-  // Refresh
+  // Refresh (con silent + debounce opcional)
   // ---------------------------
-  async function refresh() {
+  async function refresh(opts) {
+    const silent = !!opts?.silent;
+
     if (state.busy) return;
     setBusy(true);
 
@@ -637,17 +636,30 @@
       if (!s) return;
 
       state.items = await fetchPromos();
+      state.didLoadOnce = true;
+
+      if (!silent) toast("Promos", "Actualizadas.", 1200);
+
       renderTable();
     } catch (err) {
       console.error("[admin-promos] fetch error:", err);
+      state.items = [];
+      state.didLoadOnce = true;
+      renderTable();
+
       if (looksLikeRLSError(err)) {
-        toast("RLS BLOQUEANDO", "No hay permiso para leer promos. Hay que crear policy SELECT para admins.", 5200);
+        toast("RLS BLOQUEANDO", "No hay permiso para leer promos. Policy SELECT para admins.", 5200);
       } else {
         toast("Error", "No se pudo cargar promos. Revisá tabla/policies.", 5200);
       }
     } finally {
       setBusy(false);
     }
+  }
+
+  function refreshDebounced(ms) {
+    clearTimeout(state.refreshT);
+    state.refreshT = setTimeout(() => refresh({ silent: true }), ms || 250);
   }
 
   // ---------------------------
@@ -680,7 +692,7 @@
         const next = { ...p, active: !p.active };
         await updatePromo(p.id, mapUiToDbPayload(next));
         toast("Actualizado", next.active ? "Promo activada." : "Promo pausada.", 1800);
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         console.error("[admin-promos] toggle error:", err);
         if (looksLikeRLSError(err)) toast("RLS", "Bloqueado. Falta policy UPDATE en promos.", 5200);
@@ -702,7 +714,7 @@
 
         await deletePromo(id);
         toast("Eliminada", "La promo fue eliminada.", 1800);
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         console.error("[admin-promos] delete error:", err);
         if (looksLikeRLSError(err)) toast("RLS", "Bloqueado. Falta policy DELETE en promos.", 5200);
@@ -714,10 +726,12 @@
   }
 
   // ---------------------------
-  // Realtime
+  // Realtime (1 sola vez)
   // ---------------------------
-  function wireRealtime() {
+  function wireRealtimeOnce() {
     if (!ENABLE_REALTIME) return;
+    if (state.didRealtime) return;
+    state.didRealtime = true;
 
     try {
       if (realtimeChannel) {
@@ -728,8 +742,7 @@
       realtimeChannel = APP.supabase
         .channel("admin-promos-realtime")
         .on("postgres_changes", { event: "*", schema: "public", table: TABLE }, () => {
-          clearTimeout(wireRealtime._t);
-          wireRealtime._t = setTimeout(() => refresh(), REALTIME_DEBOUNCE_MS);
+          refreshDebounced(REALTIME_DEBOUNCE_MS);
         })
         .subscribe();
     } catch (e) {
@@ -738,45 +751,64 @@
   }
 
   // ---------------------------
-  // Bind / Init on tab
+  // Bind / Load (alineado)
   // ---------------------------
   function bindOnce() {
     if (state.didBind) return;
     state.didBind = true;
 
-    btnRefresh?.addEventListener("click", refresh);
+    btnRefresh?.addEventListener("click", () => refresh({ silent: false }));
     btnNew?.addEventListener("click", openNewModal);
     tbody?.addEventListener("click", onTableClick);
 
-    // búsqueda global
     $("#search")?.addEventListener("input", () => renderTable());
   }
 
-  async function initIfNeeded() {
+  async function ensureLoaded(force) {
     bindOnce();
-    if (state.didInit) return;
-    state.didInit = true;
-    await refresh();
-    wireRealtime();
+
+    const isHidden = !!$("#tab-promos")?.hidden;
+    if (!force && isHidden) return;
+
+    if (state.didLoadOnce && !force) {
+      renderTable();
+      return;
+    }
+
+    await refresh({ silent: true });
+    wireRealtimeOnce();
   }
 
-  // Wake on tab
-  window.addEventListener("admin:tab", (e) => {
-    const tab = e?.detail?.tab;
-    if (tab !== "promos") return;
-    const hidden = $("#tab-promos")?.hidden;
-    if (hidden) return;
-    initIfNeeded();
-  });
+  // ---------------------------
+  // Boot: esperar admin:ready
+  // ---------------------------
+  function boot() {
+    if (state.didBoot) return;
+    state.didBoot = true;
 
-  // fallback: si ya está visible
-  try {
-    if ($("#tab-promos") && $("#tab-promos").hidden === false) initIfNeeded();
-  } catch (_) {}
+    const wake = () => {
+      bindOnce();
+
+      window.addEventListener("admin:tab", (e) => {
+        const tab = e?.detail?.tab;
+        if (tab === "promos") ensureLoaded(true);
+      });
+
+      // fallback debug (solo después de ready)
+      try {
+        if ($("#tab-promos") && $("#tab-promos").hidden === false) ensureLoaded(true);
+      } catch (_) {}
+    };
+
+    if (window.APP && APP.__adminReady) wake();
+    else window.addEventListener("admin:ready", wake, { once: true });
+  }
+
+  boot();
 
   // API debug
   window.ECN_ADMIN_PROMOS = {
-    refresh,
+    refresh: () => refresh({ silent: false }),
     openNewModal,
   };
 })();

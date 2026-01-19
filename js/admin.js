@@ -6,33 +6,15 @@
  * - Requiere: supabaseClient.js (APP.supabase) cargado antes
  * - Corre en: admin.html (#appPanel)
  *
- * DOM REAL (confirmado):
- *  - Lista:        #eventList
- *  - Form:         #eventForm
- *  - Hidden id:    #eventId
- *  - Inputs:       #evTitle #evType #evMonth #evImg #evDesc #evLocation #evTimeRange #evDurationHours #evDuration
- *  - Botones:      #newEventBtn #dupEventBtn #saveEventBtn #deleteEventBtn #addDateBtn
- *  - Notas:        #storageNote #eventNote
- *  - Tabs:         .tab[data-tab]
- *  - Empty:        #editorEmpty
- *
- * Tabla:
- *  public.events (
- *    id, title, type, month_key, "desc", img, location, time_range, duration_hours, created_at, updated_at
- *  )
- *
- * Convención elegida (✅ ALINEADO):
- *  - type se guarda como TEXTO: "Cata de vino" | "Maridajes" | "Cocteles"
- *
- * Fixes PRO:
- *  ✅ IDs alineados al HTML real (sin #eventsList/#eventTitle/etc)
- *  ✅ HIT: listeners no dependen de refresh
- *  ✅ CRUD actualiza UI inmediatamente + refetch suave para sincronizar
- *  ✅ Manejo RLS (42501) y error útil
- *  ✅ No rompe si faltan elementos (guard clauses)
+ * ✅ NUEVO (sin recargas / sin duplicados):
+ *  - Espera admin:ready antes de boot
+ *  - Emite admin:tab cuando cambia pestaña (para módulos)
+ *  - Carga eventos on-demand (al abrir tab "events")
  */
 
 (function () {
+  const VERSION = "2026-01-18.3";
+
   // ============================================================
   // Selectores
   // ============================================================
@@ -56,6 +38,9 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
+    try {
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
+    } catch (_) {}
     try {
       if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
     } catch (_) {}
@@ -104,18 +89,8 @@
   }
 
   const MONTHS = [
-    "ENERO",
-    "FEBRERO",
-    "MARZO",
-    "ABRIL",
-    "MAYO",
-    "JUNIO",
-    "JULIO",
-    "AGOSTO",
-    "SEPTIEMBRE",
-    "OCTUBRE",
-    "NOVIEMBRE",
-    "DICIEMBRE",
+    "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
+    "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE",
   ];
 
   function normalizeMonth(m) {
@@ -207,6 +182,8 @@
     mode: "supabase", // supabase | blocked | missing
     busy: false,
     didBind: false,
+    didBoot: false,
+    didLoadOnce: false,
   };
 
   function withLock(fn) {
@@ -222,7 +199,7 @@
   }
 
   // ============================================================
-  // Tabs (solo control visual; otros módulos se manejan por sus JS)
+  // Tabs
   // ============================================================
   function hideAllTabs() {
     $("#tab-events") && ($("#tab-events").hidden = true);
@@ -233,8 +210,14 @@
     $("#tab-promos") && ($("#tab-promos").hidden = true);
   }
 
-  function setTab(tab) {
-    state.activeTab = tab || "events";
+  function emitTab(tabName) {
+    try {
+      window.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab: tabName } }));
+    } catch (_) {}
+  }
+
+  function setTab(tabName) {
+    state.activeTab = tabName || "events";
 
     $$(".tab").forEach((t) => {
       t.setAttribute("aria-selected", t.dataset.tab === state.activeTab ? "true" : "false");
@@ -249,6 +232,11 @@
     if (state.activeTab === "gallery") $("#tab-gallery") && ($("#tab-gallery").hidden = false);
     if (state.activeTab === "promos") $("#tab-promos") && ($("#tab-promos").hidden = false);
 
+    // 🔥 clave: avisar a módulos
+    emitTab(state.activeTab);
+
+    // Render / load on-demand
+    if (state.activeTab === "events") ensureEventsLoaded(false);
     renderAll();
   }
 
@@ -273,12 +261,18 @@
     if (error) {
       state.events = [];
       state.mode = isRLSError(error) ? "blocked" : "supabase";
-      setBusy(false, isRLSError(error) ? "RLS bloquea. Faltan policies para events." : "No se pudieron cargar eventos.");
+      setBusy(
+        false,
+        isRLSError(error)
+          ? "RLS bloquea. Faltan policies para events."
+          : "No se pudieron cargar eventos."
+      );
       throw error;
     }
 
     state.mode = "supabase";
     state.events = Array.isArray(data) ? data : [];
+    state.didLoadOnce = true;
     setBusy(false, "");
   }
 
@@ -329,16 +323,8 @@
 
   function clearEditorForm() {
     const ids = [
-      "eventId",
-      "evTitle",
-      "evType",
-      "evMonth",
-      "evImg",
-      "evDesc",
-      "evLocation",
-      "evTimeRange",
-      "evDurationHours",
-      "evDuration",
+      "eventId","evTitle","evType","evMonth","evImg","evDesc",
+      "evLocation","evTimeRange","evDurationHours","evDuration",
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -445,7 +431,7 @@
       const hasOption = Array.from(typeEl.options || []).some((o) => String(o.value) === dbType);
       typeEl.value = hasOption ? dbType : "Cata de vino";
       if (!hasOption && dbType) {
-        setNote(`Nota: el tipo guardado en DB es "${dbType}". Ajustá las opciones del selector si querés incluirlo.`);
+        setNote(`Nota: el tipo guardado en DB es "${dbType}". Ajustá el selector si querés incluirlo.`);
       }
     }
 
@@ -475,6 +461,33 @@
   }
 
   // ============================================================
+  // On-demand loader
+  // ============================================================
+  async function ensureEventsLoaded(force) {
+    if (state.mode === "missing") return;
+
+    // si ya cargó y no forzamos: no refetch
+    if (state.didLoadOnce && !force) return;
+
+    try {
+      await fetchEvents();
+      if (!state.activeEventId && state.events.length) {
+        state.activeEventId = state.events[0].id;
+      }
+    } catch (err) {
+      console.error(err);
+      if (isRLSError(err)) {
+        state.mode = "blocked";
+        toast("RLS", "No se pudo leer events. Falta policy SELECT para admins.", 5200);
+      } else {
+        toast("Supabase", "No se pudieron cargar eventos. Revisá consola.", 5200);
+      }
+    } finally {
+      renderAll();
+    }
+  }
+
+  // ============================================================
   // Actions
   // ============================================================
   const createNewEvent = withLock(async function () {
@@ -485,8 +498,6 @@
       }
 
       setBusy(true, "Creando evento…");
-
-      // ✅ type TEXTO (alineado al HTML)
       const typeFallback = $("#evType")?.value || "Cata de vino";
 
       const payload = {
@@ -502,18 +513,14 @@
 
       const created = await insertEvent(payload);
 
-      // UI inmediata
       state.events.unshift(created);
       state.activeEventId = created.id;
 
       toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
       renderAll();
 
-      // Refetch suave para sincronizar (updated_at/orden)
-      try {
-        await fetchEvents();
-      } catch (_) {}
-      renderAll();
+      // refetch suave (solo una vez)
+      try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {
@@ -558,10 +565,7 @@
       toast("Duplicado", "Copia creada.", 1500);
       renderAll();
 
-      try {
-        await fetchEvents();
-      } catch (_) {}
-      renderAll();
+      try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {
@@ -597,10 +601,7 @@
       toast("Evento eliminado", "Se eliminó correctamente.", 1600);
       renderAll();
 
-      try {
-        await fetchEvents();
-      } catch (_) {}
-      renderAll();
+      try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {
@@ -641,7 +642,7 @@
       desc,
       location: location || "Por confirmar",
       time_range,
-      duration_hours: duration_hours === "0" ? "" : duration_hours, // 0 => vacío (por confirmar)
+      duration_hours: duration_hours === "0" ? "" : duration_hours,
     };
 
     try {
@@ -661,11 +662,7 @@
       setNote("");
       renderAll();
 
-      try {
-        await fetchEvents();
-      } catch (_) {}
-      renderAll();
-
+      try { await ensureEventsLoaded(true); } catch (_) {}
       return true;
     } catch (err) {
       console.error(err);
@@ -688,7 +685,7 @@
     if (state.didBind) return;
     state.didBind = true;
 
-    // Tabs
+    // Tabs + emit admin:tab
     $$(".tab").forEach((t) => {
       t.addEventListener("click", () => setTab(t.dataset.tab));
     });
@@ -741,39 +738,27 @@
       toast("Fechas", "Abrí la pestaña “Fechas” para administrar cupos por evento.", 1800);
       setTab("dates");
     });
-
-    // Default tab
-    setTab("events");
   }
 
   // ============================================================
-  // Init
+  // Boot (espera admin:ready)
   // ============================================================
-  (async function init() {
+  function boot() {
+    if (state.didBoot) return;
+    state.didBoot = true;
+
+    console.log("[admin.js] boot", { VERSION });
+
     bindOnce();
+    setTab("events"); // también emite admin:tab("events")
 
-    // pequeña espera para estabilizar auth state (sin bloquear)
-    try {
-      await new Promise((r) => setTimeout(r, 60));
-    } catch (_) {}
+    // Cargar events solo cuando ya hay auth OK
+    ensureEventsLoaded(true);
+  }
 
-    try {
-      await fetchEvents();
-
-      // Auto-select primer evento si existe
-      if (!state.activeEventId && state.events.length) {
-        state.activeEventId = state.events[0].id;
-      }
-    } catch (err) {
-      console.error(err);
-      if (isRLSError(err)) {
-        state.mode = "blocked";
-        toast("RLS", "No se pudo leer events. Falta policy SELECT para admins.", 5200);
-      } else {
-        toast("Supabase", "No se pudieron cargar eventos. Revisá consola.", 5200);
-      }
-    } finally {
-      renderAll();
-    }
-  })();
+  if (window.APP && APP.__adminReady) {
+    boot();
+  } else {
+    window.addEventListener("admin:ready", boot, { once: true });
+  }
 })();

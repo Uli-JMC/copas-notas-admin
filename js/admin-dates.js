@@ -1,8 +1,13 @@
 /**
- * admin-dates.js ✅ PRO (SUPABASE CRUD event_dates) — 2026-01 FIX
+ * admin-dates.js ✅ PRO (SUPABASE CRUD event_dates) — 2026-01 PRO PATCH
+ *
+ * ✅ NO requiere recargar:
+ * - Espera evento "admin:ready" emitido por admin-auth.js
+ * - Se activa al entrar al tab "dates" vía evento "admin:tab"
  *
  * Requiere:
  *  - Supabase CDN + ./js/supabaseClient.js (APP.supabase o APP.sb)
+ *  - admin-auth.js emitiendo "admin:ready"
  *  - admin.html con IDs:
  *    #tab-dates, #datesNote, #datesRefreshBtn, #datesNewBtn
  *    #datesEventList, #datesEmpty, #datesEditor
@@ -14,23 +19,18 @@
  * Tablas:
  * - public.events (id, title, type, month_key, created_at, ...)
  * - public.event_dates (id, event_id, label, seats_total, seats_available, created_at)
- *
- * Reglas:
- * - Create: seats_available = seats_total
- * - Update:
- *   - clamp: seats_total >= 0
- *   - seats_available <= seats_total
  */
 (function () {
   "use strict";
 
+  const VERSION = "2026-01-18.3";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
-  // Guard: solo corre en admin.html con tab-dates
+  // Guard: solo corre si existe el tab de fechas en el DOM
   // ------------------------------------------------------------
-  const tab = $("#tab-dates");
-  if (!tab) return;
+  const tabEl = $("#tab-dates");
+  if (!tabEl) return;
 
   // ------------------------------------------------------------
   // UI helpers
@@ -46,7 +46,7 @@
 
   function toast(title, msg, timeoutMs = 3200) {
     try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
     } catch (_) {}
 
     const toastsEl = $("#toasts");
@@ -74,8 +74,7 @@
 
   function setNote(msg) {
     const note = $("#datesNote");
-    if (!note) return;
-    note.textContent = String(msg || "");
+    if (note) note.textContent = String(msg || "");
   }
 
   function cleanSpaces(s) {
@@ -146,12 +145,17 @@
   // ------------------------------------------------------------
   const S = {
     events: [],
-    activeEventId: null,
     dates: [],
-    query: "",
-    didBind: false,
+    activeEventId: null,
     activeDateId: null,
+    query: "",
     busy: false,
+
+    didBind: false,
+    didBoot: false,
+    didLoadOnce: false,
+
+    lastLoadAt: 0, // throttle
   };
 
   function withLock(fn) {
@@ -191,7 +195,7 @@
       seatsTotal: $("#dateSeatsTotal"),
       seatsAvail: $("#dateSeatsAvailable"),
 
-      btnSave: $("#dateSaveBtn"), // opcional
+      btnSave: $("#dateSaveBtn"),
       btnClear: $("#dateClearBtn"),
       btnDelete: $("#dateDeleteBtn"),
     };
@@ -259,7 +263,6 @@
 
     const next = { ...patch };
 
-    // clamp seguro
     if (typeof next.seats_total !== "undefined") {
       const total = clampInt(next.seats_total, 0, 1000000);
       next.seats_total = total;
@@ -316,7 +319,10 @@
   // ------------------------------------------------------------
   function setEditorVisible(on) {
     const r = R();
-    if (!r.empty || !r.editor) return;
+    if (!r.empty || !r.editor) {
+      setNote(on ? "" : "Seleccioná un evento a la izquierda para administrar sus fechas.");
+      return;
+    }
     r.empty.hidden = !!on;
     r.editor.hidden = !on;
   }
@@ -327,24 +333,6 @@
 
   function getActiveDate() {
     return S.dates.find((x) => String(x.id) === String(S.activeDateId)) || null;
-  }
-
-  function setFormMode(dateIdOrNull) {
-    const r = R();
-    S.activeDateId = dateIdOrNull ? String(dateIdOrNull) : null;
-
-    if (r.dateId) r.dateId.value = S.activeDateId || "";
-    if (r.btnDelete) r.btnDelete.disabled = !S.activeDateId;
-
-    // modo nueva
-    if (!S.activeDateId) {
-      if (r.label) r.label.value = "";
-      if (r.seatsTotal) r.seatsTotal.value = "0";
-      if (r.seatsAvail) r.seatsAvail.value = "0";
-    } else {
-      const d = getActiveDate();
-      if (d) fillFormFromDate(d);
-    }
   }
 
   function fillFormFromDate(d) {
@@ -363,12 +351,26 @@
     if (r.btnDelete) r.btnDelete.disabled = false;
   }
 
-  function safeConfirm(msg) {
-    try {
-      return window.confirm(msg);
-    } catch (_) {
-      return false;
+  function setFormMode(dateIdOrNull) {
+    const r = R();
+    S.activeDateId = dateIdOrNull ? String(dateIdOrNull) : null;
+
+    if (r.dateId) r.dateId.value = S.activeDateId || "";
+    if (r.btnDelete) r.btnDelete.disabled = !S.activeDateId;
+
+    if (!S.activeDateId) {
+      if (r.label) r.label.value = "";
+      if (r.seatsTotal) r.seatsTotal.value = "0";
+      if (r.seatsAvail) r.seatsAvail.value = "0";
+      return;
     }
+
+    const d = getActiveDate();
+    if (d) fillFormFromDate(d);
+  }
+
+  function safeConfirm(msg) {
+    try { return window.confirm(msg); } catch (_) { return false; }
   }
 
   // ------------------------------------------------------------
@@ -378,12 +380,12 @@
     const r = R();
     if (!r.eventsList) return;
 
+    pullGlobalSearch();
     const list = filteredEvents();
     const active = getActiveEvent();
 
     r.eventsList.innerHTML = "";
 
-    // Si el activo no cae dentro del filtro, lo mostramos primero igual
     if (active && S.query && !list.some((x) => String(x.id) === String(active.id))) {
       const pinned = document.createElement("div");
       pinned.className = "item active";
@@ -419,9 +421,7 @@
       item.className = "item";
       item.dataset.id = String(ev.id);
 
-      if (S.activeEventId && String(ev.id) === String(S.activeEventId)) {
-        item.classList.add("active");
-      }
+      if (S.activeEventId && String(ev.id) === String(S.activeEventId)) item.classList.add("active");
 
       item.innerHTML = `
         <div>
@@ -445,15 +445,17 @@
             setNote("Cargando fechas…");
             await fetchDatesForEvent(S.activeEventId);
 
-            setNote("Listo.");
             setEditorVisible(true);
             setFormMode(null);
+            setNote("Listo.");
 
-            renderAll();
+            renderSelectedEventHeader();
+            renderDatesList();
+            renderEventsList();
           } catch (err) {
             console.error(err);
             if (isRLSError(err)) setNote("⚠️ RLS bloquea lectura. Falta policy SELECT en event_dates.");
-            toast("Error", isRLSError(err) ? "RLS bloquea (SELECT event_dates)." : prettyError(err));
+            toast("Error", isRLSError(err) ? "RLS bloquea (SELECT event_dates)." : prettyError(err), 5200);
           }
         })
       );
@@ -468,9 +470,7 @@
     if (!ev) return;
 
     if (r.eventTitle) r.eventTitle.textContent = ev.title || "—";
-    if (r.eventMeta) {
-      r.eventMeta.textContent = `${ev.type || "—"} • ${fmtMonthKey(ev.month_key)} • ${S.dates.length} fecha(s)`;
-    }
+    if (r.eventMeta) r.eventMeta.textContent = `${ev.type || "—"} • ${fmtMonthKey(ev.month_key)} • ${S.dates.length} fecha(s)`;
   }
 
   function renderDatesList() {
@@ -497,20 +497,10 @@
       row.className = "item";
       row.dataset.id = String(d.id);
 
-      if (S.activeDateId && String(d.id) === String(S.activeDateId)) {
-        row.classList.add("active");
-      }
+      if (S.activeDateId && String(d.id) === String(S.activeDateId)) row.classList.add("active");
 
       const total = clampInt(d.seats_total, 0, 1000000);
       const avail = clampInt(d.seats_available, 0, total);
-
-      const pills = [];
-      pills.push(`<span class="pill">TOTAL ${escapeHtml(String(total))}</span>`);
-      pills.push(
-        avail <= 0
-          ? `<span class="pill danger">AGOTADO</span>`
-          : `<span class="pill">DISP ${escapeHtml(String(avail))}</span>`
-      );
 
       row.innerHTML = `
         <div>
@@ -518,7 +508,12 @@
           <p class="itemMeta">Cupos: ${escapeHtml(String(avail))}/${escapeHtml(String(total))}</p>
         </div>
         <div class="pills">
-          ${pills.join("")}
+          <span class="pill">TOTAL ${escapeHtml(String(total))}</span>
+          ${
+            avail <= 0
+              ? `<span class="pill danger">AGOTADO</span>`
+              : `<span class="pill">DISP ${escapeHtml(String(avail))}</span>`
+          }
         </div>
       `;
 
@@ -546,7 +541,6 @@
   }
 
   function renderAll() {
-    pullGlobalSearch();
     renderEventsList();
     renderEditor();
   }
@@ -572,22 +566,20 @@
         setFormMode(null);
       }
 
-      if (!S.activeEventId && S.events.length) {
-        S.activeEventId = S.events[0].id;
-      }
+      if (!S.activeEventId && S.events.length) S.activeEventId = S.events[0].id;
 
       if (S.activeEventId) {
         setNote("Cargando fechas…");
         await fetchDatesForEvent(S.activeEventId);
       }
 
-      setNote("Listo.");
       setFormMode(null);
+      setNote("Listo.");
       renderAll();
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) setNote("⚠️ RLS bloquea. Faltan policies SELECT para events/event_dates.");
-      toast("Error", isRLSError(err) ? "RLS bloquea (SELECT events/event_dates)." : prettyError(err));
+      toast("Error", isRLSError(err) ? "RLS bloquea (SELECT events/event_dates)." : prettyError(err), 5200);
       setNote("No se pudo refrescar.");
     }
   });
@@ -599,7 +591,6 @@
     }
     setFormMode(null);
 
-    // en “nueva”, seats_available sigue total
     const r = R();
     const total = clampInt(r.seatsTotal?.value || 0, 0, 1000000);
     if (r.seatsAvail) r.seatsAvail.value = String(total);
@@ -631,21 +622,19 @@
         return;
       }
 
-      // CREATE
       if (!S.activeDateId) {
         setNote("Creando fecha…");
         const created = await createDate(S.activeEventId, label, total);
 
         S.dates.unshift(created);
+        fillFormFromDate(created);
+
         setNote("Fecha creada.");
         toast("Listo", "Fecha creada.", 1200);
-
-        fillFormFromDate(created);
         renderAll();
         return;
       }
 
-      // UPDATE
       const current = getActiveDate();
       const currTotal = clampInt(current?.seats_total, 0, 1000000);
       const currAvail = clampInt(current?.seats_available, 0, currTotal);
@@ -659,10 +648,10 @@
       });
 
       S.dates = S.dates.map((d) => (String(d.id) === String(updated.id) ? updated : d));
+      fillFormFromDate(updated);
+
       setNote("Guardado.");
       toast("Guardado", "Fecha actualizada.", 1200);
-
-      fillFormFromDate(updated);
       renderAll();
     } catch (err) {
       console.error(err);
@@ -700,11 +689,10 @@
 
       S.dates = S.dates.filter((d) => String(d.id) !== String(S.activeDateId));
       S.activeDateId = null;
-
       setFormMode(null);
+
       setNote("Eliminada.");
       toast("Eliminada", "Se eliminó la fecha.", 1200);
-
       renderAll();
     } catch (err) {
       console.error(err);
@@ -728,8 +716,13 @@
   });
 
   // ------------------------------------------------------------
-  // Bind
+  // Bind once
   // ------------------------------------------------------------
+  function onAdminTab(e) {
+    const t = e?.detail?.tab;
+    if (t === "dates") ensureLoaded(true);
+  }
+
   function bindOnce() {
     if (S.didBind) return;
     S.didBind = true;
@@ -740,11 +733,10 @@
     r.btnNew?.addEventListener("click", actionNewDate);
 
     r.form?.addEventListener("submit", actionSaveDate);
-    r.btnSave?.addEventListener("click", actionSaveDate); // si existe
+    r.btnSave?.addEventListener("click", actionSaveDate);
     r.btnClear?.addEventListener("click", actionClearForm);
     r.btnDelete?.addEventListener("click", actionDeleteDate);
 
-    // seatsTotal => actualiza seatsAvail según regla (create vs edit)
     r.seatsTotal?.addEventListener("input", () => {
       const total = clampInt(r.seatsTotal.value, 0, 1000000);
 
@@ -761,21 +753,26 @@
       if (r.seatsAvail) r.seatsAvail.value = String(nextAvail);
     });
 
-    // Búsqueda global re-render
-    r.search?.addEventListener("input", () => renderAll());
-
-    // (opcional) al entrar a tab-dates, refresca suave una vez
-    document.querySelectorAll('.tab[data-tab="dates"]').forEach((btn) => {
-      btn.addEventListener("click", () => {
-        renderAll();
-      });
+    r.search?.addEventListener("input", () => {
+      renderEventsList();
     });
+
+    window.addEventListener("admin:tab", onAdminTab);
   }
 
   // ------------------------------------------------------------
-  // Init
+  // Load-on-demand (solo cuando tab “dates” se abre)
   // ------------------------------------------------------------
-  (async function init() {
+  const ensureLoaded = withLock(async function (force) {
+    bindOnce();
+
+    const now = Date.now();
+    if (!force && now - S.lastLoadAt < 600) return;
+    S.lastLoadAt = now;
+
+    const isHidden = !!$("#tab-dates")?.hidden;
+    if (!force && isHidden) return;
+
     const sb = getSB();
     if (!sb) {
       toast("Supabase", "Falta supabaseClient.js antes de admin-dates.js");
@@ -783,13 +780,17 @@
       return;
     }
 
-    bindOnce();
-
     try {
       const session = await ensureSession();
       if (!session) {
         setEditorVisible(false);
         setNote("⚠️ Sin sesión. Volvé a iniciar sesión en Admin.");
+        toast("Sesión", "No hay sesión activa.", 3200);
+        return;
+      }
+
+      if (S.didLoadOnce && !force) {
+        renderAll();
         return;
       }
 
@@ -799,6 +800,7 @@
       if (!S.events.length) {
         S.activeEventId = null;
         S.dates = [];
+        S.didLoadOnce = true;
         setEditorVisible(false);
         setNote("No hay eventos todavía. Crealos en “Eventos”.");
         renderEventsList();
@@ -810,8 +812,10 @@
       setNote("Cargando fechas…");
       await fetchDatesForEvent(S.activeEventId);
 
-      setNote("Listo.");
       setFormMode(null);
+      S.didLoadOnce = true;
+
+      setNote("Listo.");
       renderAll();
     } catch (err) {
       console.error(err);
@@ -823,5 +827,32 @@
         toast("Error", prettyError(err), 4200);
       }
     }
-  })();
+  });
+
+  // ------------------------------------------------------------
+  // Boot: esperar admin:ready
+  // ------------------------------------------------------------
+  function boot() {
+    if (S.didBoot) return;
+    S.didBoot = true;
+
+    console.log("[admin-dates] boot", { VERSION });
+
+    if (window.APP && APP.__adminReady) {
+      bindOnce();
+      if (!$("#tab-dates")?.hidden) ensureLoaded(true);
+      return;
+    }
+
+    window.addEventListener(
+      "admin:ready",
+      () => {
+        bindOnce();
+        if (!$("#tab-dates")?.hidden) ensureLoaded(true);
+      },
+      { once: true }
+    );
+  }
+
+  boot();
 })();

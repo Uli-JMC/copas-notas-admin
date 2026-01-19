@@ -1,10 +1,15 @@
 /* ============================================================
-   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 FIX
+   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 PRO PATCH
    - Admin: lista inscripciones desde public.registrations
    - Join: events.title + event_dates.label (vía FK)
-   - Filtro usa el search global #search
+   - Filtro usa el search global #search (filtra local, sin pedir a DB)
    - Exporta CSV (lo filtrado en pantalla)
    - Botón "seedRegsBtn" se usa como "Refrescar"
+
+   ✅ SIN RECARGAR:
+   - Espera admin:ready (admin-auth.js)
+   - Carga solo al abrir tab "regs" vía admin:tab o click fallback
+   - Protecciones anti-duplicado (throttle)
 
    Requiere (admin.html):
    - #tab-regs (panel)
@@ -12,28 +17,17 @@
    - #exportCsvBtn (botón)
    - #seedRegsBtn (botón) -> "Refrescar"
    - #search (input search global)
-
-   IMPORTANTE:
-   - Si ves 403/42501 => faltan policies (RLS) para registrations (y joins).
    ============================================================ */
 (function () {
   "use strict";
 
+  const VERSION = "2026-01-18.3";
   const $ = (sel) => document.querySelector(sel);
 
   // ------------------------------------------------------------
-  // Guards
+  // Guard DOM
   // ------------------------------------------------------------
   if (!document.getElementById("appPanel")) return;
-
-  if (!window.APP || !(APP.supabase || APP.sb)) {
-    console.error(
-      "APP.supabase no existe. Revisá el orden: Supabase CDN -> supabaseClient.js -> admin-registrations.js"
-    );
-    return;
-  }
-
-  const sb = APP.supabase || APP.sb;
 
   const tab = $("#tab-regs");
   const tbody = $("#regsTbody");
@@ -57,10 +51,10 @@
 
   function toast(title, msg, timeoutMs = 3200) {
     try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
     } catch (_) {}
     try {
-      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
+      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
     } catch (_) {}
 
     const toastsEl = $("#toasts");
@@ -82,7 +76,7 @@
       el.style.transform = "translateY(-6px)";
       setTimeout(() => el.remove(), 180);
     };
-    el.querySelector(".close")?.addEventListener("click", kill);
+    el.querySelector(".close")?.addEventListener("click", kill, { once: true });
     setTimeout(kill, timeoutMs);
   }
 
@@ -152,12 +146,6 @@
     return cleanSpaces(searchEl?.value || "").toLowerCase();
   }
 
-  function isRegsTabActive() {
-    const btn = document.querySelector('.tab[data-tab="regs"]');
-    const selected = btn ? btn.getAttribute("aria-selected") === "true" : false;
-    return selected && !tab.hidden;
-  }
-
   // CSV helpers
   function csvCell(v) {
     const s = safeStr(v);
@@ -184,12 +172,33 @@
   }
 
   // ------------------------------------------------------------
-  // Config DB — ALINEADO A TU SCHEMA
+  // Supabase client
+  // ------------------------------------------------------------
+  function getSB() {
+    if (!window.APP) return null;
+    return APP.supabase || APP.sb || null;
+  }
+
+  async function ensureSession(sb) {
+    try {
+      const res = await sb.auth.getSession();
+      const s = res?.data?.session || null;
+      if (!s) {
+        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
+        return null;
+      }
+      return s;
+    } catch (_) {
+      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Config DB
   // ------------------------------------------------------------
   const TABLE = "registrations";
 
-  // Estrategias:
-  // A) Join directo (si PostgREST reconoce relaciones)
   const SELECT_JOIN_A = `
     id,
     event_id,
@@ -203,8 +212,6 @@
     event_dates ( label )
   `;
 
-  // B) Join por nombre FK típico (más robusto)
-  // (en tu DDL existen constraints registrations_event_id_fkey / registrations_event_date_id_fkey)
   const SELECT_JOIN_B = `
     id,
     event_id,
@@ -218,7 +225,6 @@
     event_dates:event_dates!registrations_event_date_id_fkey ( label )
   `;
 
-  // C) Flat (último recurso) — no depende de relaciones
   const SELECT_FLAT = `
     id,
     event_id,
@@ -237,32 +243,28 @@
     list: [],
     loading: false,
     didBind: false,
-    refreshT: null,
+    didBoot: false,
+    didLoadOnce: false,
     mode: "unknown", // joinA|joinB|flat
+    lastLoadAt: 0,   // throttle tab switching
   };
 
-  // ------------------------------------------------------------
-  // Auth check
-  // ------------------------------------------------------------
-  async function ensureSession() {
-    try {
-      const res = await sb.auth.getSession();
-      const s = res?.data?.session || null;
-      if (!s) {
-        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
-        return null;
+  function withLock(fn) {
+    return async function (...args) {
+      if (S.loading) return;
+      S.loading = true;
+      try {
+        return await fn(...args);
+      } finally {
+        S.loading = false;
       }
-      return s;
-    } catch (_) {
-      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
-      return null;
-    }
+    };
   }
 
   // ------------------------------------------------------------
   // Fetch
   // ------------------------------------------------------------
-  async function fetchRegistrations(selectStr) {
+  async function fetchRegistrations(sb, selectStr) {
     const { data, error } = await sb
       .from(TABLE)
       .select(selectStr)
@@ -273,38 +275,38 @@
     return Array.isArray(data) ? data : [];
   }
 
-  async function fetchSmart() {
-    // A) Join normal
+  async function fetchSmart(sb) {
     try {
-      const data = await fetchRegistrations(SELECT_JOIN_A);
+      const data = await fetchRegistrations(sb, SELECT_JOIN_A);
       S.mode = "joinA";
       return data;
     } catch (eA) {
-      // B) Join por FK
       if (isJoinRelationError(eA)) {
         try {
-          const data = await fetchRegistrations(SELECT_JOIN_B);
+          const data = await fetchRegistrations(sb, SELECT_JOIN_B);
           S.mode = "joinB";
           return data;
-        } catch (eB) {
-          // seguimos a FLAT
-        }
+        } catch (_) {}
       }
-      // C) Flat
-      const data = await fetchRegistrations(SELECT_FLAT);
+      const data = await fetchRegistrations(sb, SELECT_FLAT);
       S.mode = "flat";
       return data;
     }
   }
 
   function normalizeRow(r) {
-    const evTitle = r?.events?.title || "—";
-    const dateLabel = r?.event_dates?.label || "—";
+    // Si hay joins:
+    const evTitle = r?.events?.title || "";
+    const dateLabel = r?.event_dates?.label || "";
+
+    // Fallback pro si estamos en flat:
+    const evFallback = r?.event_id ? `ID: ${safeStr(r.event_id)}` : "—";
+    const dtFallback = r?.event_date_id ? `ID: ${safeStr(r.event_date_id)}` : "—";
 
     return {
       id: safeStr(r?.id),
-      eventTitle: safeStr(evTitle),
-      dateLabel: safeStr(dateLabel),
+      eventTitle: safeStr(evTitle || evFallback),
+      dateLabel: safeStr(dateLabel || dtFallback),
       name: safeStr(r?.name),
       email: safeStr(r?.email),
       phone: safeStr(r?.phone || ""),
@@ -362,23 +364,31 @@
   // ------------------------------------------------------------
   // Refresh
   // ------------------------------------------------------------
-  async function refreshNow(opts) {
+  const refreshNow = withLock(async function (opts) {
     const silent = !!opts?.silent;
-    if (S.loading) return;
-    S.loading = true;
 
     if (!silent) toast("Inscripciones", "Cargando registros…", 900);
+    render(); // muestra "Cargando…" si aplica
 
     try {
-      const session = await ensureSession();
+      const sb = getSB();
+      if (!sb) {
+        toast("Supabase", "Falta supabaseClient.js antes de admin-registrations.js", 4200);
+        S.list = [];
+        render();
+        return;
+      }
+
+      const session = await ensureSession(sb);
       if (!session) {
         S.list = [];
         render();
         return;
       }
 
-      const data = await fetchSmart();
+      const data = await fetchSmart(sb);
       S.list = data.map(normalizeRow);
+      S.didLoadOnce = true;
 
       if (!silent) {
         const tag =
@@ -395,7 +405,6 @@
       if (isMissingTable(err)) {
         toast("BD", "La tabla registrations no existe en Supabase (public.registrations).", 4200);
       } else if (isRLSError(err)) {
-        // ✅ Esto es tu caso actual
         toast(
           "RLS bloqueando",
           "No hay permiso para leer registrations. Hay que crear policy SELECT para admins (y para joins).",
@@ -407,15 +416,8 @@
 
       S.list = [];
       render();
-    } finally {
-      S.loading = false;
     }
-  }
-
-  function refreshDebounced(ms) {
-    clearTimeout(S.refreshT);
-    S.refreshT = setTimeout(() => refreshNow({ silent: true }), ms || 250);
-  }
+  });
 
   // ------------------------------------------------------------
   // Export CSV (filtrado)
@@ -472,6 +474,11 @@
   // ------------------------------------------------------------
   // Bind
   // ------------------------------------------------------------
+  function onAdminTab(e) {
+    const t = e?.detail?.tab;
+    if (t === "regs") ensureLoaded(true);
+  }
+
   function bindOnce() {
     if (S.didBind) return;
     S.didBind = true;
@@ -486,25 +493,61 @@
     // Filtro global (local)
     searchEl?.addEventListener("input", () => render());
 
-    // Al abrir tab regs, refrescamos suave
+    // Click del tab (fallback) — NO duplica porque ensureLoaded tiene throttle
     document.querySelectorAll('.tab[data-tab="regs"]').forEach((btn) => {
-      btn.addEventListener("click", () => {
-        render();
-        refreshDebounced(120);
-      });
+      btn.addEventListener("click", () => ensureLoaded(true));
     });
+
+    // Evento de tabs (preferido)
+    window.addEventListener("admin:tab", onAdminTab);
   }
 
   // ------------------------------------------------------------
-  // Init
+  // Load-on-demand (throttle)
   // ------------------------------------------------------------
-  (async function init() {
+  async function ensureLoaded(force) {
     bindOnce();
-    render();
 
-    // No spamear al cargar: solo si el tab está activo
-    if (isRegsTabActive()) {
-      await refreshNow({ silent: true });
+    const isHidden = !!$("#tab-regs")?.hidden;
+    if (!force && isHidden) return;
+
+    const now = Date.now();
+    if (!force && now - S.lastLoadAt < 600) return;
+    if (force && now - S.lastLoadAt < 250) return; // anti doble-disparo por click+event
+    S.lastLoadAt = now;
+
+    if (S.didLoadOnce && !force) {
+      render();
+      return;
     }
-  })();
+
+    await refreshNow({ silent: true });
+  }
+
+  // ------------------------------------------------------------
+  // Boot: esperar admin:ready
+  // ------------------------------------------------------------
+  function boot() {
+    if (S.didBoot) return;
+    S.didBoot = true;
+
+    console.log("[admin-registrations] boot", { VERSION });
+
+    if (window.APP && APP.__adminReady) {
+      bindOnce();
+      if (!$("#tab-regs")?.hidden) ensureLoaded(true);
+      return;
+    }
+
+    window.addEventListener(
+      "admin:ready",
+      () => {
+        bindOnce();
+        if (!$("#tab-regs")?.hidden) ensureLoaded(true);
+      },
+      { once: true }
+    );
+  }
+
+  boot();
 })();
