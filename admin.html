@@ -64,7 +64,7 @@
         </div>
 
         <!-- =====================================================
-             EVENTS (ALINEADO con admin.js PRO)
+             EVENTS
         ====================================================== -->
         <section class="panel" id="tab-events" role="tabpanel">
           <div class="grid2">
@@ -81,6 +81,9 @@
                   <button class="btn btn--ghost" id="dupEventBtn" type="button">Duplicar</button>
                 </div>
               </div>
+
+              <!-- ✅ Compat: algunos scripts antiguos preguntan por #eventsList -->
+              <div id="eventsList" hidden></div>
 
               <div class="list" id="eventList" aria-label="Lista de eventos">
                 <!-- JS -->
@@ -102,6 +105,11 @@
               <div class="empty" id="editorEmpty">
                 Seleccioná un evento de la lista para editarlo.
               </div>
+
+              <!-- ✅ Compat: scripts antiguos -->
+              <input id="eventTitle" type="hidden" value="" />
+              <input id="eventType" type="hidden" value="" />
+              <input id="eventMonthKey" type="hidden" value="" />
 
               <form class="form" id="eventForm" autocomplete="off" hidden>
                 <input type="hidden" id="eventId" />
@@ -280,24 +288,22 @@
         </section>
 
         <!-- =====================================================
-             MEDIA (Storage: bucket "media" PUBLIC) — uploader simple
-             ✅ Mantiene tu UI
-             ✅ Agrega IDs compatibles para evitar null errors
+             MEDIA (bucket "media")
         ====================================================== -->
         <section class="panel" id="tab-media" role="tabpanel" hidden>
           <div class="grid2">
 
-            <!-- Subida -->
             <div class="card">
               <div class="cardHead">
                 <h3 class="h3">Medios</h3>
                 <div class="mini">Subí imágenes al bucket <b>media</b> y copiá la URL para usarla en Eventos/Promos.</div>
               </div>
 
-              <!-- ✅ Compat: algunos JS esperan mediaId/mediaTitle/mediaKind/mediaTags -->
+              <!-- ✅ Compat -->
               <div id="mediaEditorEmpty" class="empty" hidden>Seleccioná un ítem o subí uno nuevo.</div>
 
               <form class="form" id="mediaForm" autocomplete="off">
+                <!-- ✅ Compat -->
                 <input type="hidden" id="mediaId" value="" />
                 <input type="hidden" id="mediaTitle" value="" />
                 <input type="hidden" id="mediaKind" value="image" />
@@ -338,8 +344,6 @@
                       <button class="btn primary" id="mediaUploadBtn" type="submit">Subir</button>
                       <button class="btn" id="mediaCopyBtn" type="button">Copiar URL</button>
                       <button class="btn btn--ghost" id="mediaResetBtn" type="button">Limpiar</button>
-
-                      <!-- ✅ Compat: si algún JS busca deleteMediaBtn -->
                       <button class="btn" id="deleteMediaBtn" type="button" hidden>Eliminar</button>
                     </div>
                   </div>
@@ -349,7 +353,6 @@
               </form>
             </div>
 
-            <!-- Preview + lista -->
             <div class="card">
               <div class="cardHead">
                 <h3 class="h3">Vista previa</h3>
@@ -390,6 +393,10 @@
               <button class="btn" id="refreshGalleryBtn" type="button">Refrescar</button>
             </div>
 
+            <!-- ✅ Compat: si un JS viejo usa lista + form -->
+            <div id="galleryList" hidden></div>
+            <form id="galleryForm" hidden></form>
+
             <div class="tableWrap">
               <table class="table">
                 <thead>
@@ -422,6 +429,10 @@
               <button class="btn primary" id="newPromoBtn" type="button">Nueva promo</button>
               <button class="btn" id="refreshPromosBtn" type="button">Refrescar</button>
             </div>
+
+            <!-- ✅ Compat: si un JS viejo usa lista + form -->
+            <div id="promosList" hidden></div>
+            <form id="promoForm" hidden></form>
 
             <div class="tableWrap">
               <table class="table">
