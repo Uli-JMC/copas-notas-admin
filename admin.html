@@ -456,7 +456,10 @@
   </main>
 
   <!-- SCRIPTS (ORDEN CRÍTICO) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <!-- ✅ Supabase CDN SIN defer para garantizar window.supabase antes del client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- ✅ Tus scripts locales con defer (se ejecutan en orden) -->
   <script src="./js/supabaseClient.js" defer></script>
   <script src="./js/admin-auth.js" defer></script>
 

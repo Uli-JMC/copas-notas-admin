@@ -108,17 +108,21 @@
     }
   }
 
-  function emitAdminReady(user) {
-    try {
-      APP.__adminReady = true;
-      const detail = {
-        userId: user?.id || null,
-        email: user?.email || null,
-        version: VERSION,
-      };
-      window.dispatchEvent(new CustomEvent("admin:ready", { detail }));
-    } catch (_) {}
-  }
+function emitAdminReady(user) {
+  try {
+    if (APP.__adminReady === true) return; // ✅ evita doble disparo
+    APP.__adminReady = true;
+
+    const detail = {
+      userId: user?.id || null,
+      email: user?.email || null,
+      version: VERSION,
+    };
+
+    window.dispatchEvent(new CustomEvent("admin:ready", { detail }));
+  } catch (_) {}
+}
+
 
   // -----------------------------
   // Gate de admin.html (proteger panel)

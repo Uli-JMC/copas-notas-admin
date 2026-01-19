@@ -5,17 +5,16 @@
    - Buttons:      #newPromoBtn #refreshPromosBtn
    - Table body:   #promosTbody
 
-   ✅ NUEVO (sin recargar, alineado con admin-auth):
+   ✅ SIN RECARGAR / alineado con admin-auth + admin.js:
    - Espera admin:ready / APP.__adminReady
-   - Wake on tab (admin:tab)
+   - Wake on tab (admin:tab { detail: { tab:"promos" } })
    - Bind/Load protegidos (sin duplicados + throttle)
    - Realtime se cablea 1 sola vez (y usa el sb correcto)
-
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-19.1";
+  const VERSION = "2026-01-19.2";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
@@ -101,7 +100,9 @@
     try {
       const d = new Date(safeStr(iso));
       if (isNaN(d.getTime())) return "—";
-      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+      return d
+        .toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" })
+        .replace(".", "");
     } catch (_) {
       return "—";
     }
@@ -162,7 +163,11 @@
   async function ensureSession() {
     const sb = getSB();
     if (!sb) {
-      toast("Supabase", "APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-promos.js", 5200);
+      toast(
+        "Supabase",
+        "APP.supabase no existe. Orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-promos.js",
+        5200
+      );
       return null;
     }
 
@@ -272,10 +277,12 @@
     didBoot: false,
     didLoadOnce: false,
     didRealtime: false,
+    didTabListener: false,
+    didReadyListener: false,
     busy: false,
     items: [],
     refreshT: null,
-    lastLoadAt: 0, // throttle ensureLoaded
+    lastLoadAt: 0,
     realtimeChannel: null,
   };
 
@@ -292,6 +299,7 @@
   // ---------------------------
   function renderTable() {
     const q = cleanSpaces($("#search")?.value || "").toLowerCase();
+
     const items = stableSort(state.items || []).filter((p) => {
       if (!q) return true;
       return (
@@ -490,8 +498,8 @@
       const note = safeStr(noteEl?.value || "");
 
       if (countEl && descEl) countEl.textContent = String((descEl.value || "").length);
-
       if (!previewEl) return;
+
       previewEl.innerHTML = `
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
           ${badge ? `<span class="badge">${escapeHtml(badge)}</span>` : ``}
@@ -499,10 +507,12 @@
           <span class="pill">${escapeHtml(active ? "ACTIVA" : "INACTIVA")}</span>
           <span class="pill">prio ${escapeHtml(prioEl?.value || "0")}</span>
         </div>
+
         <div style="margin-top:10px;">
           <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(title)}</div>
           ${desc ? `<div style="opacity:.8; line-height:1.5;">${escapeHtml(desc)}</div>` : ``}
         </div>
+
         ${kind === "MODAL" ? `
           <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
             <span class="pill">Imagen:</span>
@@ -510,6 +520,7 @@
           </div>
           ${note ? `<div style="margin-top:8px; opacity:.7; font-size:12px;">${escapeHtml(note)}</div>` : ``}
         ` : ``}
+
         <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
           <a class="btn primary" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(cta)}</a>
           ${href === "#" ? `<span style="opacity:.7; font-size:12px;">(Link inválido o vacío)</span>` : ``}
@@ -614,11 +625,6 @@
       } catch (_) {}
     };
 
-    try {
-      const ev = new Event("input");
-      m.querySelector("#ecnTitle")?.dispatchEvent(ev);
-    } catch (_) {}
-
     renderPreview();
     return m;
   }
@@ -640,10 +646,9 @@
   // ---------------------------
   async function refresh(opts) {
     const silent = !!opts?.silent;
-
     if (state.busy) return;
-    setBusy(true);
 
+    setBusy(true);
     try {
       const s = await ensureSession();
       if (!s) return;
@@ -760,7 +765,7 @@
   }
 
   // ---------------------------
-  // Bind / Load (alineado)
+  // Bind / Load
   // ---------------------------
   function bindOnce() {
     if (state.didBind) return;
@@ -779,7 +784,6 @@
     const isHidden = !!$("#tab-promos")?.hidden;
     if (!force && isHidden) return;
 
-    // throttle anti doble-disparo (admin:tab + click)
     const now = Date.now();
     if (!force && now - state.lastLoadAt < 600) return;
     if (force && now - state.lastLoadAt < 250) return;
@@ -795,30 +799,45 @@
   }
 
   // ---------------------------
+  // Wake on tab (solo 1 vez)
+  // ---------------------------
+  function wireTabWakeOnce() {
+    if (state.didTabListener) return;
+    state.didTabListener = true;
+
+    window.addEventListener("admin:tab", (e) => {
+      const tabName = e?.detail?.tab;
+      if (tabName === "promos") ensureLoaded(true);
+    });
+  }
+
+  // ---------------------------
   // Boot: esperar admin:ready
   // ---------------------------
+  function wake() {
+    bindOnce();
+    wireTabWakeOnce();
+
+    // Si ya está visible (por default o debug), cargar
+    try {
+      if ($("#tab-promos") && $("#tab-promos").hidden === false) ensureLoaded(true);
+    } catch (_) {}
+  }
+
   function boot() {
     if (state.didBoot) return;
     state.didBoot = true;
 
     console.log("[admin-promos] boot", { VERSION, TABLE });
 
-    const wake = () => {
-      bindOnce();
+    if (window.APP && APP.__adminReady) {
+      wake();
+      return;
+    }
 
-      window.addEventListener("admin:tab", (e) => {
-        const tab = e?.detail?.tab;
-        if (tab === "promos") ensureLoaded(true);
-      });
-
-      // fallback debug (solo después de ready)
-      try {
-        if ($("#tab-promos") && $("#tab-promos").hidden === false) ensureLoaded(true);
-      } catch (_) {}
-    };
-
-    if (window.APP && APP.__adminReady) wake();
-    else window.addEventListener("admin:ready", wake, { once: true });
+    if (state.didReadyListener) return;
+    state.didReadyListener = true;
+    window.addEventListener("admin:ready", wake, { once: true });
   }
 
   boot();

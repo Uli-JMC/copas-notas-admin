@@ -1,16 +1,15 @@
 /* ============================================================
-   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV + DELETE) — 2026-01 PATCH
-   - Admin: lista inscripciones desde public.registrations
+   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 PATCH
+   - Admin: lista inscripciones desde public.registrations (solo lectura)
    - Join: events.title + event_dates.label (vía FK)
    - Filtro usa el search global #search (filtra local, sin pedir a DB)
    - Exporta CSV (lo filtrado en pantalla)
    - Botón "seedRegsBtn" se usa como "Refrescar"
-   - ✅ NUEVO: borrar inscripción (si tu RLS lo permite para admins)
 
-   ✅ SIN RECARGAR:
+   ✅ SIN RECARGAR / SIN DOBLES CARGAS:
    - Espera admin:ready (admin-auth.js)
-   - Carga solo al abrir tab "regs" vía admin:tab o click fallback
-   - Protecciones anti-duplicado (throttle)
+   - Carga solo al abrir tab "regs" vía admin:tab (admin.js)
+   - Throttle anti rebote
 
    Requiere (admin.html):
    - #tab-regs (panel)
@@ -22,7 +21,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-19.1";
+  const VERSION = "2026-01-19.2";
   const $ = (sel) => document.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -84,12 +83,8 @@
   // ------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------
-  function safeStr(x) {
-    return String(x ?? "");
-  }
-  function cleanSpaces(s) {
-    return safeStr(s).replace(/\s+/g, " ").trim();
-  }
+  function safeStr(x) { return String(x ?? ""); }
+  function cleanSpaces(s) { return safeStr(s).replace(/\s+/g, " ").trim(); }
 
   function isRLSError(err) {
     const m = safeStr(err?.message || "").toLowerCase();
@@ -247,7 +242,7 @@
     didBoot: false,
     didLoadOnce: false,
     mode: "unknown", // joinA|joinB|flat
-    lastLoadAt: 0,   // throttle tab switching
+    lastLoadAt: 0,
   };
 
   function withLock(fn) {
@@ -327,15 +322,6 @@
   }
 
   // ------------------------------------------------------------
-  // Delete (admin)
-  // ------------------------------------------------------------
-  async function deleteRegistrationById(sb, id) {
-    // Si tenés FK ON DELETE CASCADE a registration_notes, esto limpia todo.
-    const { error } = await sb.from(TABLE).delete().eq("id", id);
-    if (error) throw error;
-  }
-
-  // ------------------------------------------------------------
   // Render
   // ------------------------------------------------------------
   function render() {
@@ -366,7 +352,6 @@
     tbody.innerHTML = list
       .map((r) => {
         const created = fmtDate(r.createdAt);
-        // ✅ Botón delete embebido en la misma celda (no cambia columnas)
         return `
           <tr data-id="${escapeHtml(r.id)}">
             <td>${escapeHtml(r.eventTitle)}</td>
@@ -375,19 +360,7 @@
             <td>${escapeHtml(r.email)}</td>
             <td>${escapeHtml(r.phone || "—")}</td>
             <td>${r.marketing ? "Sí" : "No"}</td>
-            <td>
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                <span>${escapeHtml(created)}</span>
-                <button
-                  type="button"
-                  class="regDel"
-                  data-id="${escapeHtml(r.id)}"
-                  title="Eliminar inscripción"
-                  aria-label="Eliminar inscripción"
-                  style="border:0; background:transparent; cursor:pointer; opacity:.8; font-size:16px; line-height:1;"
-                >🗑</button>
-              </div>
-            </td>
+            <td>${escapeHtml(created)}</td>
           </tr>
         `;
       })
@@ -401,7 +374,7 @@
     const silent = !!opts?.silent;
 
     if (!silent) toast("Inscripciones", "Cargando registros…", 900);
-    render(); // muestra estado
+    render();
 
     try {
       const sb = getSB();
@@ -438,11 +411,7 @@
       if (isMissingTable(err)) {
         toast("BD", "La tabla registrations no existe en Supabase (public.registrations).", 4200);
       } else if (isRLSError(err)) {
-        toast(
-          "RLS bloqueando",
-          "No hay permiso para leer registrations. Hay que crear policy SELECT para admins (y para joins).",
-          5200
-        );
+        toast("RLS bloqueando", "No hay permiso para leer registrations (admins).", 5200);
       } else {
         toast("Error", prettyError(err), 4200);
       }
@@ -505,51 +474,6 @@
   }
 
   // ------------------------------------------------------------
-  // Handlers UI
-  // ------------------------------------------------------------
-  const handleDeleteClick = withLock(async function (id) {
-    const row = (S.list || []).find((x) => String(x.id) === String(id));
-    const label = row ? `${row.name} • ${row.email}` : id;
-
-    const ok = window.confirm(
-      `Eliminar inscripción?\n\n${label}\n\nEsto NO se puede deshacer.`
-    );
-    if (!ok) return;
-
-    try {
-      const sb = getSB();
-      if (!sb) return toast("Supabase", "Falta supabaseClient.js", 4200);
-
-      const session = await ensureSession(sb);
-      if (!session) return;
-
-      toast("Eliminando", "Procesando…", 900);
-
-      await deleteRegistrationById(sb, id);
-
-      // actualizar local (sin reload)
-      S.list = (S.list || []).filter((x) => String(x.id) !== String(id));
-      render();
-      toast("Listo", "Inscripción eliminada.", 1400);
-
-      // refresh suave para garantizar consistencia (si querés comentar esta línea, decime)
-      try { await refreshNow({ silent: true }); } catch (_) {}
-    } catch (err) {
-      console.error("[admin-registrations][delete]", err);
-
-      if (isRLSError(err)) {
-        toast(
-          "RLS bloqueando",
-          "Tu policy no permite DELETE en registrations para admins. Si querés esta acción, hay que habilitarla en RLS.",
-          5200
-        );
-      } else {
-        toast("Error", prettyError(err), 4200);
-      }
-    }
-  });
-
-  // ------------------------------------------------------------
   // Bind
   // ------------------------------------------------------------
   function onAdminTab(e) {
@@ -571,23 +495,7 @@
     // Filtro global (local)
     searchEl?.addEventListener("input", () => render());
 
-    // Delegación: delete button
-    tbody.addEventListener("click", (e) => {
-      const btn = e.target && e.target.closest ? e.target.closest(".regDel") : null;
-      if (!btn) return;
-      const id = btn.getAttribute("data-id");
-      if (!id) return;
-      e.preventDefault();
-      e.stopPropagation();
-      handleDeleteClick(id);
-    });
-
-    // Click del tab (fallback) — NO duplica por throttle
-    document.querySelectorAll('.tab[data-tab="regs"]').forEach((btn) => {
-      btn.addEventListener("click", () => ensureLoaded(true));
-    });
-
-    // Evento de tabs (preferido)
+    // Evento de tabs (única fuente)
     window.addEventListener("admin:tab", onAdminTab);
   }
 
@@ -602,7 +510,7 @@
 
     const now = Date.now();
     if (!force && now - S.lastLoadAt < 600) return;
-    if (force && now - S.lastLoadAt < 250) return; // anti doble-disparo por click+event
+    if (force && now - S.lastLoadAt < 250) return;
     S.lastLoadAt = now;
 
     if (S.didLoadOnce && !force) {
@@ -622,21 +530,10 @@
 
     console.log("[admin-registrations] boot", { VERSION });
 
-    if (window.APP && APP.__adminReady) {
-      bindOnce();
-      if (!$("#tab-regs")?.hidden) ensureLoaded(true);
-      return;
-    }
-
-    window.addEventListener(
-      "admin:ready",
-      () => {
-        bindOnce();
-        if (!$("#tab-regs")?.hidden) ensureLoaded(true);
-      },
-      { once: true }
-    );
+    bindOnce();
+    if (!$("#tab-regs")?.hidden) ensureLoaded(true);
   }
 
-  boot();
+  if (window.APP && APP.__adminReady) boot();
+  else window.addEventListener("admin:ready", boot, { once: true });
 })();
