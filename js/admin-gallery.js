@@ -33,7 +33,7 @@
   // ---------------------------
   // Config
   // ---------------------------
-  const VERSION = "2026-01-18.4";
+  const VERSION = "2026-01-20.scrollfix.1";
   const TABLE = "gallery_items";
   const BUCKET = "gallery";
   const TARGET_DEFAULT = "home";
@@ -108,9 +108,7 @@
     try {
       const d = new Date(safeStr(iso));
       if (isNaN(d.getTime())) return "—";
-      return d
-        .toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" })
-        .replace(".", "");
+      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
     } catch (_) {
       return "—";
     }
@@ -391,26 +389,19 @@
   }
 
   // ---------------------------
-  // ✅ Modal Nuevo (FIX SCROLL + preview)
+  // ✅ Modal Nuevo (DEPURADO + scroll estable)
   // ---------------------------
+
+  // ✅ Depurado: solo bloquea body, NO toca <html> (evita bugs raros de scroll en overlay)
   function lockBodyScroll(on) {
-    // evita “bloqueo raro” y mantiene UX consistente
-    const root = document.documentElement;
     const body = document.body;
-    if (!root || !body) return;
+    if (!body) return;
 
     if (on) {
-      // guarda estado previo
       if (!body.dataset._prevOverflow) body.dataset._prevOverflow = body.style.overflow || "";
-      if (!root.dataset._prevOverflow) root.dataset._prevOverflow = root.style.overflow || "";
-
-      root.style.overflow = "hidden";
       body.style.overflow = "hidden";
     } else {
-      root.style.overflow = root.dataset._prevOverflow || "";
       body.style.overflow = body.dataset._prevOverflow || "";
-
-      delete root.dataset._prevOverflow;
       delete body.dataset._prevOverflow;
     }
   }
@@ -422,7 +413,7 @@
     m = document.createElement("div");
     m.id = "ecnGalleryModal";
 
-    // ✅ Overlay con scroll (clave)
+    // ✅ Overlay con scroll real
     m.style.position = "fixed";
     m.style.inset = "0";
     m.style.background = "rgba(0,0,0,.65)";
@@ -430,10 +421,10 @@
     m.style.padding = "18px";
     m.style.zIndex = "9999";
 
-    // ✅ En vez de center, top + scroll
     m.style.alignItems = "flex-start";
     m.style.justifyContent = "center";
-    m.style.overflow = "auto";
+    m.style.overflowY = "auto";
+    m.style.overflowX = "hidden";
     m.style.webkitOverflowScrolling = "touch";
 
     m.innerHTML = `
@@ -443,7 +434,11 @@
         background: rgba(20,20,20,.96);
         border:1px solid rgba(255,255,255,.10);
         border-radius:16px;
-        overflow:hidden;
+
+        /* ✅ clave: el card NO puede crecer infinito */
+        max-height: calc(100vh - 36px);
+        overflow: auto;
+
         box-shadow: 0 18px 60px rgba(0,0,0,.55);
       ">
         <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10);">
@@ -458,9 +453,10 @@
           padding:14px;
           display:grid;
           gap:12px;
-          /* ✅ El form ahora sí cabe en pantalla */
-          max-height: calc(100vh - 140px);
-          overflow: auto;
+
+          /* ✅ el form scrollea adentro y deja el footer sticky visible */
+          max-height: calc(100vh - 170px);
+          overflow:auto;
           -webkit-overflow-scrolling: touch;
         ">
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -497,14 +493,26 @@
           ">
             <img id="ecnGalPreviewImg" alt="Preview" style="
               width:100%;
-              /* ✅ clave: no crece infinito */
-              max-height: 46vh;
+              height: min(46vh, 360px);
               object-fit: contain;
               display:block;
+              background: rgba(0,0,0,.18);
             " />
           </div>
 
-          <div style="display:flex; gap:10px; justify-content:flex-end; position: sticky; bottom: 0; padding-top: 10px; background: rgba(20,20,20,.96);">
+          <div style="
+            display:flex;
+            gap:10px;
+            justify-content:flex-end;
+
+            position: sticky;
+            bottom: 0;
+            padding-top: 10px;
+            padding-bottom: 10px;
+
+            background: rgba(20,20,20,.96);
+            border-top: 1px solid rgba(255,255,255,.08);
+          ">
             <button class="btn" type="button" id="ecnGalReset">Limpiar</button>
             <button class="btn primary" type="submit" id="ecnGalSubmit">Subir</button>
           </div>
@@ -524,11 +532,15 @@
       if (e.target === m) close();
     });
 
-    // escape
+    // ✅ depurado: listener de ESC se agrega una sola vez y se quita al cerrar
+    let escBound = false;
     const onEsc = (e) => {
       if (e.key === "Escape" && m.style.display !== "none") close();
     };
-    window.addEventListener("keydown", onEsc);
+    if (!escBound) {
+      window.addEventListener("keydown", onEsc);
+      escBound = true;
+    }
 
     m.querySelector("#ecnGalleryClose")?.addEventListener("click", close);
 
@@ -639,6 +651,11 @@
     const m = ensureModal();
     lockBodyScroll(true);
     m.style.display = "flex";
+    m.scrollTop = 0;
+    // ✅ extra: asegura que el card quede arriba visible en pantallas chicas
+    try {
+      m.querySelector("#ecnGalleryCard")?.scrollIntoView({ block: "start" });
+    } catch (_) {}
   }
 
   // ---------------------------
