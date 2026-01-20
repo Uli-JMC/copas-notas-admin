@@ -1,5 +1,5 @@
 /* ============================================================
-   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 PATCH
+   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 PATCH+
    - Admin: lista inscripciones desde public.registrations (solo lectura)
    - Join: events.title + event_dates.label (vía FK)
    - Filtro usa el search global #search (filtra local, sin pedir a DB)
@@ -10,18 +10,15 @@
    - Espera admin:ready (admin-auth.js)
    - Carga solo al abrir tab "regs" vía admin:tab (admin.js)
    - Throttle anti rebote
-
-   Requiere (admin.html):
-   - #tab-regs (panel)
-   - #regsTbody (tbody)
-   - #exportCsvBtn (botón)
-   - #seedRegsBtn (botón) -> "Refrescar"
-   - #search (input search global)
-   ============================================================ */
+============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-19.2";
+  // ✅ Guard global anti doble eval
+  if (window.__ecnRegsMounted === true) return;
+  window.__ecnRegsMounted = true;
+
+  const VERSION = "2026-01-19.3";
   const $ = (sel) => document.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -238,6 +235,7 @@
   const S = {
     list: [],
     loading: false,
+    loadingUi: false, // ✅ NUEVO: para mostrar "Actualizando…" aunque haya data
     didBind: false,
     didBoot: false,
     didLoadOnce: false,
@@ -291,8 +289,12 @@
   }
 
   function normalizeRow(r) {
-    const evTitle = r?.events?.title || "";
-    const dateLabel = r?.event_dates?.label || "";
+    // ✅ Soportar object o array (según relación/embedded)
+    const ev = Array.isArray(r?.events) ? r.events[0] : r?.events;
+    const dt = Array.isArray(r?.event_dates) ? r.event_dates[0] : r?.event_dates;
+
+    const evTitle = ev?.title || "";
+    const dateLabel = dt?.label || "";
 
     const evFallback = r?.event_id ? `ID: ${safeStr(r.event_id)}` : "—";
     const dtFallback = r?.event_date_id ? `ID: ${safeStr(r.event_date_id)}` : "—";
@@ -327,7 +329,33 @@
   function render() {
     const list = filterList(S.list);
 
-    if (S.loading && !list.length) {
+    // ✅ Mensaje de “actualizando” aunque haya data
+    if (S.loadingUi && list.length) {
+      // Mantenemos tabla, pero dejamos 1 fila arriba tipo status
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="opacity:.75; padding:14px;">
+            Actualizando…
+          </td>
+        </tr>
+      ` + list.slice(0, 999).map((r) => {
+        const created = fmtDate(r.createdAt);
+        return `
+          <tr data-id="${escapeHtml(r.id)}">
+            <td>${escapeHtml(r.eventTitle)}</td>
+            <td>${escapeHtml(r.dateLabel)}</td>
+            <td>${escapeHtml(r.name)}</td>
+            <td>${escapeHtml(r.email)}</td>
+            <td>${escapeHtml(r.phone || "—")}</td>
+            <td>${r.marketing ? "Sí" : "No"}</td>
+            <td>${escapeHtml(created)}</td>
+          </tr>
+        `;
+      }).join("");
+      return;
+    }
+
+    if (S.loadingUi && !list.length) {
       tbody.innerHTML = `
         <tr>
           <td colspan="7" style="opacity:.75; padding:14px;">
@@ -373,22 +401,25 @@
   const refreshNow = withLock(async function (opts) {
     const silent = !!opts?.silent;
 
-    if (!silent) toast("Inscripciones", "Cargando registros…", 900);
-    render();
-
+    S.loadingUi = true;
     try {
+      // UX: bloquear botones durante carga
+      if (refreshBtn) refreshBtn.disabled = true;
+      if (exportBtn) exportBtn.disabled = true;
+
+      if (!silent) toast("Inscripciones", "Cargando registros…", 900);
+      render();
+
       const sb = getSB();
       if (!sb) {
         toast("Supabase", "Falta supabaseClient.js antes de admin-registrations.js", 4200);
         S.list = [];
-        render();
         return;
       }
 
       const session = await ensureSession(sb);
       if (!session) {
         S.list = [];
-        render();
         return;
       }
 
@@ -403,8 +434,6 @@
           " (sin joins)";
         toast("Listo", "Inscripciones actualizadas." + tag, 1100);
       }
-
-      render();
     } catch (err) {
       console.error("[admin-registrations]", err);
 
@@ -417,6 +446,10 @@
       }
 
       S.list = [];
+    } finally {
+      S.loadingUi = false;
+      if (refreshBtn) refreshBtn.disabled = false;
+      if (exportBtn) exportBtn.disabled = false;
       render();
     }
   });

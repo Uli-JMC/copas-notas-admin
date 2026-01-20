@@ -14,7 +14,11 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-19.2";
+  // ✅ Guard global anti doble-evaluación
+  if (window.__ecnPromosMounted === true) return;
+  window.__ecnPromosMounted = true;
+
+  const VERSION = "2026-01-19.3";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
@@ -295,19 +299,15 @@
   }
 
   // ---------------------------
-  // Render table
+  // Render table (✅ ALINEADO con thead: Tipo / Título / Target / Creado / Acciones)
   // ---------------------------
   function renderTable() {
     const q = cleanSpaces($("#search")?.value || "").toLowerCase();
 
     const items = stableSort(state.items || []).filter((p) => {
       if (!q) return true;
-      return (
-        safeStr(p.title).toLowerCase().includes(q) ||
-        safeStr(p.description).toLowerCase().includes(q) ||
-        safeStr(p.badge).toLowerCase().includes(q) ||
-        safeStr(p.kind).toLowerCase().includes(q)
-      );
+      const hay = `${p.title} ${p.description} ${p.badge} ${p.kind} ${p.target}`.toLowerCase();
+      return hay.includes(q);
     });
 
     tbody.innerHTML = "";
@@ -330,24 +330,31 @@
 
       const kind = p.kind === "MODAL" ? "MODAL" : "BANNER";
       const active = p.active ? "ACTIVA" : "INACTIVA";
-      const meta = `${kind} · ${active} · prio ${Number(p.priority) || 0}`;
+      const meta = `${active} · prio ${Number(p.priority) || 0}`;
+
+      // Título: 1ra línea title, 2da línea meta, 3ra línea description (sub)
+      const desc = cleanSpaces(p.description || "");
+      const descLine = desc ? `<div style="opacity:.78; font-size:.92rem; margin-top:6px; line-height:1.35;">${escapeHtml(desc)}</div>` : "";
 
       tr.innerHTML = `
         <td>${escapeHtml(kind)}</td>
         <td>
-          <div style="font-weight:700;">${escapeHtml(p.title || "Promo")}</div>
-          <div style="opacity:.8; font-size:.92rem;">${escapeHtml(meta)}</div>
+          <div style="font-weight:800;">${escapeHtml(p.title || "Promo")}</div>
+          <div style="opacity:.78; font-size:.92rem; margin-top:4px;">
+            ${escapeHtml(meta)}${p.badge ? ` · ${escapeHtml(p.badge)}` : ""}
+          </div>
+          ${descLine}
         </td>
-        <td style="max-width:380px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${escapeHtml(p.description || "—")}
-        </td>
+        <td>${escapeHtml(p.target || TARGET_DEFAULT)}</td>
         <td>${escapeHtml(fmtShortDate(p.created_at))}</td>
-        <td style="display:flex; gap:8px; justify-content:flex-end;">
-          <button class="btn btn--ghost" type="button" data-action="toggle">
-            ${p.active ? "Pausar" : "Activar"}
-          </button>
-          <button class="btn btn--ghost" type="button" data-action="edit">Editar</button>
-          <button class="btn" type="button" data-action="delete">Eliminar</button>
+        <td>
+          <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+            <button class="btn btn--ghost" type="button" data-action="toggle">
+              ${p.active ? "Pausar" : "Activar"}
+            </button>
+            <button class="btn btn--ghost" type="button" data-action="edit">Editar</button>
+            <button class="btn" type="button" data-action="delete">Eliminar</button>
+          </div>
         </td>
       `;
 
@@ -379,7 +386,7 @@
       <div style="max-width:820px; width:100%; background: rgba(20,20,20,.96); border:1px solid rgba(255,255,255,.10); border-radius:16px; overflow:hidden;">
         <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10);">
           <div>
-            <p id="ecnPromoModalTitle" style="margin:0; font-weight:700;">Promo</p>
+            <p id="ecnPromoModalTitle" style="margin:0; font-weight:800;">Promo</p>
             <p style="margin:4px 0 0; opacity:.8; font-size:.92rem;">Crear / editar promo (banner o modal)</p>
           </div>
           <button id="ecnPromoClose" class="btn" type="button">Cerrar</button>
@@ -501,21 +508,22 @@
       if (!previewEl) return;
 
       previewEl.innerHTML = `
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          ${badge ? `<span class="badge">${escapeHtml(badge)}</span>` : ``}
+        <div class="pills" style="justify-content:flex-start;">
+          ${badge ? `<span class="pill">${escapeHtml(badge)}</span>` : ``}
           <span class="pill">${escapeHtml(kind)}</span>
           <span class="pill">${escapeHtml(active ? "ACTIVA" : "INACTIVA")}</span>
           <span class="pill">prio ${escapeHtml(prioEl?.value || "0")}</span>
+          <span class="pill">target ${escapeHtml(TARGET_DEFAULT)}</span>
         </div>
 
         <div style="margin-top:10px;">
-          <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(title)}</div>
+          <div style="font-weight:800; margin-bottom:6px;">${escapeHtml(title)}</div>
           ${desc ? `<div style="opacity:.8; line-height:1.5;">${escapeHtml(desc)}</div>` : ``}
         </div>
 
         ${kind === "MODAL" ? `
           <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-            <span class="pill">Imagen:</span>
+            <span class="pill">Imagen</span>
             <span style="opacity:.8;">${media ? escapeHtml(media) : "(vacía)"}</span>
           </div>
           ${note ? `<div style="margin-top:8px; opacity:.7; font-size:12px;">${escapeHtml(note)}</div>` : ``}
@@ -818,7 +826,6 @@
     bindOnce();
     wireTabWakeOnce();
 
-    // Si ya está visible (por default o debug), cargar
     try {
       if ($("#tab-promos") && $("#tab-promos").hidden === false) ensureLoaded(true);
     } catch (_) {}

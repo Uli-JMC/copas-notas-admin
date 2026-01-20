@@ -798,3 +798,22 @@ body.adminLoginPage .page{
     padding: 10px 12px;
   }
 }
+
+/* Marca visual del item activo en la lista (tu JS usa .item.active) */
+.item.active{
+  background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(45,212,191,.08));
+  border-left: 3px solid rgba(124,92,255,.75);
+}
+
+/* Opcional: dar aire al content cuando hay sidebar */
+.adminContent{
+  min-width: 0;
+}
+
+/* Tabla: contenedor de acciones consistente */
+.tableActions{
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
