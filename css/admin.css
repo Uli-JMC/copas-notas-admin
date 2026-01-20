@@ -969,3 +969,38 @@ body.adminLoginPage .page{
 #ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
   z-index: 2;
 }
+
+
+/* ============================================================
+   FIX: Preview no se mete debajo del footer sticky (Gallery Modal)
+============================================================ */
+
+/* 1) El form necesita espacio para que el footer sticky no tape contenido */
+#ecnGalleryModal #ecnGalleryForm{
+  padding-bottom: 84px !important; /* espacio para LIMPIAR/SUBIR */
+  overflow-x: hidden !important;
+}
+
+/* 2) Footer sticky arriba de todo y sin transparencia rara */
+#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
+  z-index: 5 !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 3) Preview siempre dentro del recuadro */
+#ecnGalleryModal #ecnGalPreview{
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+/* 4) Imagen nunca “se sale” */
+#ecnGalleryModal #ecnGalPreviewImg{
+  max-width: 100% !important;
+  width: 100% !important;
+  height: auto !important;          /* ✅ clave */
+  max-height: min(46vh, 360px) !important;
+  object-fit: contain !important;
+  display: block !important;
+}
