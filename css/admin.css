@@ -1004,3 +1004,44 @@ body.adminLoginPage .page{
   object-fit: contain !important;
   display: block !important;
 }
+
+
+/* ============================================================
+   FIX FINAL: Preview no queda debajo del footer sticky
+   (Gallery Modal)
+============================================================ */
+
+/* El form es el scroll container */
+#ecnGalleryModal #ecnGalleryForm{
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* 1) Limitá el alto REAL del preview box (no depende del alto natural de la imagen) */
+#ecnGalleryModal #ecnGalPreview{
+  max-height: min(46vh, 360px) !important;
+  overflow: hidden !important;
+  border-radius: 12px;
+}
+
+/* 2) La imagen se adapta al alto del box (NO crece infinito) */
+#ecnGalleryModal #ecnGalPreviewImg{
+  width: 100% !important;
+  height: 100% !important;        /* ✅ clave */
+  max-height: none !important;     /* evita conflictos */
+  object-fit: contain !important;
+  display: block !important;
+}
+
+/* 3) Dejá espacio para que el footer sticky NO tape el preview */
+#ecnGalleryModal #ecnGalPreview{
+  margin-bottom: 92px !important;  /* ✅ “colchón” = alto footer */
+}
+
+/* 4) Asegurá que el footer esté encima y sólido */
+#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
+  z-index: 10 !important;
+  background: rgba(20,20,20,.96) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
