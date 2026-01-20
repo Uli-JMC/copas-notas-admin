@@ -170,7 +170,11 @@
   async function ensureSession() {
     const sb = getSB();
     if (!sb) {
-      toast("Supabase", "APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-gallery.js", 5200);
+      toast(
+        "Supabase",
+        "APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-gallery.js",
+        5200
+      );
       return null;
     }
 
@@ -387,25 +391,61 @@
   }
 
   // ---------------------------
-  // Modal Nuevo (sin tocar HTML)
+  // ✅ Modal Nuevo (FIX SCROLL + preview)
   // ---------------------------
+  function lockBodyScroll(on) {
+    // evita “bloqueo raro” y mantiene UX consistente
+    const root = document.documentElement;
+    const body = document.body;
+    if (!root || !body) return;
+
+    if (on) {
+      // guarda estado previo
+      if (!body.dataset._prevOverflow) body.dataset._prevOverflow = body.style.overflow || "";
+      if (!root.dataset._prevOverflow) root.dataset._prevOverflow = root.style.overflow || "";
+
+      root.style.overflow = "hidden";
+      body.style.overflow = "hidden";
+    } else {
+      root.style.overflow = root.dataset._prevOverflow || "";
+      body.style.overflow = body.dataset._prevOverflow || "";
+
+      delete root.dataset._prevOverflow;
+      delete body.dataset._prevOverflow;
+    }
+  }
+
   function ensureModal() {
     let m = $("#ecnGalleryModal");
     if (m) return m;
 
     m = document.createElement("div");
     m.id = "ecnGalleryModal";
+
+    // ✅ Overlay con scroll (clave)
     m.style.position = "fixed";
     m.style.inset = "0";
     m.style.background = "rgba(0,0,0,.65)";
     m.style.display = "none";
-    m.style.alignItems = "center";
-    m.style.justifyContent = "center";
     m.style.padding = "18px";
     m.style.zIndex = "9999";
 
+    // ✅ En vez de center, top + scroll
+    m.style.alignItems = "flex-start";
+    m.style.justifyContent = "center";
+    m.style.overflow = "auto";
+    m.style.webkitOverflowScrolling = "touch";
+
     m.innerHTML = `
-      <div style="max-width:720px; width:100%; background: rgba(20,20,20,.96); border:1px solid rgba(255,255,255,.10); border-radius:16px; overflow:hidden;">
+      <div id="ecnGalleryCard" style="
+        max-width:720px; width:100%;
+        margin: 18px auto;
+        background: rgba(20,20,20,.96);
+        border:1px solid rgba(255,255,255,.10);
+        border-radius:16px;
+        overflow:hidden;
+        box-shadow: 0 18px 60px rgba(0,0,0,.55);
+      ">
         <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10);">
           <div>
             <p style="margin:0; font-weight:700;">Nuevo ítem</p>
@@ -414,7 +454,15 @@
           <button id="ecnGalleryClose" class="btn" type="button">Cerrar</button>
         </div>
 
-        <form id="ecnGalleryForm" style="padding:14px; display:grid; gap:12px;">
+        <form id="ecnGalleryForm" style="
+          padding:14px;
+          display:grid;
+          gap:12px;
+          /* ✅ El form ahora sí cabe en pantalla */
+          max-height: calc(100vh - 140px);
+          overflow: auto;
+          -webkit-overflow-scrolling: touch;
+        ">
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
             <div class="field">
               <label class="label" for="ecnGalType">Tipo</label>
@@ -440,11 +488,23 @@
             <div style="opacity:.8; font-size:.9rem; margin-top:6px;">Máximo ~${MAX_MB}MB</div>
           </div>
 
-          <div id="ecnGalPreview" style="display:none; border:1px solid rgba(255,255,255,.10); border-radius:12px; overflow:hidden;">
-            <img id="ecnGalPreviewImg" alt="Preview" style="width:100%; height:auto; display:block;" />
+          <div id="ecnGalPreview" style="
+            display:none;
+            border:1px solid rgba(255,255,255,.10);
+            border-radius:12px;
+            overflow:hidden;
+            background: rgba(0,0,0,.25);
+          ">
+            <img id="ecnGalPreviewImg" alt="Preview" style="
+              width:100%;
+              /* ✅ clave: no crece infinito */
+              max-height: 46vh;
+              object-fit: contain;
+              display:block;
+            " />
           </div>
 
-          <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <div style="display:flex; gap:10px; justify-content:flex-end; position: sticky; bottom: 0; padding-top: 10px; background: rgba(20,20,20,.96);">
             <button class="btn" type="button" id="ecnGalReset">Limpiar</button>
             <button class="btn primary" type="submit" id="ecnGalSubmit">Subir</button>
           </div>
@@ -454,10 +514,22 @@
 
     document.body.appendChild(m);
 
-    const close = () => (m.style.display = "none");
+    const close = () => {
+      m.style.display = "none";
+      lockBodyScroll(false);
+    };
+
+    // click fuera
     m.addEventListener("click", (e) => {
       if (e.target === m) close();
     });
+
+    // escape
+    const onEsc = (e) => {
+      if (e.key === "Escape" && m.style.display !== "none") close();
+    };
+    window.addEventListener("keydown", onEsc);
+
     m.querySelector("#ecnGalleryClose")?.addEventListener("click", close);
 
     // preview
@@ -541,7 +613,7 @@
         await insertDbRow(payload);
 
         toast("Listo", "Se agregó el ítem a la galería.", 2000);
-        m.style.display = "none";
+        close();
 
         // refresh UI
         await refresh({ silent: true });
@@ -557,11 +629,15 @@
       }
     });
 
+    // expone close internamente sin romper
+    m._ecnClose = close;
+
     return m;
   }
 
   function openNewModal() {
     const m = ensureModal();
+    lockBodyScroll(true);
     m.style.display = "flex";
   }
 
