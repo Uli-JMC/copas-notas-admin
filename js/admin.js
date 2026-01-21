@@ -1,54 +1,38 @@
-/* ============================================================
-   admin-promos.js ✅ PRO (DOM REAL + CRUD Supabase) — 2026-01 PATCH alineado
-   UI REAL (admin.html):
-   - Tab:          #tab-promos
-   - Buttons:      #newPromoBtn #refreshPromosBtn
-   - Table body:   #promosTbody
+"use strict";
 
-   ✅ SIN RECARGAR / alineado con admin-auth + admin.js:
-   - Espera admin:ready / APP.__adminReady
-   - Wake on tab (admin:tab { detail: { tab:"promos" } })
-   - Bind/Load protegidos (sin duplicados + throttle)
-   - Realtime se cablea 1 sola vez (y usa el sb correcto)
+/**
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-01 (DOM REAL + HIT robusto)
+ * - NO maneja login/sesión/logout (eso va en admin-auth.js)
+ * - Requiere: supabaseClient.js (APP.supabase) cargado antes
+ * - Corre en: admin.html (#appPanel)
+ *
+ * ✅ PRO (sin recargas / sin duplicados):
+ *  - Espera admin:ready antes de boot
+ *  - Emite admin:tab cuando cambia pestaña (para módulos)
+ *  - Carga eventos on-demand (al abrir tab "events")
+ *
+ * ✅ FIXES 2026-01-19.2
+ *  - No re-render de events si no estás en tab "events"
+ *  - No re-dispatch si clickeas el tab activo
+ *  - Oculta paneles dinámicamente (role="tabpanel")
+ */
 
-   ✅ FIX 2026-01-21:
-   - Modal NO ocupa toda la pantalla (max-height + scroll interno)
-   - Overlay scrollea + body scroll lock al abrir
-   - Footer sticky con botones (Guardar/Limpiar)
-============================================================ */
 (function () {
-  "use strict";
+  const VERSION = "2026-01-19.2";
 
-  // ✅ Guard global anti doble-evaluación
-  if (window.__ecnPromosMounted === true) return;
-  window.__ecnPromosMounted = true;
-
-  const VERSION = "2026-01-21.modalScrollFix.1";
+  // ============================================================
+  // Selectores
+  // ============================================================
   const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-  if (!document.getElementById("appPanel")) return;
+  // Guard: solo corre en admin.html real
+  const appPanel = $("#appPanel");
+  if (!appPanel) return;
 
-  // DOM real
-  const panel = $("#tab-promos");
-  const tbody = $("#promosTbody");
-  const btnNew = $("#newPromoBtn");
-  const btnRefresh = $("#refreshPromosBtn");
-
-  if (!panel || !tbody) return;
-
-  // ---------------------------
-  // Config
-  // ---------------------------
-  const TABLE = "promos";
-  const TARGET_DEFAULT = "home";
-  const MAX_DESC = 240;
-
-  const ENABLE_REALTIME = true;
-  const REALTIME_DEBOUNCE_MS = 250;
-
-  // ---------------------------
-  // Toast
-  // ---------------------------
+  // ============================================================
+  // UI helpers
+  // ============================================================
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -89,878 +73,692 @@
     setTimeout(kill, timeoutMs);
   }
 
-  // ---------------------------
-  // Utils
-  // ---------------------------
-  const safeStr = (x) => String(x ?? "");
-  const cleanSpaces = (s) => safeStr(s).replace(/\s+/g, " ").trim();
+  function setNote(msg) {
+    const el = $("#eventNote");
+    if (!el) return;
+    el.textContent = String(msg || "");
+  }
 
-  function looksLikeRLSError(err) {
-    const m = safeStr(err?.message || "").toLowerCase();
-    const c = safeStr(err?.code || "").toLowerCase();
+  function setBusy(on, msg) {
+    const note = $("#storageNote");
+    if (!note) return;
+    if (!on && msg == null) return;
+    note.textContent = on ? (msg || "Procesando…") : (msg || "");
+  }
+
+  // ============================================================
+  // Utils
+  // ============================================================
+  function cleanSpaces(s) {
+    return String(s ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  const MONTHS = [
+    "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
+    "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE",
+  ];
+
+  function normalizeMonth(m) {
+    const up = String(m || "").trim().toUpperCase();
+    return MONTHS.includes(up) ? up : "ENERO";
+  }
+
+  // DB guarda duration_hours como TEXT: aceptamos "2", "2.5", "".
+  function parseHoursNumber(input) {
+    const raw = cleanSpaces(input);
+    if (!raw) return "";
+    const m = raw.replace(",", ".").match(/(\d+(\.\d+)?)/);
+    if (!m) return "";
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n < 0) return "";
+    return String(n);
+  }
+
+  function normalizeTimeRange(s) {
+    return cleanSpaces(s);
+  }
+
+  function buildDurationLabel(timeRange, durationHours) {
+    const t = normalizeTimeRange(timeRange);
+    const h = parseHoursNumber(durationHours);
+    const hasH = h !== "" && Number(h) > 0;
+
+    if (t && hasH) return `${t} · ${h} hrs`;
+    if (t) return t;
+    if (hasH) return `${h} hrs`;
+    return "Por confirmar";
+  }
+
+  // ============================================================
+  // Supabase helpers
+  // ============================================================
+  function getSB() {
+    return window.APP && (window.APP.supabase || window.APP.sb)
+      ? window.APP.supabase || window.APP.sb
+      : null;
+  }
+
+  function isRLSError(err) {
+    const m = String(err?.message || "").toLowerCase();
+    const code = String(err?.code || "").toLowerCase();
     return (
-      c === "42501" ||
+      code === "42501" ||
       m.includes("42501") ||
       m.includes("rls") ||
-      m.includes("row level security") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
-      m.includes("violates row-level security")
+      m.includes("row level security") ||
+      m.includes("violates row-level security") ||
+      m.includes("new row violates row-level security")
     );
   }
 
-  function fmtShortDate(iso) {
-    try {
-      const d = new Date(safeStr(iso));
-      if (isNaN(d.getTime())) return "—";
-      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
-    } catch (_) {
-      return "—";
-    }
+  function prettyError(err) {
+    const msg = String(err?.message || err || "");
+    return msg || "Ocurrió un error.";
   }
 
-  function toKind(v) {
-    const t = safeStr(v).trim().toLowerCase();
-    return t === "modal" ? "MODAL" : "BANNER";
-  }
+  // ============================================================
+  // DB mapping
+  // ============================================================
+  const EVENTS_TABLE = "events";
+  const SELECT_EVENTS = `
+    id,
+    title,
+    type,
+    month_key,
+    "desc",
+    img,
+    location,
+    time_range,
+    duration_hours,
+    created_at,
+    updated_at
+  `;
 
-  function fromKind(k) {
-    const v = safeStr(k).trim().toUpperCase();
-    return v === "MODAL" ? "modal" : "banner";
-  }
-
-  // ✅ URL sanitizer
-  function sanitizeHref(raw) {
-    const s = safeStr(raw).trim();
-    if (!s) return "#";
-    if (s === "#") return "#";
-    if (s.startsWith("#")) return s;
-    if (/^(mailto:|tel:)/i.test(s)) return s;
-    if (/^https?:\/\//i.test(s)) return s;
-    if (/^(wa\.me\/|www\.wa\.me\/)/i.test(s)) return "https://" + s;
-    if (/^(javascript:|data:|vbscript:|file:)/i.test(s)) return "#";
-    if (/^[a-z0-9.-]+\.[a-z]{2,}([\/?#].*)?$/i.test(s)) return "https://" + s;
-    return "#";
-  }
-
-  function stableSort(arr) {
-    return (arr || []).slice().sort((a, b) => {
-      const pa = Number(a?.priority) || 0;
-      const pb = Number(b?.priority) || 0;
-      if (pb !== pa) return pb - pa;
-
-      const ca = safeStr(a?.created_at || "");
-      const cb = safeStr(b?.created_at || "");
-      const dcmp = cb.localeCompare(ca);
-      if (dcmp !== 0) return dcmp;
-
-      const ta = safeStr(a?.title || "");
-      const tb = safeStr(b?.title || "");
-      const tcmp = ta.localeCompare(tb);
-      if (tcmp !== 0) return tcmp;
-
-      return safeStr(a?.id || "").localeCompare(safeStr(b?.id || ""));
-    });
-  }
-
-  // ---------------------------
-  // Supabase helpers (APP.supabase OR APP.sb)
-  // ---------------------------
-  function getSB() {
-    if (!window.APP) return null;
-    return window.APP.supabase || window.APP.sb || null;
-  }
-
-  async function ensureSession() {
-    const sb = getSB();
-    if (!sb) {
-      toast(
-        "Supabase",
-        "APP.supabase no existe. Orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-promos.js",
-        5200
-      );
-      return null;
-    }
-
-    try {
-      const res = await sb.auth.getSession();
-      const s = res?.data?.session || null;
-      if (!s) {
-        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
-        return null;
-      }
-      return s;
-    } catch (_) {
-      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
-      return null;
-    }
-  }
-
-  // ---------------------------
-  // Mapping
-  // ---------------------------
-  function mapDbRow(r) {
-    const row = r || {};
-    return {
-      id: row.id,
-      active: !!row.active,
-      kind: safeStr(row.kind || "BANNER").toUpperCase(),
-      target: safeStr(row.target || TARGET_DEFAULT),
-      priority: Number(row.priority) || 0,
-      badge: safeStr(row.badge || ""),
-      title: safeStr(row.title || "Promo"),
-      description: safeStr(row.description || ""),
-      note: safeStr(row.note || ""),
-      cta_label: safeStr(row.cta_label || "Conocer"),
-      cta_href: safeStr(row.cta_href || "#"),
-      media_img: safeStr(row.media_img || ""),
-      dismiss_days: Math.max(1, Number(row.dismiss_days) || 7),
-      start_at: safeStr(row.start_at || ""),
-      end_at: safeStr(row.end_at || ""),
-      created_at: safeStr(row.created_at || ""),
-    };
-  }
-
-  function mapUiToDbPayload(ui) {
-    const x = ui || {};
-    return {
-      active: !!x.active,
-      kind: safeStr(x.kind || "BANNER").toUpperCase(),
-      target: safeStr(x.target || TARGET_DEFAULT).toLowerCase(),
-      priority: Number(x.priority) || 0,
-      badge: safeStr(x.badge || ""),
-      title: safeStr(x.title || "Promo"),
-      description: safeStr(x.description || ""),
-      note: safeStr(x.note || ""),
-      cta_label: safeStr(x.cta_label || "Conocer"),
-      cta_href: sanitizeHref(x.cta_href || "#"),
-      media_img: safeStr(x.media_img || ""),
-      dismiss_days: Math.max(1, Number(x.dismiss_days) || 7),
-      start_at: cleanSpaces(x.start_at || "") || null,
-      end_at: cleanSpaces(x.end_at || "") || null,
-    };
-  }
-
-  // ---------------------------
-  // CRUD Supabase
-  // ---------------------------
-  async function fetchPromos() {
-    const sb = getSB();
-    const { data, error } = await sb
-      .from(TABLE)
-      .select("*")
-      .eq("target", TARGET_DEFAULT)
-      .order("priority", { ascending: false })
-      .order("created_at", { ascending: false })
-      .order("title", { ascending: true });
-
-    if (error) throw error;
-    const arr = Array.isArray(data) ? data : [];
-    return stableSort(arr.map(mapDbRow));
-  }
-
-  async function insertPromo(payloadDb) {
-    const sb = getSB();
-    const { data, error } = await sb.from(TABLE).insert(payloadDb).select("*").single();
-    if (error) throw error;
-    return mapDbRow(data);
-  }
-
-  async function updatePromo(id, payloadDb) {
-    const sb = getSB();
-    const { data, error } = await sb.from(TABLE).update(payloadDb).eq("id", id).select("*").single();
-    if (error) throw error;
-    return mapDbRow(data);
-  }
-
-  async function deletePromo(id) {
-    const sb = getSB();
-    const { error } = await sb.from(TABLE).delete().eq("id", id);
-    if (error) throw error;
-    return true;
-  }
-
-  // ---------------------------
+  // ============================================================
   // State
-  // ---------------------------
+  // ============================================================
   const state = {
+    activeTab: "events",
+    query: "",
+    activeEventId: null,
+    events: [],
+    mode: "supabase", // supabase | blocked | missing
+    busy: false,
     didBind: false,
     didBoot: false,
     didLoadOnce: false,
-    didRealtime: false,
-    didTabListener: false,
-    didReadyListener: false,
-    busy: false,
-    items: [],
-    refreshT: null,
-    lastLoadAt: 0,
-    realtimeChannel: null,
   };
 
-  function setBusy(on) {
-    state.busy = !!on;
+  function withLock(fn) {
+    return async function (...args) {
+      if (state.busy) return;
+      state.busy = true;
+      try {
+        return await fn(...args);
+      } finally {
+        state.busy = false;
+      }
+    };
+  }
+
+  // ============================================================
+  // Tabs
+  // ============================================================
+  function hideAllTabs() {
+    // ✅ dinámico: cualquier panel con role="tabpanel" dentro del appPanel
+    $$('[role="tabpanel"]', appPanel).forEach((p) => { p.hidden = true; });
+  }
+
+  function emitTab(tabName) {
     try {
-      if (btnNew) btnNew.disabled = !!on;
-      if (btnRefresh) btnRefresh.disabled = !!on;
+      window.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab: tabName } }));
     } catch (_) {}
   }
 
-  // ---------------------------
-  // Render table (✅ ALINEADO con thead: Tipo / Título / Target / Creado / Acciones)
-  // ---------------------------
-  function renderTable() {
-    const q = cleanSpaces($("#search")?.value || "").toLowerCase();
+  function setTab(tabName) {
+    const next = tabName || "events";
+    if (next === state.activeTab) return; // ✅ evita re-emits y re-renders
 
-    const items = stableSort(state.items || []).filter((p) => {
-      if (!q) return true;
-      const hay = `${p.title} ${p.description} ${p.badge} ${p.kind} ${p.target}`.toLowerCase();
-      return hay.includes(q);
+    state.activeTab = next;
+
+    $$(".tab", appPanel).forEach((t) => {
+      t.setAttribute("aria-selected", t.dataset.tab === state.activeTab ? "true" : "false");
     });
 
-    tbody.innerHTML = "";
+    hideAllTabs();
 
-    if (!items.length) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td colspan="5" style="opacity:.85; padding:16px;">
-          ${state.didLoadOnce ? 'No hay promos todavía. Usá <b>“Nueva promo”</b>.' : "Cargando…"}
-        </td>`;
-      tbody.appendChild(tr);
+    const panel = $("#tab-" + state.activeTab);
+    if (panel) panel.hidden = false;
+
+    // 🔥 clave: avisar a módulos
+    emitTab(state.activeTab);
+
+    // on-demand (solo events acá)
+    if (state.activeTab === "events") {
+      ensureEventsLoaded(false);
+      renderAll();
+    }
+  }
+
+  // ============================================================
+  // Supabase CRUD
+  // ============================================================
+  async function fetchEvents() {
+    const sb = getSB();
+    if (!sb) {
+      state.mode = "missing";
+      state.events = [];
       return;
     }
 
-    const frag = document.createDocumentFragment();
+    setBusy(true, "Cargando eventos desde Supabase…");
 
-    items.forEach((p) => {
-      const tr = document.createElement("tr");
-      tr.dataset.id = safeStr(p.id || "");
+    const { data, error } = await sb
+      .from(EVENTS_TABLE)
+      .select(SELECT_EVENTS)
+      .order("created_at", { ascending: false });
 
-      const kind = p.kind === "MODAL" ? "MODAL" : "BANNER";
-      const active = p.active ? "ACTIVA" : "INACTIVA";
-      const meta = `${active} · prio ${Number(p.priority) || 0}`;
+    if (error) {
+      state.events = [];
+      state.mode = isRLSError(error) ? "blocked" : "supabase";
+      setBusy(
+        false,
+        isRLSError(error)
+          ? "RLS bloquea. Faltan policies para events."
+          : "No se pudieron cargar eventos."
+      );
+      throw error;
+    }
 
-      const desc = cleanSpaces(p.description || "");
-      const descLine = desc
-        ? `<div style="opacity:.78; font-size:.92rem; margin-top:6px; line-height:1.35;">${escapeHtml(desc)}</div>`
-        : "";
+    state.mode = "supabase";
+    state.events = Array.isArray(data) ? data : [];
+    state.didLoadOnce = true;
+    setBusy(false, "");
+  }
 
-      tr.innerHTML = `
-        <td>${escapeHtml(kind)}</td>
-        <td>
-          <div style="font-weight:800;">${escapeHtml(p.title || "Promo")}</div>
-          <div style="opacity:.78; font-size:.92rem; margin-top:4px;">
-            ${escapeHtml(meta)}${p.badge ? ` · ${escapeHtml(p.badge)}` : ""}
-          </div>
-          ${descLine}
-        </td>
-        <td>${escapeHtml(p.target || TARGET_DEFAULT)}</td>
-        <td>${escapeHtml(fmtShortDate(p.created_at))}</td>
-        <td>
-          <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
-            <button class="btn btn--ghost" type="button" data-action="toggle">
-              ${p.active ? "Pausar" : "Activar"}
-            </button>
-            <button class="btn btn--ghost" type="button" data-action="edit">Editar</button>
-            <button class="btn" type="button" data-action="delete">Eliminar</button>
-          </div>
-        </td>
-      `;
+  async function insertEvent(payload) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
-      frag.appendChild(tr);
+    const { data, error } = await sb
+      .from(EVENTS_TABLE)
+      .insert(payload)
+      .select(SELECT_EVENTS)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async function updateEvent(id, payload) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
+
+    const { data, error } = await sb
+      .from(EVENTS_TABLE)
+      .update(payload)
+      .eq("id", id)
+      .select(SELECT_EVENTS)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async function deleteEvent(id) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
+
+    const { error } = await sb.from(EVENTS_TABLE).delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  // ============================================================
+  // Render: events list + editor
+  // ============================================================
+  function setEditorVisible(show) {
+    $("#editorEmpty") && ($("#editorEmpty").hidden = show);
+    $("#eventForm") && ($("#eventForm").hidden = !show);
+  }
+
+  function clearEditorForm() {
+    const ids = [
+      "eventId","evTitle","evType","evMonth","evImg","evDesc",
+      "evLocation","evTimeRange","evDurationHours","evDuration",
+    ];
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
     });
 
-    tbody.appendChild(frag);
+    $("#descCount") && ($("#descCount").textContent = "0");
+    setNote("");
   }
 
-  // ---------------------------
-  // ✅ Modal scroll/size fix helpers
-  // ---------------------------
-  function lockBodyScroll(on) {
-    const body = document.body;
-    if (!body) return;
-
-    if (on) {
-      if (!body.dataset._prevOverflow) body.dataset._prevOverflow = body.style.overflow || "";
-      body.style.overflow = "hidden";
-    } else {
-      body.style.overflow = body.dataset._prevOverflow || "";
-      delete body.dataset._prevOverflow;
-    }
+  function getFilteredEvents() {
+    const q = cleanSpaces(state.query).toLowerCase();
+    return (state.events || []).filter((ev) => {
+      if (!q) return true;
+      return (
+        String(ev.title || "").toLowerCase().includes(q) ||
+        String(ev.type || "").toLowerCase().includes(q) ||
+        String(ev.month_key || "").toLowerCase().includes(q)
+      );
+    });
   }
 
-  // ---------------------------
-  // Modal Editor (sin tocar HTML)
-  // ---------------------------
-  function ensureModal() {
-    let m = $("#ecnPromoModal");
-    if (m) return m;
+  function renderEventList() {
+    const box = $("#eventList");
+    if (!box) return;
 
-    m = document.createElement("div");
-    m.id = "ecnPromoModal";
+    const filtered = getFilteredEvents();
 
-    // ✅ overlay scrolleable (si el card no cabe)
-    m.style.position = "fixed";
-    m.style.inset = "0";
-    m.style.background = "rgba(0,0,0,.65)";
-    m.style.display = "none";
-    m.style.padding = "18px";
-    m.style.zIndex = "9999";
-    m.style.alignItems = "flex-start";
-    m.style.justifyContent = "center";
-    m.style.overflowY = "auto";
-    m.style.overflowX = "hidden";
-    m.style.webkitOverflowScrolling = "touch";
-
-    // ✅ card con max-height + overflow
-    m.innerHTML = `
-      <div id="ecnPromoCard" style="
-        max-width:820px; width:100%;
-        margin: 18px auto;
-        background: rgba(20,20,20,.96);
-        border:1px solid rgba(255,255,255,.10);
-        border-radius:16px;
-        overflow: auto;
-        max-height: calc(100vh - 36px);
-        box-shadow: 0 18px 60px rgba(0,0,0,.55);
-      ">
-        <div style="
-          display:flex; justify-content:space-between; align-items:center;
-          padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10);
-        ">
+    if (state.mode === "missing") {
+      box.innerHTML = `
+        <div class="item" style="cursor:default;">
           <div>
-            <p id="ecnPromoModalTitle" style="margin:0; font-weight:800;">Promo</p>
-            <p style="margin:4px 0 0; opacity:.8; font-size:.92rem;">Crear / editar promo (banner o modal)</p>
+            <p class="itemTitle">Sin conexión a Supabase</p>
+            <p class="itemMeta">Falta cargar supabaseClient.js antes de admin.js.</p>
           </div>
-          <button id="ecnPromoClose" class="btn" type="button">Cerrar</button>
-        </div>
-
-        <form id="ecnPromoForm" style="
-          padding:14px;
-          display:grid;
-          gap:12px;
-
-          /* ✅ form con scroll interno */
-          max-height: calc(100vh - 170px);
-          overflow:auto;
-          -webkit-overflow-scrolling: touch;
-        ">
-          <input type="hidden" id="ecnPromoId" />
-
-          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
-            <div class="field">
-              <label class="label" for="ecnKind">Tipo</label>
-              <select class="select" id="ecnKind">
-                <option value="banner">BANNER</option>
-                <option value="modal">MODAL</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="label" for="ecnActive">Estado</label>
-              <select class="select" id="ecnActive">
-                <option value="true">ACTIVA</option>
-                <option value="false">INACTIVA</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="label" for="ecnPriority">Prioridad</label>
-              <input class="input" id="ecnPriority" type="number" min="0" step="1" value="10" />
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <div class="field">
-              <label class="label" for="ecnBadge">Badge</label>
-              <input class="input" id="ecnBadge" type="text" maxlength="20" placeholder="NUEVO" />
-            </div>
-            <div class="field">
-              <label class="label" for="ecnTitle">Título</label>
-              <input class="input" id="ecnTitle" type="text" maxlength="70" placeholder="Ej: Promo de enero" required />
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label" for="ecnDesc">Descripción</label>
-            <textarea class="textarea" id="ecnDesc" rows="3" maxlength="${MAX_DESC}" placeholder="Texto corto (máx ${MAX_DESC})"></textarea>
-            <div style="opacity:.8; font-size:.9rem; margin-top:6px;">Chars: <span id="ecnDescCount">0</span>/${MAX_DESC}</div>
-          </div>
-
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <div class="field">
-              <label class="label" for="ecnCtaLabel">CTA label</label>
-              <input class="input" id="ecnCtaLabel" type="text" maxlength="22" placeholder="Conocer" />
-            </div>
-            <div class="field">
-              <label class="label" for="ecnCtaHref">CTA href</label>
-              <input class="input" id="ecnCtaHref" type="text" maxlength="160" placeholder="https://... o #ancla" />
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <div class="field">
-              <label class="label" for="ecnMediaImg">Imagen (url)</label>
-              <input class="input" id="ecnMediaImg" type="text" maxlength="240" placeholder="https://..." />
-            </div>
-            <div class="field">
-              <label class="label" for="ecnDismiss">Dismiss days</label>
-              <input class="input" id="ecnDismiss" type="number" min="1" step="1" value="7" />
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label" for="ecnNote">Nota interna</label>
-            <input class="input" id="ecnNote" type="text" maxlength="120" placeholder="Opcional" />
-          </div>
-
-          <div id="ecnPromoPreview" style="border:1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.05); border-radius:16px; padding:12px;"></div>
-
-          <!-- ✅ footer sticky -->
-          <div style="
-            display:flex;
-            gap:10px;
-            justify-content:flex-end;
-
-            position: sticky;
-            bottom: 0;
-            padding-top: 10px;
-            padding-bottom: 10px;
-
-            background: rgba(20,20,20,.96);
-            border-top: 1px solid rgba(255,255,255,.08);
-          ">
-            <button class="btn" type="button" id="ecnPromoReset">Limpiar</button>
-            <button class="btn primary" type="submit" id="ecnPromoSave">Guardar</button>
-          </div>
-        </form>
-      </div>
-    `;
-
-    document.body.appendChild(m);
-
-    // close + reset + unlock scroll
-    const close = () => {
-      try {
-        m.style.display = "none";
-        lockBodyScroll(false);
-      } catch (_) {}
-    };
-
-    // click fuera del card
-    m.addEventListener("click", (e) => {
-      if (e.target === m) close();
-    });
-
-    m.querySelector("#ecnPromoClose")?.addEventListener("click", close);
-
-    // ESC para cerrar
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && m.style.display !== "none") close();
-    });
-
-    const form = m.querySelector("#ecnPromoForm");
-    const idEl = m.querySelector("#ecnPromoId");
-    const kindEl = m.querySelector("#ecnKind");
-    const activeEl = m.querySelector("#ecnActive");
-    const prioEl = m.querySelector("#ecnPriority");
-    const badgeEl = m.querySelector("#ecnBadge");
-    const titleEl = m.querySelector("#ecnTitle");
-    const descEl = m.querySelector("#ecnDesc");
-    const countEl = m.querySelector("#ecnDescCount");
-    const ctaLabelEl = m.querySelector("#ecnCtaLabel");
-    const ctaHrefEl = m.querySelector("#ecnCtaHref");
-    const mediaEl = m.querySelector("#ecnMediaImg");
-    const dismissEl = m.querySelector("#ecnDismiss");
-    const noteEl = m.querySelector("#ecnNote");
-    const previewEl = m.querySelector("#ecnPromoPreview");
-    const resetBtn = m.querySelector("#ecnPromoReset");
-
-    function renderPreview() {
-      const kind = toKind(kindEl?.value);
-      const active = activeEl?.value === "true";
-      const title = safeStr(titleEl?.value || "Promo");
-      const desc = safeStr(descEl?.value || "");
-      const badge = safeStr(badgeEl?.value || "");
-      const cta = safeStr(ctaLabelEl?.value || "Conocer");
-      const href = sanitizeHref(ctaHrefEl?.value || "#");
-      const media = safeStr(mediaEl?.value || "");
-      const note = safeStr(noteEl?.value || "");
-
-      if (countEl && descEl) countEl.textContent = String((descEl.value || "").length);
-      if (!previewEl) return;
-
-      previewEl.innerHTML = `
-        <div class="pills" style="justify-content:flex-start;">
-          ${badge ? `<span class="pill">${escapeHtml(badge)}</span>` : ``}
-          <span class="pill">${escapeHtml(kind)}</span>
-          <span class="pill">${escapeHtml(active ? "ACTIVA" : "INACTIVA")}</span>
-          <span class="pill">prio ${escapeHtml(prioEl?.value || "0")}</span>
-          <span class="pill">target ${escapeHtml(TARGET_DEFAULT)}</span>
-        </div>
-
-        <div style="margin-top:10px;">
-          <div style="font-weight:800; margin-bottom:6px;">${escapeHtml(title)}</div>
-          ${desc ? `<div style="opacity:.8; line-height:1.5;">${escapeHtml(desc)}</div>` : ``}
-        </div>
-
-        ${kind === "MODAL"
-          ? `
-          <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-            <span class="pill">Imagen</span>
-            <span style="opacity:.8;">${media ? escapeHtml(media) : "(vacía)"}</span>
-          </div>
-          ${note ? `<div style="margin-top:8px; opacity:.7; font-size:12px;">${escapeHtml(note)}</div>` : ``}
-        `
-          : ``}
-
-        <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <a class="btn primary" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(cta)}</a>
-          ${href === "#" ? `<span style="opacity:.7; font-size:12px;">(Link inválido o vacío)</span>` : ``}
-        </div>
-      `;
+        </div>`;
+      return;
     }
 
-    [kindEl, activeEl, prioEl, badgeEl, titleEl, descEl, ctaLabelEl, ctaHrefEl, mediaEl, dismissEl, noteEl].forEach(
-      (el) => {
-        if (!el) return;
-        el.addEventListener("input", renderPreview);
-        el.addEventListener("change", renderPreview);
-      }
-    );
+    if (state.mode === "blocked") {
+      box.innerHTML = `
+        <div class="item" style="cursor:default;">
+          <div>
+            <p class="itemTitle">Acceso bloqueado por RLS</p>
+            <p class="itemMeta">Faltan policies SELECT/INSERT/UPDATE/DELETE para <code>events</code>.</p>
+          </div>
+        </div>`;
+      return;
+    }
 
-    resetBtn?.addEventListener("click", () => {
-      idEl.value = "";
-      kindEl.value = "banner";
-      activeEl.value = "true";
-      prioEl.value = "10";
-      badgeEl.value = "NUEVO";
-      titleEl.value = "";
-      descEl.value = "";
-      ctaLabelEl.value = "Conocer";
-      ctaHrefEl.value = "";
-      mediaEl.value = "";
-      dismissEl.value = "7";
-      noteEl.value = "";
-      renderPreview();
-      try {
-        m.querySelector("#ecnPromoForm")?.scrollTo({ top: 0 });
-      } catch (_) {}
+    if (!filtered.length) {
+      box.innerHTML = `
+        <div class="item" style="cursor:default;">
+          <div>
+            <p class="itemTitle">Sin eventos</p>
+            <p class="itemMeta">Creá el primero con “Nuevo”.</p>
+          </div>
+        </div>`;
+      return;
+    }
+
+    box.innerHTML = "";
+
+    filtered.forEach((ev) => {
+      const item = document.createElement("div");
+      item.className = "item";
+      if (state.activeEventId && String(ev.id) === String(state.activeEventId)) item.classList.add("active");
+
+      item.innerHTML = `
+        <div>
+          <p class="itemTitle">${escapeHtml(ev.title || "—")}</p>
+          <p class="itemMeta">${escapeHtml(ev.type || "—")} • ${escapeHtml(ev.month_key || "—")}</p>
+        </div>
+        <div class="pills"><span class="pill">SUPABASE</span></div>
+      `;
+
+      item.addEventListener("click", () => {
+        state.activeEventId = ev.id;
+        renderAll();
+      });
+
+      box.appendChild(item);
     });
+  }
 
-    form?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (state.busy) return;
+  function renderEventEditor() {
+    const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
-      const ui = {
-        id: cleanSpaces(idEl.value || ""),
-        kind: toKind(kindEl.value),
-        active: activeEl.value === "true",
-        priority: Number(prioEl.value) || 0,
-        badge: safeStr(badgeEl.value || ""),
-        title: cleanSpaces(titleEl.value || ""),
-        description: safeStr(descEl.value || ""),
-        cta_label: safeStr(ctaLabelEl.value || "Conocer"),
-        cta_href: sanitizeHref(ctaHrefEl.value || "#"),
-        media_img: safeStr(mediaEl.value || ""),
-        dismiss_days: Math.max(1, Number(dismissEl.value) || 7),
-        note: safeStr(noteEl.value || ""),
-        target: TARGET_DEFAULT,
-        start_at: "",
-        end_at: "",
-      };
+    if (!ev) {
+      clearEditorForm();
+      setEditorVisible(false);
+      return;
+    }
 
-      if (!ui.title || ui.title.length < 2) {
-        toast("Revisá", "Poné un título válido (mínimo 2 caracteres).");
+    setEditorVisible(true);
+
+    $("#eventId") && ($("#eventId").value = String(ev.id || ""));
+    $("#evTitle") && ($("#evTitle").value = ev.title || "");
+
+    const typeEl = $("#evType");
+    if (typeEl) {
+      const dbType = String(ev.type || "Cata de vino");
+      const hasOption = Array.from(typeEl.options || []).some((o) => String(o.value) === dbType);
+      typeEl.value = hasOption ? dbType : "Cata de vino";
+      if (!hasOption && dbType) {
+        setNote(`Nota: el tipo guardado en DB es "${dbType}". Ajustá el selector si querés incluirlo.`);
+      }
+    }
+
+    $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
+    $("#evImg") && ($("#evImg").value = ev.img || "");
+
+    const d = ev["desc"] || "";
+    $("#evDesc") && ($("#evDesc").value = d);
+    $("#descCount") && ($("#descCount").textContent = String(String(d).length));
+
+    $("#evLocation") && ($("#evLocation").value = ev.location || "");
+    $("#evTimeRange") && ($("#evTimeRange").value = ev.time_range || "");
+    $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours || "");
+
+    const dur = $("#evDuration");
+    if (dur) {
+      const label = buildDurationLabel(ev.time_range || "", ev.duration_hours || "");
+      dur.value = label === "Por confirmar" ? "" : label;
+    }
+  }
+
+  function renderAll() {
+    if (state.activeTab !== "events") return; // ✅ clave
+    renderEventList();
+    renderEventEditor();
+  }
+
+  // ============================================================
+  // On-demand loader
+  // ============================================================
+  async function ensureEventsLoaded(force) {
+    if (state.mode === "missing") return;
+
+    if (state.didLoadOnce && !force) return;
+
+    try {
+      await fetchEvents();
+      if (!state.activeEventId && state.events.length) {
+        state.activeEventId = state.events[0].id;
+      }
+    } catch (err) {
+      console.error(err);
+      if (isRLSError(err)) {
+        state.mode = "blocked";
+        toast("RLS", "No se pudo leer events. Falta policy SELECT para admins.", 5200);
+      } else {
+        toast("Supabase", "No se pudieron cargar eventos. Revisá consola.", 5200);
+      }
+    } finally {
+      renderAll();
+    }
+  }
+
+  // ============================================================
+  // Actions
+  // ============================================================
+  const createNewEvent = withLock(async function () {
+    try {
+      if (state.mode !== "supabase") {
+        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
         return;
       }
 
-      setBusy(true);
-      try {
-        const s = await ensureSession();
-        if (!s) return;
+      setBusy(true, "Creando evento…");
+      const typeFallback = $("#evType")?.value || "Cata de vino";
 
-        const payloadDb = mapUiToDbPayload(ui);
+      const payload = {
+        title: "Nuevo evento",
+        type: typeFallback,
+        month_key: "ENERO",
+        img: "./assets/img/hero-1.jpg",
+        desc: "",
+        location: "Por confirmar",
+        time_range: "",
+        duration_hours: "",
+      };
 
-        if (ui.id) {
-          await updatePromo(ui.id, payloadDb);
-          toast("Guardado", "Promo actualizada.", 1800);
-        } else {
-          const saved = await insertPromo(payloadDb);
-          idEl.value = saved.id || "";
-          toast("Guardado", "Promo creada.", 1800);
-        }
+      const created = await insertEvent(payload);
 
-        await refresh({ silent: true });
-        close();
-      } catch (err) {
-        console.error("[admin-promos] save error:", err);
-        if (looksLikeRLSError(err)) toast("RLS", "Bloqueado. Faltan policies INSERT/UPDATE en promos.", 5200);
-        else toast("Error", "No se pudo guardar la promo.", 4200);
-      } finally {
-        setBusy(false);
+      state.events.unshift(created);
+      state.activeEventId = created.id;
+
+      toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
+      renderAll();
+
+      try { await ensureEventsLoaded(true); } catch (_) {}
+    } catch (err) {
+      console.error(err);
+      if (isRLSError(err)) {
+        state.mode = "blocked";
+        toast("RLS", "Falta policy INSERT para events (admins).", 5200);
+      } else {
+        toast("Error", prettyError(err), 5200);
       }
-    });
+    } finally {
+      setBusy(false, "");
+    }
+  });
 
-    m._fill = (p) => {
-      m.querySelector("#ecnPromoId").value = safeStr(p?.id || "");
-      m.querySelector("#ecnKind").value = fromKind(p?.kind || "BANNER");
-      m.querySelector("#ecnActive").value = String(!!p?.active);
-      m.querySelector("#ecnPriority").value = String(Number(p?.priority) || 0);
-      m.querySelector("#ecnBadge").value = safeStr(p?.badge || "");
-      m.querySelector("#ecnTitle").value = safeStr(p?.title || "");
-      m.querySelector("#ecnDesc").value = safeStr(p?.description || "");
-      m.querySelector("#ecnCtaLabel").value = safeStr(p?.cta_label || "Conocer");
-      m.querySelector("#ecnCtaHref").value = safeStr(p?.cta_href || "");
-      m.querySelector("#ecnMediaImg").value = safeStr(p?.media_img || "");
-      m.querySelector("#ecnDismiss").value = String(Number(p?.dismiss_days) || 7);
-      m.querySelector("#ecnNote").value = safeStr(p?.note || "");
+  const duplicateActiveEvent = withLock(async function () {
+    const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
+    if (!ev) return toast("Duplicar", "Seleccioná un evento primero.");
 
-      try {
-        const ev = new Event("input");
-        m.querySelector("#ecnDesc")?.dispatchEvent(ev);
-        m.querySelector("#ecnTitle")?.dispatchEvent(ev);
-      } catch (_) {}
+    try {
+      if (state.mode !== "supabase") {
+        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
+        return;
+      }
 
-      // subir al inicio del form
-      try {
-        m.querySelector("#ecnPromoForm")?.scrollTo({ top: 0 });
-      } catch (_) {}
+      setBusy(true, "Duplicando evento…");
+
+      const payload = {
+        title: `${ev.title || "Evento"} (Copia)`,
+        type: ev.type || ($("#evType")?.value || "Cata de vino"),
+        month_key: normalizeMonth(ev.month_key || "ENERO"),
+        img: ev.img || "./assets/img/hero-1.jpg",
+        desc: ev["desc"] || "",
+        location: ev.location || "Por confirmar",
+        time_range: ev.time_range || "",
+        duration_hours: ev.duration_hours || "",
+      };
+
+      const created = await insertEvent(payload);
+
+      state.events.unshift(created);
+      state.activeEventId = created.id;
+
+      toast("Duplicado", "Copia creada.", 1500);
+      renderAll();
+
+      try { await ensureEventsLoaded(true); } catch (_) {}
+    } catch (err) {
+      console.error(err);
+      if (isRLSError(err)) {
+        state.mode = "blocked";
+        toast("RLS", "Falta policy INSERT para events (admins).", 5200);
+      } else {
+        toast("Error", prettyError(err), 5200);
+      }
+    } finally {
+      setBusy(false, "");
+    }
+  });
+
+  const deleteActiveEvent = withLock(async function () {
+    const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
+    if (!ev) return toast("Eliminar", "Seleccioná un evento primero.");
+
+    const ok = window.confirm(`Eliminar evento:\n\n${ev.title}\n\nEsta acción no se puede deshacer.`);
+    if (!ok) return;
+
+    try {
+      if (state.mode !== "supabase") {
+        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
+        return;
+      }
+
+      setBusy(true, "Eliminando evento…");
+      await deleteEvent(ev.id);
+
+      state.events = (state.events || []).filter((x) => String(x.id) !== String(ev.id));
+      state.activeEventId = null;
+
+      toast("Evento eliminado", "Se eliminó correctamente.", 1600);
+      renderAll();
+
+      try { await ensureEventsLoaded(true); } catch (_) {}
+    } catch (err) {
+      console.error(err);
+      if (isRLSError(err)) {
+        state.mode = "blocked";
+        toast("RLS", "Falta policy DELETE para events (admins).", 5200);
+      } else {
+        toast("Error", prettyError(err), 5200);
+      }
+    } finally {
+      setBusy(false, "");
+    }
+  });
+
+  const saveActiveEvent = withLock(async function () {
+    const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId));
+    if (!ev) return false;
+
+    const title = cleanSpaces($("#evTitle")?.value || "");
+    const type = cleanSpaces($("#evType")?.value || "Cata de vino");
+    const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
+    const img = cleanSpaces($("#evImg")?.value || "");
+    const desc = cleanSpaces($("#evDesc")?.value || "");
+
+    const location = cleanSpaces($("#evLocation")?.value || "");
+    const time_range = normalizeTimeRange($("#evTimeRange")?.value || "");
+    const duration_hours = parseHoursNumber($("#evDurationHours")?.value || "");
+
+    if (!title) {
+      toast("Falta el nombre", "Ingresá el nombre del evento.");
+      return false;
+    }
+
+    const payload = {
+      title,
+      type,
+      month_key,
+      img: img || "./assets/img/hero-1.jpg",
+      desc,
+      location: location || "Por confirmar",
+      time_range,
+      duration_hours: duration_hours === "0" ? "" : duration_hours,
     };
 
-    renderPreview();
-    return m;
-  }
-
-  function openNewModal() {
-    const m = ensureModal();
-    m.querySelector("#ecnPromoReset")?.click();
-
-    lockBodyScroll(true);
-    m.style.display = "flex";
-    m.scrollTop = 0;
-
     try {
-      m.querySelector("#ecnPromoCard")?.scrollIntoView({ block: "start" });
-    } catch (_) {}
-  }
+      if (state.mode !== "supabase") {
+        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
+        return false;
+      }
 
-  function openEditModal(p) {
-    const m = ensureModal();
-    m._fill?.(p);
+      setBusy(true, "Guardando cambios…");
+      const updated = await updateEvent(ev.id, payload);
 
-    lockBodyScroll(true);
-    m.style.display = "flex";
-    m.scrollTop = 0;
+      state.events = (state.events || []).map((x) =>
+        String(x.id) === String(updated.id) ? updated : x
+      );
 
-    try {
-      m.querySelector("#ecnPromoCard")?.scrollIntoView({ block: "start" });
-    } catch (_) {}
-  }
+      toast("Guardado", "Evento actualizado en Supabase.", 1400);
+      setNote("");
+      renderAll();
 
-  // ---------------------------
-  // Refresh
-  // ---------------------------
-  async function refresh(opts) {
-    const silent = !!opts?.silent;
-    if (state.busy) return;
-
-    setBusy(true);
-    try {
-      const s = await ensureSession();
-      if (!s) return;
-
-      state.items = await fetchPromos();
-      state.didLoadOnce = true;
-
-      if (!silent) toast("Promos", "Actualizadas.", 1200);
-      renderTable();
+      try { await ensureEventsLoaded(true); } catch (_) {}
+      return true;
     } catch (err) {
-      console.error("[admin-promos] fetch error:", err);
-      state.items = [];
-      state.didLoadOnce = true;
-      renderTable();
-
-      if (looksLikeRLSError(err)) toast("RLS BLOQUEANDO", "No hay permiso para leer promos. Policy SELECT para admins.", 5200);
-      else toast("Error", "No se pudo cargar promos. Revisá tabla/policies.", 5200);
+      console.error(err);
+      if (isRLSError(err)) {
+        state.mode = "blocked";
+        toast("RLS", "Falta policy UPDATE para events (admins).", 5200);
+      } else {
+        toast("Error", prettyError(err), 5200);
+      }
+      return false;
     } finally {
-      setBusy(false);
+      setBusy(false, "");
     }
-  }
+  });
 
-  function refreshDebounced(ms) {
-    clearTimeout(state.refreshT);
-    state.refreshT = setTimeout(() => refresh({ silent: true }), ms || 250);
-  }
-
-  // ---------------------------
-  // Table actions
-  // ---------------------------
-  async function onTableClick(e) {
-    const btn = e.target && e.target.closest ? e.target.closest("[data-action]") : null;
-    if (!btn) return;
-
-    const tr = btn.closest("tr");
-    const id = tr ? safeStr(tr.dataset.id || "") : "";
-    if (!id) return;
-
-    const p = (state.items || []).find((x) => safeStr(x.id) === id);
-    if (!p) return;
-
-    const action = safeStr(btn.dataset.action || "");
-
-    if (action === "edit") return openEditModal(p);
-
-    if (action === "toggle") {
-      setBusy(true);
-      try {
-        const s = await ensureSession();
-        if (!s) return;
-
-        const next = { ...p, active: !p.active };
-        await updatePromo(p.id, mapUiToDbPayload(next));
-        toast("Actualizado", next.active ? "Promo activada." : "Promo pausada.", 1800);
-        await refresh({ silent: true });
-      } catch (err) {
-        console.error("[admin-promos] toggle error:", err);
-        if (looksLikeRLSError(err)) toast("RLS", "Bloqueado. Falta policy UPDATE en promos.", 5200);
-        else toast("Error", "No se pudo actualizar el estado.", 4200);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
-    if (action === "delete") {
-      const ok = window.confirm("¿Eliminar esta promo? Esta acción no se puede deshacer.");
-      if (!ok) return;
-
-      setBusy(true);
-      try {
-        const s = await ensureSession();
-        if (!s) return;
-
-        await deletePromo(id);
-        toast("Eliminada", "La promo fue eliminada.", 1800);
-        await refresh({ silent: true });
-      } catch (err) {
-        console.error("[admin-promos] delete error:", err);
-        if (looksLikeRLSError(err)) toast("RLS", "Bloqueado. Falta policy DELETE en promos.", 5200);
-        else toast("Error", "No se pudo eliminar la promo.", 4200);
-      } finally {
-        setBusy(false);
-      }
-    }
-  }
-
-  // ---------------------------
-  // Realtime (1 sola vez, usa sb correcto)
-  // ---------------------------
-  function wireRealtimeOnce() {
-    if (!ENABLE_REALTIME) return;
-    if (state.didRealtime) return;
-    state.didRealtime = true;
-
-    const sb = getSB();
-    if (!sb || typeof sb.channel !== "function") return;
-
-    try {
-      if (state.realtimeChannel) {
-        try {
-          sb.removeChannel(state.realtimeChannel);
-        } catch (_) {}
-        state.realtimeChannel = null;
-      }
-
-      state.realtimeChannel = sb
-        .channel("admin-promos-realtime")
-        .on("postgres_changes", { event: "*", schema: "public", table: TABLE }, () => {
-          refreshDebounced(REALTIME_DEBOUNCE_MS);
-        })
-        .subscribe();
-    } catch (e) {
-      console.warn("[admin-promos] Realtime no disponible:", e);
-    }
-  }
-
-  // ---------------------------
-  // Bind / Load
-  // ---------------------------
+  // ============================================================
+  // Wiring
+  // ============================================================
   function bindOnce() {
     if (state.didBind) return;
     state.didBind = true;
 
-    btnRefresh?.addEventListener("click", () => refresh({ silent: false }));
-    btnNew?.addEventListener("click", openNewModal);
-    tbody?.addEventListener("click", onTableClick);
+    // Tabs
+    $$(".tab", appPanel).forEach((t) => {
+      t.addEventListener("click", () => setTab(t.dataset.tab));
+    });
 
-    $("#search")?.addEventListener("input", () => renderTable());
-  }
+    // Search
+    $("#search")?.addEventListener("input", (e) => {
+      state.query = e.target.value || "";
+      renderAll();
+    });
 
-  async function ensureLoaded(force) {
-    bindOnce();
+    // Buttons events
+    $("#newEventBtn")?.addEventListener("click", createNewEvent);
+    $("#dupEventBtn")?.addEventListener("click", duplicateActiveEvent);
+    $("#deleteEventBtn")?.addEventListener("click", deleteActiveEvent);
 
-    const isHidden = !!$("#tab-promos")?.hidden;
-    if (!force && isHidden) return;
+    // Save (submit) + botón explícito
+    $("#eventForm")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveActiveEvent();
+    });
+    $("#saveEventBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      saveActiveEvent();
+    });
 
-    const now = Date.now();
-    if (!force && now - state.lastLoadAt < 600) return;
-    if (force && now - state.lastLoadAt < 250) return;
-    state.lastLoadAt = now;
+    // Counter desc
+    $("#evDesc")?.addEventListener("input", () => {
+      const v = $("#evDesc")?.value || "";
+      $("#descCount") && ($("#descCount").textContent = String(v.length));
+    });
 
-    if (state.didLoadOnce && !force) {
-      renderTable();
-      return;
+    // Auto duration (solo UI)
+    const durInput = $("#evDuration");
+    const timeInput = $("#evTimeRange");
+    const hoursInput = $("#evDurationHours");
+
+    function autoFillDurationIfEmpty() {
+      if (!durInput) return;
+      const manual = cleanSpaces(durInput.value || "");
+      if (manual) return;
+      const label = buildDurationLabel(timeInput?.value || "", hoursInput?.value || "");
+      durInput.value = label === "Por confirmar" ? "" : label;
     }
 
-    await refresh({ silent: true });
-    wireRealtimeOnce();
-  }
+    timeInput?.addEventListener("input", autoFillDurationIfEmpty);
+    hoursInput?.addEventListener("input", autoFillDurationIfEmpty);
 
-  // ---------------------------
-  // Wake on tab (solo 1 vez)
-  // ---------------------------
-  function wireTabWakeOnce() {
-    if (state.didTabListener) return;
-    state.didTabListener = true;
-
-    window.addEventListener("admin:tab", (e) => {
-      const tabName = e?.detail?.tab;
-      if (tabName === "promos") ensureLoaded(true);
+    // Ir a fechas
+    $("#addDateBtn")?.addEventListener("click", () => {
+      toast("Fechas", "Abrí la pestaña “Fechas” para administrar cupos por evento.", 1800);
+      // ✅ en vez de setTab (que ahora no cambia si ya estaba), forzamos cambio real:
+      if (state.activeTab !== "dates") setTab("dates");
     });
   }
 
-  // ---------------------------
-  // Boot: esperar admin:ready
-  // ---------------------------
-  function wake() {
-    bindOnce();
-    wireTabWakeOnce();
-
-    try {
-      if ($("#tab-promos") && $("#tab-promos").hidden === false) ensureLoaded(true);
-    } catch (_) {}
-  }
-
+  // ============================================================
+  // Boot (espera admin:ready)
+  // ============================================================
   function boot() {
     if (state.didBoot) return;
     state.didBoot = true;
 
-    console.log("[admin-promos] boot", { VERSION, TABLE });
+    console.log("[admin.js] boot", { VERSION });
 
-    if (window.APP && APP.__adminReady) {
-      wake();
-      return;
-    }
+    bindOnce();
 
-    if (state.didReadyListener) return;
-    state.didReadyListener = true;
-    window.addEventListener("admin:ready", wake, { once: true });
+    // Mostrar tab inicial sin re-emit raro:
+    // setTab ahora ignora si es el mismo tab, así que ponemos state primero:
+    state.activeTab = "__init__";
+    setTab("events");
   }
 
-  boot();
-
-  // API debug
-  window.ECN_ADMIN_PROMOS = {
-    refresh: () => refresh({ silent: false }),
-    openNewModal,
-    ensureLoaded: () => ensureLoaded(true),
-  };
+  if (window.APP && APP.__adminReady) {
+    boot();
+  } else {
+    window.addEventListener("admin:ready", boot, { once: true });
+  }
 })();

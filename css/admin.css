@@ -5,7 +5,6 @@
    - ✅ Fondo full pantalla (sin cortes)
    - ✅ Media tab FIX (sin duplicados)
    - ✅ FIX: Gallery Modal (sin choques, sin “romper”, preview estable)
-   - ✅ FIX: Promos Modal (no full screen + scroll interno, sin márgenes inflados)
 ============================================================ */
 
 :root{
@@ -450,7 +449,7 @@ input, select, textarea{
   background: rgba(0,0,0,.28);
   color: var(--text);
   padding: 12px 12px;
-  margin: 12px 0; /* ✅ global para forms normales */
+  margin: 12px 0;
   outline:none;
   font-size: 14px;
   transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
@@ -935,117 +934,6 @@ body.adminLoginPage .page{
 }
 
 /* ============================================================
-   ✅ PROMOS MODAL (ecn) — FIX FINAL (NO full screen)
-   - Overlay SÍ puede scrollear
-   - Card con max-height + overflow auto
-   - Form con scroll interno
-   - ✅ IMPORTANT: reset de margins dentro del modal (tu regla global inflaba el alto)
-   - Scrollbar dark SOLO dentro del modal
-============================================================ */
-
-/* Overlay del modal promos */
-#ecnPromoModal{
-  position: fixed;
-  inset: 0;
-  display: none;                /* JS lo pone en flex */
-  align-items: flex-start;      /* arriba, no centro */
-  justify-content: center;
-  padding: 18px;
-  background: rgba(0,0,0,.65);
-  z-index: 9999;
-
-  overflow-y: auto;             /* ✅ overlay scrolleable */
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-
-/* Card interno (el primer hijo del modal) */
-#ecnPromoModal > *{
-  width: min(820px, calc(100% - 0px));
-  max-height: calc(100vh - 36px);
-  margin: 18px auto;
-  display: flex;
-  flex-direction: column;
-  overflow: auto;              /* ✅ si el contenido crece, el card no revienta */
-  border-radius: 16px;
-}
-
-/* ✅ RESET CRÍTICO: evita que el margin:12px 0 global infle el modal */
-#ecnPromoModal input,
-#ecnPromoModal select,
-#ecnPromoModal textarea,
-#ecnPromoModal .input,
-#ecnPromoModal .select,
-#ecnPromoModal .textarea{
-  margin: 0 !important;
-}
-
-/* Ajuste fino de separación en fields dentro del modal */
-#ecnPromoModal .field{
-  display: grid;
-  gap: 8px;
-}
-
-/* El form (si existe por id) se comporta como área scroll */
-#ecnPromoModal #ecnPromoForm{
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-
-/* Textarea: que no se dispare en alto por defaults */
-#ecnPromoModal textarea{
-  resize: vertical;
-  min-height: 88px;
-}
-
-/* Footer sticky (tu JS/HTML inline ya lo pone sticky; acá solo lo reforzamos) */
-#ecnPromoModal #ecnPromoForm > div[style*="position: sticky"]{
-  z-index: 10;
-  background: rgba(20,20,20,.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  margin: 0 !important;
-}
-
-/* Scrollbar dark SOLO dentro del modal promos */
-#ecnPromoModal #ecnPromoForm{
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
-}
-
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar{
-  width: 10px;
-}
-
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-track{
-  background: rgba(0,0,0,.18);
-  border-left: 1px solid rgba(255,255,255,.08);
-}
-
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,.20);
-  border-radius: 999px;
-  border: 2px solid rgba(0,0,0,.18);
-}
-
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb:hover{
-  background: rgba(255,255,255,.28);
-}
-
-/* Mobile: reduce padding y evita que se sienta “pantallón” */
-@media (max-width: 820px){
-  #ecnPromoModal{ padding: 12px; }
-  #ecnPromoModal > *{
-    max-height: calc(100vh - 24px);
-    margin: 12px auto;
-  }
-}
-
-/* ============================================================
    ✅ GALLERY MODAL (ecn) — FINAL DEPURADO (sin choques)
    - Overlay NO scrollea; el scroll vive en #ecnGalleryForm
    - Card recorta (overflow:hidden) y respeta border-radius
@@ -1097,7 +985,8 @@ body.adminLoginPage .page{
   overscroll-behavior: contain;
 }
 
-/* ✅ Espacio de seguridad ANTES del footer */
+/* ✅ Espacio de seguridad ANTES del footer (no después)
+   Ajuste: igualá este valor al alto aproximado del footer */
 #ecnGalleryModal #ecnGalPreview{
   width: 100%;
   height: clamp(260px, 48vh, 400px);
@@ -1105,6 +994,8 @@ body.adminLoginPage .page{
   overflow: hidden;
   background: rgba(0,0,0,.25);
   border: 1px solid rgba(255,255,255,.10);
+
+  /* ✅ este reemplaza al padding-bottom del form */
   margin-bottom: 0px;
 }
 
@@ -1123,6 +1014,8 @@ body.adminLoginPage .page{
   background: rgba(20,20,20,.96);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+
+  /* Evita deformaciones raras por herencias/colapsos */
   margin: 0 !important;
 }
 
