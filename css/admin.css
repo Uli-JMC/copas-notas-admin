@@ -933,10 +933,10 @@ body.adminLoginPage .page{
 }
 
 /* ============================================================
-   ✅ GALLERY MODAL (ecn) — FIX SCROLL + preview (NO rompe nada)
-   - Neutraliza margins globales en inputs dentro del modal
-   - Asegura que la preview nunca “se estire”
-   - Evita que el footer sticky quede fuera de pantalla
+   ✅ GALLERY MODAL (ecn) — CONSOLIDADO (NO rompe nada)
+   - Evita duplicados que se pisan
+   - Preview con alto real (no queda mini)
+   - Footer sticky no tapa contenido
 ============================================================ */
 
 /* el overlay siempre scrollea aunque body esté locked */
@@ -956,89 +956,36 @@ body.adminLoginPage .page{
   margin: 0 !important;
 }
 
-/* preview: nunca cubrir ni crecer infinito aunque exista CSS global para img */
-#ecnGalleryModal #ecnGalPreviewImg{
-  width: 100% !important;
-  height: min(46vh, 360px) !important;
-  max-height: none !important;
-  object-fit: contain !important;
-  display: block;
-}
-
-/* footer sticky: siempre arriba del contenido */
-#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
-  z-index: 2;
-}
-
-
-/* ============================================================
-   FIX: Preview no se mete debajo del footer sticky (Gallery Modal)
-============================================================ */
-
-/* 1) El form necesita espacio para que el footer sticky no tape contenido */
-#ecnGalleryModal #ecnGalleryForm{
-  padding-bottom: 84px !important; /* espacio para LIMPIAR/SUBIR */
-  overflow-x: hidden !important;
-}
-
-/* 2) Footer sticky arriba de todo y sin transparencia rara */
-#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
-  z-index: 5 !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-/* 3) Preview siempre dentro del recuadro */
-#ecnGalleryModal #ecnGalPreview{
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-}
-
-/* 4) Imagen nunca “se sale” */
-#ecnGalleryModal #ecnGalPreviewImg{
-  max-width: 100% !important;
-  width: 100% !important;
-  height: auto !important;          /* ✅ clave */
-  max-height: min(46vh, 360px) !important;
-  object-fit: contain !important;
-  display: block !important;
-}
-
-
-/* ============================================================
-   FIX FINAL: Preview no queda debajo del footer sticky
-   (Gallery Modal)
-============================================================ */
-
-/* El form es el scroll container */
+/* el form es el scroll container y deja espacio para el footer sticky */
 #ecnGalleryModal #ecnGalleryForm{
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  padding-bottom: 92px !important; /* espacio para LIMPIAR/SUBIR */
 }
 
-/* 1) Limitá el alto REAL del preview box (no depende del alto natural de la imagen) */
+/* preview box: alto real y estable (evita preview “mini”) */
 #ecnGalleryModal #ecnGalPreview{
-  max-height: min(46vh, 360px) !important;
+  width: 100% !important;
+  max-width: 100% !important;
   overflow: hidden !important;
   border-radius: 12px;
+  height: clamp(220px, 46vh, 360px) !important; /* ✅ clave */
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(255,255,255,.10);
 }
 
-/* 2) La imagen se adapta al alto del box (NO crece infinito) */
+/* imagen: llena el box sin salirse */
 #ecnGalleryModal #ecnGalPreviewImg{
   width: 100% !important;
-  height: 100% !important;        /* ✅ clave */
-  max-height: none !important;     /* evita conflictos */
+  height: 100% !important;       /* ✅ clave */
+  max-width: 100% !important;
+  max-height: 100% !important;
   object-fit: contain !important;
   display: block !important;
+  background: rgba(0,0,0,.18);
 }
 
-/* 3) Dejá espacio para que el footer sticky NO tape el preview */
-#ecnGalleryModal #ecnGalPreview{
-  margin-bottom: 92px !important;  /* ✅ “colchón” = alto footer */
-}
-
-/* 4) Asegurá que el footer esté encima y sólido */
+/* footer sticky arriba de todo y sólido */
 #ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
   z-index: 10 !important;
   background: rgba(20,20,20,.96) !important;
