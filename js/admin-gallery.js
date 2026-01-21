@@ -522,7 +522,31 @@
 
     document.body.appendChild(m);
 
+    // preview
+    const file = m.querySelector("#ecnGalFile");
+    const prevBox = m.querySelector("#ecnGalPreview");
+    const prevImg = m.querySelector("#ecnGalPreviewImg");
+    let prevUrl = "";
+
+    // ✅ FIX: resetear SIEMPRE el modal al cerrar/abrir (evita datos pegados)
+    const resetModal = () => {
+      const form = m.querySelector("#ecnGalleryForm");
+      form?.reset();
+
+      // limpia file + preview
+      if (file) file.value = "";
+
+      if (prevUrl) {
+        try { URL.revokeObjectURL(prevUrl); } catch (_) {}
+      }
+      prevUrl = "";
+
+      if (prevBox) prevBox.style.display = "none";
+      if (prevImg) prevImg.src = "";
+    };
+
     const close = () => {
+      resetModal(); // ✅ FIX
       m.style.display = "none";
       lockBodyScroll(false);
     };
@@ -543,12 +567,6 @@
     }
 
     m.querySelector("#ecnGalleryClose")?.addEventListener("click", close);
-
-    // preview
-    const file = m.querySelector("#ecnGalFile");
-    const prevBox = m.querySelector("#ecnGalPreview");
-    const prevImg = m.querySelector("#ecnGalPreviewImg");
-    let prevUrl = "";
 
     file?.addEventListener("change", () => {
       const f = file.files ? file.files[0] : null;
@@ -577,12 +595,7 @@
 
     // reset
     m.querySelector("#ecnGalReset")?.addEventListener("click", () => {
-      const form = m.querySelector("#ecnGalleryForm");
-      form?.reset();
-      if (prevUrl) try { URL.revokeObjectURL(prevUrl); } catch (_) {}
-      prevUrl = "";
-      if (prevBox) prevBox.style.display = "none";
-      if (prevImg) prevImg.src = "";
+      resetModal(); // ✅ FIX
     });
 
     // submit
@@ -641,14 +654,18 @@
       }
     });
 
-    // expone close internamente sin romper
+    // expone close + reset internamente sin romper
     m._ecnClose = close;
+    m._ecnReset = resetModal; // ✅ FIX
 
     return m;
   }
 
   function openNewModal() {
     const m = ensureModal();
+    // ✅ FIX: por si algún flujo dejó algo “pegado”
+    try { m._ecnReset?.(); } catch (_) {}
+
     lockBodyScroll(true);
     m.style.display = "flex";
     m.scrollTop = 0;
