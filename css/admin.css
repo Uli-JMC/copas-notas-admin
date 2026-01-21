@@ -935,11 +935,9 @@ body.adminLoginPage .page{
 
 /* ============================================================
    ✅ GALLERY MODAL (ecn) — FINAL DEPURADO (sin choques)
-   - NO duplicados (#ecnGalleryModal estaba definido 2+ veces)
    - Overlay NO scrollea; el scroll vive en #ecnGalleryForm
    - Card recorta (overflow:hidden) y respeta border-radius
-   - Preview grande estable, no “rompe” por abajo
-   - ✅ FIX: elimina hueco bajo botones (sin tocar HTML)
+   - ✅ FIX: sin hueco abajo / footer estable / scrollbar dark
 ============================================================ */
 
 /* Overlay del modal */
@@ -974,15 +972,21 @@ body.adminLoginPage .page{
   margin: 0 !important;
 }
 
-/* El form es el área scroll + espacio para footer sticky */
+/* El form es el área scroll */
 #ecnGalleryModal #ecnGalleryForm{
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 96px;
+
+  /* ✅ Clave: NO padding-bottom aquí (ese era el hueco al final) */
+  padding-bottom: 0 !important;
+
+  /* Mejor feeling de scroll */
+  overscroll-behavior: contain;
 }
 
-/* Preview box */
+/* ✅ Espacio de seguridad ANTES del footer (no después)
+   Ajuste: igualá este valor al alto aproximado del footer */
 #ecnGalleryModal #ecnGalPreview{
   width: 100%;
   height: clamp(260px, 48vh, 400px);
@@ -990,6 +994,9 @@ body.adminLoginPage .page{
   overflow: hidden;
   background: rgba(0,0,0,.25);
   border: 1px solid rgba(255,255,255,.10);
+
+  /* ✅ este reemplaza al padding-bottom del form */
+  margin-bottom: 96px;
 }
 
 /* Imagen */
@@ -1001,13 +1008,40 @@ body.adminLoginPage .page{
   background: rgba(0,0,0,.18);
 }
 
-/* Footer sticky */
+/* Footer sticky (tus botones) */
 #ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
   z-index: 10;
   background: rgba(20,20,20,.96);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 
-  /* ✅ FIX: elimina el hueco debajo del footer (cancela el padding-bottom del form) */
-  margin-bottom: -96px;
+  /* Evita deformaciones raras por herencias/colapsos */
+  margin: 0 !important;
+}
+
+/* ============================================================
+   ✅ Scrollbar dark SOLO dentro del modal
+============================================================ */
+#ecnGalleryModal #ecnGalleryForm{
+  scrollbar-width: thin;                /* Firefox */
+  scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
+}
+
+#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar{
+  width: 10px;
+}
+
+#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-track{
+  background: rgba(0,0,0,.18);
+  border-left: 1px solid rgba(255,255,255,.08);
+}
+
+#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.20);
+  border-radius: 999px;
+  border: 2px solid rgba(0,0,0,.18);
+}
+
+#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,.28);
 }
