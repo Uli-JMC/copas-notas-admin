@@ -960,7 +960,6 @@ body.adminLoginPage .page{
 #ecnGalleryModal #ecnGalleryForm{
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  padding-bottom: 92px !important; /* espacio para LIMPIAR/SUBIR */
 }
 
 /* preview box: alto real y estable (evita preview “mini”) */
