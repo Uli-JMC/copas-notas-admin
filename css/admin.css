@@ -939,6 +939,7 @@ body.adminLoginPage .page{
    - Overlay NO scrollea; el scroll vive en #ecnGalleryForm
    - Card recorta (overflow:hidden) y respeta border-radius
    - Preview grande estable, no “rompe” por abajo
+   - ✅ FIX: elimina hueco bajo botones (sin tocar HTML)
 ============================================================ */
 
 /* Overlay del modal */
@@ -1006,4 +1007,7 @@ body.adminLoginPage .page{
   background: rgba(20,20,20,.96);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+
+  /* ✅ FIX: elimina el hueco debajo del footer (cancela el padding-bottom del form) */
+  margin-bottom: -96px;
 }
