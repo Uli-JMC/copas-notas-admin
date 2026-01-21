@@ -1067,6 +1067,13 @@ body.adminLoginPage .page{
   overflow: hidden !important; /* el overlay NO scrollea */
 }
 
+#ecnPromoModal{
+  pointer-events: auto;
+}
+#ecnPromoModal > *{
+  pointer-events: auto;
+}
+
 /* Card contenedor (lo que sea que esté adentro) */
 #ecnPromoModal > *{
   width: min(920px, calc(100% - 32px));

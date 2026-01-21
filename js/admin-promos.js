@@ -477,6 +477,17 @@
     m.querySelector("#ecnPromoClose")?.addEventListener("click", close);
 
     const form = m.querySelector("#ecnPromoForm");
+
+    // ✅ PATCH: evita que Enter dispare submit y "cierre" el modal mientras editás
+    // Solo permite Enter normal dentro de TEXTAREA
+    form?.addEventListener("keydown", (e) => {
+      const t = e.target;
+      if (!t) return;
+      if (e.key === "Enter" && t.tagName !== "TEXTAREA") {
+        e.preventDefault();
+      }
+    });
+
     const idEl = m.querySelector("#ecnPromoId");
     const kindEl = m.querySelector("#ecnKind");
     const activeEl = m.querySelector("#ecnActive");
