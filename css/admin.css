@@ -996,7 +996,7 @@ body.adminLoginPage .page{
   border: 1px solid rgba(255,255,255,.10);
 
   /* ✅ este reemplaza al padding-bottom del form */
-  margin-bottom: 96px;
+  margin-bottom: 0px;
 }
 
 /* Imagen */
