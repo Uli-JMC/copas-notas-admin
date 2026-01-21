@@ -944,11 +944,11 @@ body.adminLoginPage .page{
 #ecnGalleryModal{
   position: fixed;
   inset: 0;
-  display: flex;
+  display: none;              /* ✅ IMPORTANTE: no bloquear la UI cuando está cerrado */
   align-items: flex-start;
   justify-content: center;
   padding: 24px 0;
-  overflow: hidden !important; /* ⛔ el overlay NO scrollea */
+  overflow: hidden !important;
   -webkit-overflow-scrolling: touch;
 }
 
