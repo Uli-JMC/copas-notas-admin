@@ -944,11 +944,11 @@ body.adminLoginPage .page{
 #ecnGalleryModal{
   position: fixed;
   inset: 0;
-  display: none;              /* ✅ IMPORTANTE: no bloquear la UI cuando está cerrado */
+  display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 24px 0;
-  overflow: hidden !important;
+  overflow: hidden !important; /* ⛔ el overlay NO scrollea */
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1045,3 +1045,102 @@ body.adminLoginPage .page{
 #ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb:hover{
   background: rgba(255,255,255,.28);
 }
+
+/* nuevo adicional para modal */
+
+/* ============================================================
+   ✅ PROMO MODAL (ecn) — FIX SIZE (NO GIGANTE)
+   - Mantiene IDs/clases
+   - Restringe ancho/alto del modal
+   - Scroll vive dentro del form
+   - Override del margin global de inputs SOLO aquí
+============================================================ */
+
+/* Overlay */
+#ecnPromoModal{
+  position: fixed;
+  inset: 0;
+  padding: 24px 0;
+  display: flex;              /* asumimos que tu JS lo muestra/oculta */
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden !important; /* el overlay NO scrollea */
+}
+
+/* Card contenedor (lo que sea que esté adentro) */
+#ecnPromoModal > *{
+  width: min(920px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;           /* clip real */
+  border-radius: 22px;
+}
+
+/* El área scroll */
+#ecnPromoModal #ecnPromoForm{
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* 🔥 CLAVE: cancelar el margin global de inputs SOLO en el modal */
+#ecnPromoModal input,
+#ecnPromoModal select,
+#ecnPromoModal textarea,
+#ecnPromoModal .input,
+#ecnPromoModal .select,
+#ecnPromoModal .textarea{
+  margin: 0 !important;
+}
+
+/* Espaciado “pro” sin inflar: el espacio lo da el contenedor, no el input */
+#ecnPromoModal #ecnPromoForm .field{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Grillas del formulario dentro del modal */
+#ecnPromoModal #ecnPromoForm .row{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 820px){
+  #ecnPromoModal #ecnPromoForm .row{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Footer sticky (si usás sticky inline en el último div) */
+#ecnPromoModal #ecnPromoForm > div[style*="position: sticky"]{
+  z-index: 10;
+  background: rgba(20,20,20,.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  margin: 0 !important;
+}
+
+/* Scrollbar dark dentro del modal */
+#ecnPromoModal #ecnPromoForm{
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
+}
+#ecnPromoModal #ecnPromoForm::-webkit-scrollbar{ width: 10px; }
+#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-track{
+  background: rgba(0,0,0,.18);
+  border-left: 1px solid rgba(255,255,255,.08);
+}
+#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.20);
+  border-radius: 999px;
+  border: 2px solid rgba(0,0,0,.18);
+}
+#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,.28);
+}
+
+
