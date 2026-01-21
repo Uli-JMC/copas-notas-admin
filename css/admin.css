@@ -1,9 +1,10 @@
 /* ============================================================
-   admin.css ✅ PRO UI (2026-01) — FULL (DEPURADO)
+   admin.css ✅ PRO UI (2026-01) — FULL (DEPURADO + FIX MODAL)
    - Mantiene tus clases/IDs (NO rompe JS)
    - Mejora jerarquía visual: cards, grids, tabs, tablas, forms
    - ✅ Fondo full pantalla (sin cortes)
    - ✅ Media tab FIX (sin duplicados)
+   - ✅ FIX: Gallery Modal (sin choques, sin “romper”, preview estable)
 ============================================================ */
 
 :root{
@@ -933,136 +934,76 @@ body.adminLoginPage .page{
 }
 
 /* ============================================================
-   ✅ GALLERY MODAL (ecn) — CONSOLIDADO (NO rompe nada)
-   - Evita duplicados que se pisan
-   - Preview con alto real (no queda mini)
-   - Footer sticky no tapa contenido
+   ✅ GALLERY MODAL (ecn) — FINAL DEPURADO (sin choques)
+   - NO duplicados (#ecnGalleryModal estaba definido 2+ veces)
+   - Overlay NO scrollea; el scroll vive en #ecnGalleryForm
+   - Card recorta (overflow:hidden) y respeta border-radius
+   - Preview grande estable, no “rompe” por abajo
 ============================================================ */
 
-/* el overlay siempre scrollea aunque body esté locked */
+/* Overlay del modal */
 #ecnGalleryModal{
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* dentro del modal NO sumamos márgenes extra (el JS ya usa gap en grid) */
-#ecnGalleryModal .input,
-#ecnGalleryModal .select,
-#ecnGalleryModal .textarea,
-#ecnGalleryModal input,
-#ecnGalleryModal select,
-#ecnGalleryModal textarea{
-  margin: 0 !important;
-}
-
-/* el form es el scroll container y deja espacio para el footer sticky */
-#ecnGalleryModal #ecnGalleryForm{
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
-/* preview box: alto real y estable (evita preview “mini”) */
-#ecnGalleryModal #ecnGalPreview{
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-  border-radius: 12px;
-  height: clamp(220px, 46vh, 360px) !important; /* ✅ clave */
-  background: rgba(0,0,0,.25);
-  border: 1px solid rgba(255,255,255,.10);
-}
-
-/* imagen: llena el box sin salirse */
-#ecnGalleryModal #ecnGalPreviewImg{
-  width: 100% !important;
-  height: 100% !important;       /* ✅ clave */
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-  display: block !important;
-  background: rgba(0,0,0,.18);
-}
-
-/* footer sticky arriba de todo y sólido */
-#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
-  z-index: 10 !important;
-  background: rgba(20,20,20,.96) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-/* ============================================================
-   ✅ GALLERY MODAL (ecn) — FIX CLIP + SCROLL (NO rompe nada)
-   - El card del modal recorta (respeta border-radius)
-   - El scroll vive dentro del form (no se sale del modal)
-   - Preview grande estable
-============================================================ */
-
-/* overlay */
-#ecnGalleryModal{
-  overflow: hidden !important; /* ✅ evita “salidas” raras del overlay */
-  -webkit-overflow-scrolling: touch;
-  padding: 18px 0;            /* espacio arriba/abajo */
+  position: fixed;
+  inset: 0;
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  padding: 24px 0;
+  overflow: hidden !important; /* ⛔ el overlay NO scrollea */
+  -webkit-overflow-scrolling: touch;
 }
 
-/* ✅ el “card” interno del modal (primer hijo típico) */
+/* Card interno del modal */
 #ecnGalleryModal > *{
-  width: min(980px, calc(100% - 28px));
-  max-height: calc(100vh - 36px);
-  overflow: hidden !important;   /* ✅ CLAVE: recorta dentro del border-radius */
-  border-radius: 22px;           /* por si el contenedor no lo trae */
+  width: min(980px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;            /* ✅ CLIP REAL */
+  border-radius: 22px;
 }
 
-/* dentro del modal NO sumamos márgenes extra (el JS ya usa gaps) */
-#ecnGalleryModal .input,
-#ecnGalleryModal .select,
-#ecnGalleryModal .textarea,
+/* Reset márgenes globales dentro del modal */
 #ecnGalleryModal input,
 #ecnGalleryModal select,
-#ecnGalleryModal textarea{
+#ecnGalleryModal textarea,
+#ecnGalleryModal .input,
+#ecnGalleryModal .select,
+#ecnGalleryModal .textarea{
   margin: 0 !important;
 }
 
-/* ✅ el form es el área scroll del modal */
+/* El form es el área scroll + espacio para footer sticky */
 #ecnGalleryModal #ecnGalleryForm{
   flex: 1 1 auto;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  padding-bottom: 96px !important; /* espacio para el footer sticky */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 96px;
 }
 
-/* preview box: alto real y estable */
+/* Preview box */
 #ecnGalleryModal #ecnGalPreview{
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-  border-radius: 12px;
-  height: clamp(240px, 48vh, 380px) !important;
+  width: 100%;
+  height: clamp(260px, 48vh, 400px);
+  border-radius: 14px;
+  overflow: hidden;
   background: rgba(0,0,0,.25);
   border: 1px solid rgba(255,255,255,.10);
 }
 
-/* imagen: llena el box sin salirse */
+/* Imagen */
 #ecnGalleryModal #ecnGalPreviewImg{
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-  display: block !important;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
   background: rgba(0,0,0,.18);
 }
 
-/* footer sticky arriba de todo y sólido */
+/* Footer sticky */
 #ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
-  z-index: 10 !important;
-  background: rgba(20,20,20,.96) !important;
+  z-index: 10;
+  background: rgba(20,20,20,.96);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
