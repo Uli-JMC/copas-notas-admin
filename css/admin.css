@@ -991,3 +991,78 @@ body.adminLoginPage .page{
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
+
+/* ============================================================
+   ✅ GALLERY MODAL (ecn) — FIX CLIP + SCROLL (NO rompe nada)
+   - El card del modal recorta (respeta border-radius)
+   - El scroll vive dentro del form (no se sale del modal)
+   - Preview grande estable
+============================================================ */
+
+/* overlay */
+#ecnGalleryModal{
+  overflow: hidden !important; /* ✅ evita “salidas” raras del overlay */
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 0;            /* espacio arriba/abajo */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* ✅ el “card” interno del modal (primer hijo típico) */
+#ecnGalleryModal > *{
+  width: min(980px, calc(100% - 28px));
+  max-height: calc(100vh - 36px);
+  overflow: hidden !important;   /* ✅ CLAVE: recorta dentro del border-radius */
+  border-radius: 22px;           /* por si el contenedor no lo trae */
+  display: flex;
+  flex-direction: column;
+}
+
+/* dentro del modal NO sumamos márgenes extra (el JS ya usa gaps) */
+#ecnGalleryModal .input,
+#ecnGalleryModal .select,
+#ecnGalleryModal .textarea,
+#ecnGalleryModal input,
+#ecnGalleryModal select,
+#ecnGalleryModal textarea{
+  margin: 0 !important;
+}
+
+/* ✅ el form es el área scroll del modal */
+#ecnGalleryModal #ecnGalleryForm{
+  flex: 1 1 auto;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 96px !important; /* espacio para el footer sticky */
+}
+
+/* preview box: alto real y estable */
+#ecnGalleryModal #ecnGalPreview{
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  border-radius: 12px;
+  height: clamp(240px, 48vh, 380px) !important;
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(255,255,255,.10);
+}
+
+/* imagen: llena el box sin salirse */
+#ecnGalleryModal #ecnGalPreviewImg{
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  display: block !important;
+  background: rgba(0,0,0,.18);
+}
+
+/* footer sticky arriba de todo y sólido */
+#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
+  z-index: 10 !important;
+  background: rgba(20,20,20,.96) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
