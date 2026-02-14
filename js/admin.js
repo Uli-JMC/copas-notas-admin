@@ -1,13 +1,14 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-02 PATCH (precio)
- * - Añade soporte para: events.price_amount (numeric) y events.price_currency (text)
- * - No rompe si los inputs no existen todavía (fallbacks).
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-02 PATCH (precio) + FIX description
+ * - Soporta: events.price_amount (numeric) y events.price_currency (text)
+ * - ✅ FIX: reemplaza "desc" por "description" (DB ya no tiene desc)
+ * - No rompe si inputs no existen todavía (fallbacks).
  */
 
 (function () {
-  const VERSION = "2026-02-11.1";
+  const VERSION = "2026-02-14.1";
 
   // ============================================================
   // Selectores
@@ -122,9 +123,7 @@
   function normalizeCurrency(input, fallback = "USD") {
     const v = cleanSpaces(input).toUpperCase();
     if (!v) return fallback;
-    // permitimos lo básico
     if (v === "USD" || v === "CRC") return v;
-    // si meten "$" o "₡" lo normalizamos
     if (v.includes("$")) return "USD";
     if (v.includes("₡")) return "CRC";
     return fallback;
@@ -134,10 +133,9 @@
     const raw = cleanSpaces(input);
     if (!raw) return null;
 
-    // Permite "49", "49.5", "49,50", "$49.00", "USD 49"
     const cleaned = raw
       .replace(/[^\d.,-]/g, "")
-      .replace(",", "."); // si viene con coma decimal
+      .replace(",", ".");
 
     const m = cleaned.match(/-?\d+(\.\d+)?/);
     if (!m) return null;
@@ -145,7 +143,6 @@
     const n = Number(m[0]);
     if (!Number.isFinite(n) || n < 0) return null;
 
-    // guardamos con 2 decimales, pero como number
     return Math.round(n * 100) / 100;
   }
 
@@ -187,7 +184,7 @@
     title,
     type,
     month_key,
-    "desc",
+    description,
     img,
     location,
     time_range,
@@ -346,7 +343,6 @@
     const ids = [
       "eventId","evTitle","evType","evMonth","evImg","evDesc",
       "evLocation","evTimeRange","evDurationHours","evDuration",
-      // ✅ nuevos (si existen)
       "evPriceAmount","evPriceCurrency",
     ];
     ids.forEach((id) => {
@@ -460,7 +456,7 @@
     $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
     $("#evImg") && ($("#evImg").value = ev.img || "");
 
-    const d = ev["desc"] || "";
+    const d = ev.description || "";
     $("#evDesc") && ($("#evDesc").value = d);
     $("#descCount") && ($("#descCount").textContent = String(String(d).length));
 
@@ -479,7 +475,6 @@
     const priceCurrencyEl = $("#evPriceCurrency");
 
     if (priceAmountEl) {
-      // ev.price_amount puede venir number o string
       const pa = ev.price_amount;
       priceAmountEl.value = pa == null ? "" : String(pa);
     }
@@ -537,11 +532,10 @@
         type: typeFallback,
         month_key: "ENERO",
         img: "./assets/img/hero-1.jpg",
-        desc: "",
+        description: "",
         location: "Por confirmar",
         time_range: "",
         duration_hours: "",
-        // ✅ precio default (editable luego)
         price_amount: null,
         price_currency: "USD",
       };
@@ -585,11 +579,10 @@
         type: ev.type || ($("#evType")?.value || "Cata de vino"),
         month_key: normalizeMonth(ev.month_key || "ENERO"),
         img: ev.img || "./assets/img/hero-1.jpg",
-        desc: ev["desc"] || "",
+        description: ev.description || "",
         location: ev.location || "Por confirmar",
         time_range: ev.time_range || "",
         duration_hours: ev.duration_hours || "",
-        // ✅ duplica precio
         price_amount: ev.price_amount == null ? null : ev.price_amount,
         price_currency: normalizeCurrency(ev.price_currency, "USD"),
       };
@@ -660,13 +653,12 @@
     const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
     const img = cleanSpaces($("#evImg")?.value || "");
-    const desc = cleanSpaces($("#evDesc")?.value || "");
+    const description = cleanSpaces($("#evDesc")?.value || "");
 
     const location = cleanSpaces($("#evLocation")?.value || "");
     const time_range = normalizeTimeRange($("#evTimeRange")?.value || "");
     const duration_hours = parseHoursNumber($("#evDurationHours")?.value || "");
 
-    // ✅ Precio (si inputs no existen, mantenemos lo que ya hay o defaults)
     const priceAmountEl = $("#evPriceAmount");
     const priceCurrencyEl = $("#evPriceCurrency");
 
@@ -675,7 +667,7 @@
 
     if (priceAmountEl) {
       const parsed = parseMoneyAmount(priceAmountEl.value);
-      price_amount = parsed; // puede ser null
+      price_amount = parsed;
     }
     if (priceCurrencyEl) {
       price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
@@ -691,12 +683,10 @@
       type,
       month_key,
       img: img || "./assets/img/hero-1.jpg",
-      desc,
+      description,
       location: location || "Por confirmar",
       time_range,
       duration_hours: duration_hours === "0" ? "" : duration_hours,
-
-      // ✅ guardado de precio
       price_amount,
       price_currency,
     };
@@ -741,23 +731,19 @@
     if (state.didBind) return;
     state.didBind = true;
 
-    // Tabs
     $$(".tab", appPanel).forEach((t) => {
       t.addEventListener("click", () => setTab(t.dataset.tab));
     });
 
-    // Search
     $("#search")?.addEventListener("input", (e) => {
       state.query = e.target.value || "";
       renderAll();
     });
 
-    // Buttons events
     $("#newEventBtn")?.addEventListener("click", createNewEvent);
     $("#dupEventBtn")?.addEventListener("click", duplicateActiveEvent);
     $("#deleteEventBtn")?.addEventListener("click", deleteActiveEvent);
 
-    // Save (submit) + botón explícito
     $("#eventForm")?.addEventListener("submit", (e) => {
       e.preventDefault();
       saveActiveEvent();
@@ -767,13 +753,11 @@
       saveActiveEvent();
     });
 
-    // Counter desc
     $("#evDesc")?.addEventListener("input", () => {
       const v = $("#evDesc")?.value || "";
       $("#descCount") && ($("#descCount").textContent = String(v.length));
     });
 
-    // Auto duration (solo UI)
     const durInput = $("#evDuration");
     const timeInput = $("#evTimeRange");
     const hoursInput = $("#evDurationHours");
@@ -789,7 +773,6 @@
     timeInput?.addEventListener("input", autoFillDurationIfEmpty);
     hoursInput?.addEventListener("input", autoFillDurationIfEmpty);
 
-    // Ir a fechas
     $("#addDateBtn")?.addEventListener("click", () => {
       toast("Fechas", "Abrí la pestaña “Fechas” para administrar cupos por evento.", 1800);
       if (state.activeTab !== "dates") setTab("dates");

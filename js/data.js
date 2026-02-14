@@ -9,6 +9,8 @@
  * ✅ Cambio clave:
  * - event_dates ahora vive separado (ECN.LS.EVENT_DATES) y events[].dates es "legacy/derivado"
  *   para no romper el sitio público mientras migramos.
+ *
+ * ✅ FIX: "desc" -> "description" (pero con fallback leyendo "desc" viejo)
  */
 (function () {
   // ============================================================
@@ -22,7 +24,7 @@
   ECN.LS = {
     ADMIN_SESSION: "ecn_admin_session",
     EVENTS: "ecn_events",
-    EVENT_DATES: "ecn_event_dates", // ✅ NUEVO (mapea tu tabla public.event_dates)
+    EVENT_DATES: "ecn_event_dates",
     REGS: "ecn_regs",
     MEDIA: "ecn_media",
     PROMOS: "ecn_promos",
@@ -37,7 +39,8 @@
       type: "Cata de vino",
       monthKey: "ENERO",
       title: "Cata: Notas & Maridajes",
-      desc: "Explorá aromas y sabores con maridajes guiados. Ideal para principiantes y curiosos.",
+      description:
+        "Explorá aromas y sabores con maridajes guiados. Ideal para principiantes y curiosos.",
       img: "./assets/img/hero-1.jpg",
 
       location: "San José (por confirmar)",
@@ -45,7 +48,6 @@
       durationHours: "Por confirmar",
       duration: "1.5–2.5 horas",
 
-      // Legacy dates (se migran a EVENT_DATES en ensureDefaults)
       dates: [{ label: "18-19 enero", seats: 12 }],
     },
     {
@@ -53,7 +55,8 @@
       type: "Coctelería",
       monthKey: "FEBRERO",
       title: "Cocteles Clásicos con Twist",
-      desc: "Aprendé técnica, balance y presentación con recetas clásicas reinterpretadas.",
+      description:
+        "Aprendé técnica, balance y presentación con recetas clásicas reinterpretadas.",
       img: "./assets/img/hero-2.jpg",
 
       location: "San José (por confirmar)",
@@ -68,7 +71,8 @@
       type: "Cata de vino",
       monthKey: "MARZO",
       title: "Ruta de Tintos",
-      desc: "Comparación de perfiles, cuerpo, taninos y maridajes para cada estilo.",
+      description:
+        "Comparación de perfiles, cuerpo, taninos y maridajes para cada estilo.",
       img: "./assets/img/hero-3.jpg",
 
       location: "Heredia (por confirmar)",
@@ -100,7 +104,7 @@
 
       badge: "NUEVO",
       title: "El Club del Vino viene pronto",
-      desc: "Acceso anticipado, experiencias privadas y maridajes exclusivos.",
+      description: "Acceso anticipado, experiencias privadas y maridajes exclusivos.",
 
       ctaLabel: "Unirme a la lista VIP",
       ctaHref:
@@ -124,7 +128,8 @@
 
       badge: "NUEVO",
       title: "🍷 Club del Vino (próximamente)",
-      desc: "Una comunidad para probar, aprender y compartir. Cupos limitados en el lanzamiento.",
+      description:
+        "Una comunidad para probar, aprender y compartir. Cupos limitados en el lanzamiento.",
       note: "Tip: si te unís ahora, te avisamos primero cuando esté la página lista.",
 
       ctaLabel: "Quiero estar adentro",
@@ -197,21 +202,13 @@
     return new Date().toISOString();
   }
 
-  // uuid local (se parece a Supabase)
   function uuid() {
     try {
       if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
     } catch (_) {}
-    // fallback (no perfecto, pero suficiente para local)
-    return (
-      "id_" +
-      Math.random().toString(16).slice(2) +
-      "_" +
-      Date.now().toString(16)
-    );
+    return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
   }
 
-  // ✅ Normaliza duración en horas (ej: "3", "3hrs", "3 hrs", "3h") => "3"
   function normalizeDurationHours(v) {
     const s = safeStr(v).trim().toLowerCase();
     if (!s) return "";
@@ -220,7 +217,6 @@
     return m[1].replace(",", ".");
   }
 
-  // ✅ duration (lo que ve event.html) = timeRange cuando exista; si no, usa duration legacy
   function pickSchedule(timeRange, legacyDuration) {
     const tr = safeStr(timeRange).trim();
     if (tr && tr !== "Por confirmar") return tr;
@@ -228,14 +224,11 @@
     return lg || "Por confirmar";
   }
 
-  // ✅ evita "javascript:" y basura rara en links
   function sanitizeHref(href) {
     const s = safeStr(href).trim();
     if (!s) return "#";
     const lower = s.toLowerCase();
     if (lower.startsWith("javascript:")) return "#";
-
-    // permitimos: http(s), wa.me, mailto, tel, hash, /ruta, ./ruta
     if (
       lower.startsWith("http://") ||
       lower.startsWith("https://") ||
@@ -245,17 +238,20 @@
       lower.startsWith("/") ||
       lower.startsWith("./")
     ) return s;
-
-    // wa.me sin protocolo
     if (lower.startsWith("wa.me/")) return "https://" + s;
+    return s;
+  }
 
-    return s; // default: lo dejamos (por si usás rutas internas)
+  // ✅ compat: si aún existe desc en datos viejos, lo toma como fallback
+  function pickDescription(raw) {
+    const d = safeStr(raw?.description ?? "").trim();
+    if (d) return d;
+    const old = safeStr(raw?.desc ?? "").trim();
+    return old;
   }
 
   // ============================================================
-  // ✅ EVENT_DATES (mapea tabla public.event_dates)
-  // Shape local:
-  // { id, event_id, label, seats_total, seats_available, created_at }
+  // EVENT_DATES (mapea tabla public.event_dates)
   // ============================================================
   function cleanEventDate(row) {
     const r = row || {};
@@ -265,7 +261,6 @@
     const label = safeStr(r.label).trim() || "Por definir";
     const seats_total = Math.max(0, Number(r.seats_total) || 0);
 
-    // si seats_available no viene, lo igualamos a total
     const seats_available_raw = Number(r.seats_available);
     const seats_available =
       Number.isFinite(seats_available_raw)
@@ -284,7 +279,6 @@
   ECN.setEventDatesRaw = function setEventDatesRaw(rows) {
     const clean = asArray(rows).map(cleanEventDate).filter((x) => !!x.event_id);
     writeJSON(ECN.LS.EVENT_DATES, clean);
-    // cada cambio a event_dates refresca legacy en events
     syncLegacyDatesIntoEvents();
     return clean;
   };
@@ -304,7 +298,6 @@
     const i = all.findIndex((x) => safeStr(x.id) === safeStr(next.id));
 
     if (i >= 0) {
-      // conserva created_at original
       next.created_at = safeStr(all[i]?.created_at || next.created_at);
       all[i] = next;
     } else {
@@ -332,9 +325,7 @@
   };
 
   // ============================================================
-  // Legacy sync: event_dates => events[].dates (para no romper el sitio público)
-  // events[].dates queda como:
-  //   [{ label, seats }] donde seats = seats_available
+  // Legacy sync: event_dates => events[].dates
   // ============================================================
   function syncLegacyDatesIntoEvents() {
     const events = asArray(readJSON(ECN.LS.EVENTS, []));
@@ -352,7 +343,6 @@
       const eid = safeStr(ev?.id);
       const rows = byEvent.get(eid) || [];
 
-      // derivamos legacy dates (label + seats available)
       const legacyDates = rows
         .slice()
         .sort((a, b) => safeStr(a.created_at).localeCompare(safeStr(b.created_at)))
@@ -361,16 +351,12 @@
           seats: Math.max(0, Number(r.seats_available) || 0),
         }));
 
-      return {
-        ...ev,
-        dates: legacyDates,
-      };
+      return { ...ev, dates: legacyDates };
     });
 
     writeJSON(ECN.LS.EVENTS, nextEvents);
   }
 
-  // Helper expuesto (por si admin-dates.js necesita forzar refresh)
   ECN.syncLegacyDates = function syncLegacyDates() {
     syncLegacyDatesIntoEvents();
   };
@@ -390,13 +376,12 @@
     const existing = readJSON(ECN.LS.EVENT_DATES, null);
     if (Array.isArray(existing) && existing.length) return;
 
-    // si no hay event_dates todavía, los creamos desde DEFAULT_EVENTS (o desde events si ya existen)
     const events = asArray(readJSON(ECN.LS.EVENTS, DEFAULT_EVENTS));
     const rows = [];
 
     events.forEach((ev) => {
       const eid = safeStr(ev?.id);
-      asArray(ev?.dates).forEach((d, idx) => {
+      asArray(ev?.dates).forEach((d) => {
         const seats = Math.max(0, Number(d?.seats) || 0);
         rows.push(
           cleanEventDate({
@@ -405,11 +390,10 @@
             label: safeStr(d?.label || "Por definir").trim(),
             seats_total: seats,
             seats_available: seats,
-            created_at: nowIso(), // en local no importa precisión
+            created_at: nowIso(),
           })
         );
       });
-      // no borramos legacy aquí; luego se sincroniza
     });
 
     writeJSON(ECN.LS.EVENT_DATES, rows);
@@ -437,7 +421,6 @@
       writeJSON(ECN.LS.PROMOS, DEFAULT_PROMOS);
     }
 
-    // ✅ nuevo: event_dates
     seedEventDatesFromLegacyIfMissing();
   };
 
@@ -445,8 +428,6 @@
   // Events API (RAW)
   // ============================================================
   ECN.getEventsRaw = function getEventsRaw() {
-    // aseguramos que legacy esté sincronizado si event_dates existe
-    // (por si alguien tocó event_dates directo)
     try {
       const hasDates = asArray(readJSON(ECN.LS.EVENT_DATES, [])).length > 0;
       if (hasDates) syncLegacyDatesIntoEvents();
@@ -471,7 +452,7 @@
         type: safeStr(ev?.type || "Cata de vino"),
         monthKey: normalizeMonth(ev?.monthKey || "ENERO"),
         title: safeStr(ev?.title || "Evento"),
-        desc: safeStr(ev?.desc || ""),
+        description: pickDescription(ev),
         img: safeStr(ev?.img || DEFAULT_MEDIA.defaultHero),
 
         location,
@@ -479,7 +460,6 @@
         durationHours,
         duration,
 
-        // ✅ legacy dates: dejamos lo que venga, pero normalmente se derivan de event_dates
         dates: asArray(ev?.dates).map((d) => ({
           label: safeStr(d?.label || "Por definir").trim(),
           seats: Math.max(0, Number(d?.seats) || 0),
@@ -489,7 +469,6 @@
 
     writeJSON(ECN.LS.EVENTS, clean);
 
-    // si ya hay event_dates, forzamos sync legacy desde event_dates para consistencia
     try {
       const hasDates = ECN.getEventDatesRaw().length > 0;
       if (hasDates) syncLegacyDatesIntoEvents();
@@ -503,12 +482,10 @@
     return events.find((e) => safeStr(e?.id) === safeStr(id)) || null;
   };
 
-  // alias usado por register.js / admin.js
   ECN.getEventById = function getEventById(id) {
     return ECN.getEventRawById(id);
   };
 
-  // Upsert (create/edit) para Admin
   ECN.upsertEvent = function upsertEvent(ev) {
     const raw = ev || {};
     const events = ECN.getEventsRaw();
@@ -530,7 +507,7 @@
       type: safeStr(raw.type || "Cata de vino"),
       monthKey: normalizeMonth(raw.monthKey || "ENERO"),
       title: safeStr(raw.title || "Evento"),
-      desc: safeStr(raw.desc || ""),
+      description: pickDescription(raw),
       img: safeStr(raw.img || DEFAULT_MEDIA.defaultHero),
 
       location,
@@ -538,7 +515,6 @@
       durationHours,
       duration,
 
-      // legacy dates se mantienen pero el source real será event_dates
       dates: asArray(raw.dates).map((d) => ({
         label: safeStr(d?.label || "Por definir").trim(),
         seats: Math.max(0, Number(d?.seats) || 0),
@@ -551,7 +527,6 @@
 
     ECN.setEventsRaw(events);
 
-    // ✅ Si el admin aún manda dates legacy, las migramos a event_dates SOLO si no hay fechas para ese evento
     const existingDates = ECN.getEventDatesByEventId(id);
     if (!existingDates.length && next.dates.length) {
       next.dates.forEach((d) => {
@@ -566,7 +541,6 @@
         });
       });
     } else {
-      // si ya hay event_dates, refrescamos legacy
       syncLegacyDatesIntoEvents();
     }
 
@@ -579,24 +553,17 @@
     const after = events.filter((e) => safeStr(e?.id) !== safeStr(id));
     ECN.setEventsRaw(after);
 
-    // ✅ cascade local: borrar fechas del evento
     ECN.deleteEventDatesByEventId(id);
 
     return after.length !== before;
   };
 
-  /**
-   * Descontar cupo por fecha
-   * - Nuevo: opera sobre event_dates (label)
-   * - Compat: actualiza legacy events[].dates automáticamente
-   */
   ECN.decrementSeat = function decrementSeat(eventId, dateLabel) {
     const eid = safeStr(eventId);
     const lab = safeStr(dateLabel);
 
     const rows = ECN.getEventDatesByEventId(eid);
     if (!rows.length) {
-      // fallback legacy (por si algo quedó viejo)
       const events = ECN.getEventsRaw();
       const i = events.findIndex((e) => safeStr(e?.id) === eid);
       if (i < 0) return false;
@@ -617,7 +584,6 @@
       return true;
     }
 
-    // buscar por label (MVP: label como identificador)
     const idx = rows.findIndex((r) => safeStr(r.label) === lab);
     if (idx < 0) return false;
 
@@ -626,7 +592,7 @@
     if (cur <= 0) return false;
 
     row.seats_available = cur - 1;
-    ECN.upsertEventDate(row); // esto ya sincroniza legacy
+    ECN.upsertEventDate(row);
 
     return true;
   };
@@ -649,7 +615,7 @@
       type: safeStr(raw.type || "Experiencia"),
       monthKey: normalizeMonth(raw.monthKey || "—"),
       title: safeStr(raw.title || "Evento"),
-      desc: safeStr(raw.desc || ""),
+      description: pickDescription(raw),
       img: safeStr(raw.img || ""),
 
       location: safeStr(raw.location || "Por confirmar"),
@@ -657,9 +623,9 @@
       durationHours,
       duration,
 
-      dates, // string[]
-      seats, // total disponible
-      _dates: datesObj, // legacy con seats disponibles
+      dates,
+      seats,
+      _dates: datesObj,
     };
   };
 
@@ -672,16 +638,10 @@
     return raw ? ECN.flattenEventForUI(raw) : null;
   };
 
-  // ============================================================
-  // Upcoming events (RAW) (alias usado por home.js)
-  // ============================================================
   ECN.getUpcomingEvents = function getUpcomingEvents() {
     return ECN.getEventsRaw();
   };
 
-  // ============================================================
-  // Months window (3 meses) (alias usado por home.js)
-  // ============================================================
   const MONTHS_ES = [
     "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
     "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE",
@@ -720,7 +680,7 @@
   };
 
   // ============================================================
-  // Regs API (oficial)
+  // Regs API
   // ============================================================
   ECN.getRegs = function getRegs() {
     const r = readJSON(ECN.LS.REGS, []);
@@ -743,7 +703,7 @@
   };
 
   // ============================================================
-  // Promos API (RAW) ✅ hardened
+  // Promos API
   // ============================================================
   function normalizePromoKind(k) {
     const v = safeStr(k).trim().toUpperCase();
@@ -763,7 +723,6 @@
     const createdAt = safeStr(raw.createdAt).trim() || nowIso();
     const updatedAt = nowIso();
 
-    // default active true cuando viene undefined (mejor UX en admin)
     const active = raw.active === undefined ? true : !!raw.active;
 
     return {
@@ -775,7 +734,7 @@
 
       badge: safeStr(raw.badge || ""),
       title: safeStr(raw.title || "Promo"),
-      desc: safeStr(raw.desc || ""),
+      description: pickDescription(raw),
       note: safeStr(raw.note || ""),
 
       ctaLabel: safeStr(raw.ctaLabel || "Conocer"),
@@ -860,7 +819,5 @@
   // Boot
   // ============================================================
   ECN.ensureDefaults();
-
-  // por si algo externo creó/alteró event_dates, sincronizamos legacy al cargar
   try { syncLegacyDatesIntoEvents(); } catch (_) {}
 })();
