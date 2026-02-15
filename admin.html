@@ -170,12 +170,14 @@
                       </div>
                     </div>
 
-                    <!-- ✅ NUEVO: VIDEO URL DESKTOP -->
+                    <!-- ✅ VIDEO URL DESKTOP -->
                     <div class="row">
                       <div class="field">
                         <label class="label" for="evVideoUrl">Video (url) — desktop (MP4/WebM)</label>
                         <input class="input" id="evVideoUrl" type="text" placeholder="https://…/hero.mp4" />
-                        <div class="mini">Tip: usá el tab <b>Medios</b>, seleccioná bucket <b>video</b> y pegá aquí la URL pública.</div>
+                        <div class="mini">
+                          Tip: usá el tab <b>Medios</b>, seleccioná bucket <b>video</b> y pegá aquí la URL pública.
+                        </div>
                       </div>
                       <div class="field">
                         <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
@@ -200,7 +202,7 @@
                       </div>
                     </div>
 
-                    <!-- ✅ NUEVO: PRECIO -->
+                    <!-- ✅ PRECIO -->
                     <div class="row">
                       <div class="field">
                         <label class="label" for="evPriceAmount">Precio</label>
@@ -350,13 +352,18 @@
                 <div class="card">
                   <div class="cardHead">
                     <h3 class="h3">Medios</h3>
-                    <div class="mini">Subí imágenes o videos (según bucket) y copiá la URL para usarla en Eventos/Promos.</div>
+                    <div class="mini">
+                      Subí imágenes o videos (según bucket) y copiá la URL para usarla en Eventos/Promos.
+                      <br />
+                      <b>Límite recomendado:</b> 25 MB por archivo.
+                    </div>
                   </div>
 
                   <!-- ✅ Compat -->
                   <div id="mediaEditorEmpty" class="empty" hidden>Seleccioná un ítem o subí uno nuevo.</div>
 
-                  <form class="form" id="mediaForm" autocomplete="off">
+                  <!-- ✅ data-max-mb: lo usa la validación de este HTML (y no rompe tu JS) -->
+                  <form class="form" id="mediaForm" autocomplete="off" data-max-mb="25">
                     <!-- ✅ Compat -->
                     <input type="hidden" id="mediaId" value="" />
                     <input type="hidden" id="mediaTitle" value="" />
@@ -366,11 +373,14 @@
                     <div class="field">
                       <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP/MP4/WebM)</label>
                       <input class="input" id="mediaFile" type="file" accept="image/*,video/*" required />
-                      <div class="mini">Tip: Si subís MP4/WebM, seleccioná bucket <b>video</b>.</div>
+                      <div class="mini">
+                        Tip: Si subís MP4/WebM, seleccioná bucket <b>video</b>.
+                        <span style="opacity:.85;">(Máx: <b>25 MB</b>)</span>
+                      </div>
                     </div>
 
                     <div class="row">
-                      <!-- ✅ NUEVO: BUCKET SELECTOR (PRO) -->
+                      <!-- ✅ BUCKET SELECTOR (PRO) -->
                       <div class="field">
                         <label class="label" for="mediaBucket">Bucket</label>
                         <select class="select" id="mediaBucket">
@@ -535,5 +545,89 @@
   <script src="./js/admin-media.js" defer></script>
   <script src="./js/admin-gallery.js" defer></script>
   <script src="./js/admin-promos.js" defer></script>
+
+  <!-- ✅ PATCH 2026-02-15: Validación tamaño de archivo (25MB) SOLO UI
+       - No rompe tu admin-media.js (no toca tus handlers, solo bloquea submit si excede).
+  -->
+  <script>
+    (function () {
+      "use strict";
+
+      const form = document.getElementById("mediaForm");
+      const file = document.getElementById("mediaFile");
+
+      // Si no existe, salimos.
+      if (!form || !file) return;
+
+      // Toast helper compatible con tu contenedor #toasts
+      const toastsEl = document.getElementById("toasts");
+      const escapeHtml = (s) =>
+        String(s ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+
+      const toast = (title, msg, timeout = 4200) => {
+        if (!toastsEl) return alert(title + " — " + msg);
+
+        const el = document.createElement("div");
+        el.className = "toast";
+        el.innerHTML = `
+          <div>
+            <p class="tTitle">${escapeHtml(title)}</p>
+            <p class="tMsg">${escapeHtml(msg)}</p>
+          </div>
+          <button class="close" aria-label="Cerrar">✕</button>
+        `;
+        toastsEl.appendChild(el);
+
+        const kill = () => {
+          try {
+            el.style.opacity = "0";
+            el.style.transform = "translateY(-6px)";
+            setTimeout(() => el.remove(), 180);
+          } catch (_) {}
+        };
+
+        el.querySelector(".close")?.addEventListener("click", kill, { once: true });
+        setTimeout(kill, timeout);
+      };
+
+      const getMaxBytes = () => {
+        const raw = form.getAttribute("data-max-mb");
+        const mb = Number(raw || 25);
+        const safe = Number.isFinite(mb) && mb > 0 ? mb : 25;
+        return safe * 1024 * 1024;
+      };
+
+      const fmtMB = (bytes) => (bytes / (1024 * 1024)).toFixed(2) + " MB";
+
+      // Validación al elegir archivo (feedback inmediato)
+      file.addEventListener("change", () => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+
+        const max = getMaxBytes();
+        if (f.size > max) {
+          toast("Archivo muy grande", `Máximo permitido: ${fmtMB(max)}. Tu archivo: ${fmtMB(f.size)}.`);
+        }
+      });
+
+      // Validación antes de subir (bloquea submit si excede)
+      form.addEventListener("submit", (e) => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+
+        const max = getMaxBytes();
+        if (f.size > max) {
+          e.preventDefault();
+          e.stopPropagation();
+          toast("No se puede subir", `El archivo excede ${fmtMB(max)}. Reducilo o exportalo más liviano.`);
+        }
+      }, true);
+    })();
+  </script>
 </body>
 </html>
