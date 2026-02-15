@@ -165,8 +165,21 @@
                         </select>
                       </div>
                       <div class="field">
-                        <label class="label" for="evImg">Imagen (url)</label>
+                        <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
                         <input class="input" id="evImg" type="text" placeholder="https://…" />
+                      </div>
+                    </div>
+
+                    <!-- ✅ NUEVO: VIDEO URL DESKTOP -->
+                    <div class="row">
+                      <div class="field">
+                        <label class="label" for="evVideoUrl">Video (url) — desktop (MP4/WebM)</label>
+                        <input class="input" id="evVideoUrl" type="text" placeholder="https://…/hero.mp4" />
+                        <div class="mini">Tip: usá bucket <b>video</b> (PUBLIC) y pegá aquí la URL pública.</div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
+                        <input class="input" id="evImg_dup" type="text" placeholder="(opcional) repetido para layout" hidden />
                       </div>
                     </div>
 
@@ -337,7 +350,7 @@
                 <div class="card">
                   <div class="cardHead">
                     <h3 class="h3">Medios</h3>
-                    <div class="mini">Subí imágenes al bucket <b>media</b> y copiá la URL para usarla en Eventos/Promos.</div>
+                    <div class="mini">Subí imágenes o videos (según bucket) y copiá la URL para usarla en Eventos/Promos.</div>
                   </div>
 
                   <!-- ✅ Compat -->
@@ -351,9 +364,9 @@
                     <input type="hidden" id="mediaTags" value="" />
 
                     <div class="field">
-                      <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP)</label>
-                      <input class="input" id="mediaFile" type="file" accept="image/*" required />
-                      <div class="mini">Recomendado: &lt; 6MB. Se genera URL pública automáticamente.</div>
+                      <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP/MP4/WebM)</label>
+                      <input class="input" id="mediaFile" type="file" accept="image/*,video/*" required />
+                      <div class="mini">Imágenes van a <b>media</b>. Videos recomendados a bucket <b>video</b>.</div>
                     </div>
 
                     <div class="row">
@@ -397,10 +410,10 @@
                 <div class="card">
                   <div class="cardHead">
                     <h3 class="h3">Vista previa</h3>
-                    <div class="mini">Verificá la imagen y luego copiá la URL.</div>
+                    <div class="mini">Verificá el archivo y luego copiá la URL.</div>
                   </div>
 
-                  <div class="empty" id="mediaPreviewEmpty">Seleccioná una imagen para previsualizar.</div>
+                  <div class="empty" id="mediaPreviewEmpty">Seleccioná un archivo para previsualizar.</div>
 
                   <div id="mediaPreview" hidden>
                     <img id="mediaPreviewImg" alt="Preview" style="width:100%; height:auto; border:1px solid rgba(255,255,255,.10);" />

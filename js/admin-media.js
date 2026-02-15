@@ -1,20 +1,22 @@
 /* ============================================================
-   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-01 FIX + AUTO COMPRESS + SETTINGS UI
-   - Bucket: "media" (PUBLIC recomendado)
-   - Sube imágenes y genera URL pública
-   - Lista objetos del bucket (por carpeta)
-   - Preview + copiar URL + eliminar
+   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 VIDEO PATCH
+   - Buckets:
+       - "media" (PUBLIC)   -> imágenes
+       - "video" (PUBLIC)   -> videos (MP4/WebM)
+   - ✅ Sube imágenes y videos y genera URL pública
+   - ✅ Lista ambos buckets (por carpeta) en una sola lista
+   - Preview (img/video) + copiar URL + eliminar (según bucket)
    - No usa DB (ideal para "copiar y pegar URL")
-   - ✅ Settings PRO (sin editar HTML):
+   - ✅ Settings PRO (solo aplica a imágenes):
        - Toggle Optimizar
-       - Forzar WebP (si el navegador soporta)
+       - Forzar WebP (si soporta)
        - Slider calidad
        - Guarda en localStorage
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-01-19.5";
+  const VERSION = "2026-02-15.2";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -28,12 +30,19 @@
   // ------------------------------------------------------------
   // Config
   // ------------------------------------------------------------
-  const BUCKET = "media";
-  const MAX_MB = 6;
-  const MAX_BYTES = MAX_MB * 1024 * 1024;
+  const BUCKET_IMG = "media";
+  const BUCKET_VID = "video";
+
+  // ✅ Límites separados (tu bucket video muestra 15MB)
+  const MAX_IMG_MB = 6;
+  const MAX_VID_MB = 15;
+
+  const MAX_IMG_BYTES = MAX_IMG_MB * 1024 * 1024;
+  const MAX_VID_BYTES = MAX_VID_MB * 1024 * 1024;
+
   const LIST_LIMIT = 60;
 
-  // ✅ Auto-compress config (default)
+  // ✅ Auto-compress config (solo imágenes)
   const COMPRESS_MAX_DIM_DEFAULT = 1920;
   const COMPRESS_QUALITY_DEFAULT = 0.82;
   const COMPRESS_MIN_BYTES = 900 * 1024;
@@ -117,18 +126,32 @@
       .replace(/^\-|\-$/g, "");
   }
 
+  function isVideoFile(file) {
+    return !!file && /^video\//i.test(file.type || "");
+  }
+  function isImageFile(file) {
+    return !!file && /^image\//i.test(file.type || "");
+  }
+
   function extFromNameOrMime(file) {
     const name = safeStr(file?.name || "");
     const m = safeStr(file?.type || "").toLowerCase();
-
     const fromName = (name.split(".").pop() || "").toLowerCase();
-    if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
 
+    // ✅ videos
+    if (["mp4", "webm"].includes(fromName)) return fromName;
+    if (m.includes("mp4")) return "mp4";
+    if (m.includes("webm")) return "webm";
+
+    // ✅ images
+    if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
     if (m.includes("webp")) return "webp";
     if (m.includes("png")) return "png";
     if (m.includes("gif")) return "gif";
     if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
-    return "jpg";
+
+    // fallback
+    return isVideoFile(file) ? "mp4" : "jpg";
   }
 
   function humanKB(bytes) {
@@ -191,20 +214,25 @@
     }
   }
 
-  function publicUrlFromPath(path) {
+  function publicUrlFromPath(bucket, path) {
     const sb = getSB();
+    const b = cleanSpaces(bucket);
     const p = cleanSpaces(path);
-    if (!sb || !p) return "";
+    if (!sb || !b || !p) return "";
     try {
-      const res = sb.storage.from(BUCKET).getPublicUrl(p);
+      const res = sb.storage.from(b).getPublicUrl(p);
       return res?.data?.publicUrl || "";
     } catch (_) {
       return "";
     }
   }
 
+  function pickBucketForFile(file) {
+    return isVideoFile(file) ? BUCKET_VID : BUCKET_IMG;
+  }
+
   // ------------------------------------------------------------
-  // ✅ Settings (localStorage)
+  // ✅ Settings (localStorage) — solo imágenes
   // ------------------------------------------------------------
   function readLS(key, fallback) {
     try {
@@ -217,9 +245,7 @@
   }
 
   function writeLS(key, value) {
-    try {
-      localStorage.setItem(key, String(value));
-    } catch (_) {}
+    try { localStorage.setItem(key, String(value)); } catch (_) {}
   }
 
   function loadSettings() {
@@ -231,7 +257,7 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ Auto-compress helpers (Canvas -> WebP/JPG)
+  // ✅ Auto-compress helpers (solo imágenes)
   // ------------------------------------------------------------
   function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
@@ -244,11 +270,8 @@
 
   function canvasToBlob(canvas, mime, quality) {
     return new Promise((resolve) => {
-      try {
-        canvas.toBlob((blob) => resolve(blob || null), mime, quality);
-      } catch (_) {
-        resolve(null);
-      }
+      try { canvas.toBlob((blob) => resolve(blob || null), mime, quality); }
+      catch (_) { resolve(null); }
     });
   }
 
@@ -304,7 +327,7 @@
     const maxDim = Math.round(clampNum(Number(opts?.maxDim ?? COMPRESS_MAX_DIM_DEFAULT), 800, 4096));
     const forceWebp = !!opts?.forceWebp;
 
-    // Solo imágenes
+    // ✅ Solo imágenes
     if (!file || !/^image\//.test(file.type)) return { file, changed: false, note: "" };
 
     const size = Number(file.size || 0);
@@ -320,7 +343,6 @@
     const w = info.width, h = info.height;
     const { tw, th, scale } = computeTargetSize(w, h, maxDim);
 
-    // si no requiere resize y además pesa poco -> no tocar
     if (scale === 1 && maybeSkipBySize) {
       try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
       return { file, changed: false, note: "" };
@@ -352,7 +374,6 @@
     let blob = await withTimeout(canvasToBlob(canvas, mime, quality), COMPRESS_TIMEOUT_MS).catch(() => null);
     if (!blob) return { file, changed: false, note: "" };
 
-    // Si recompress salió más pesada y no hubo resize, devolvemos original
     if (Number(blob.size || 0) >= size && scale === 1) {
       return { file, changed: false, note: "" };
     }
@@ -392,7 +413,6 @@
 
       previewEmpty: $("#mediaPreviewEmpty", panel),
       previewWrap: $("#mediaPreview", panel),
-      previewImg: $("#mediaPreviewImg", panel),
       previewMeta: $("#mediaPreviewMeta", panel),
 
       refreshBtn: $("#mediaRefreshBtn", panel),
@@ -416,11 +436,11 @@
     busy: false,
     previewUrl: "",
     lastUploadedPath: "",
+    lastUploadedBucket: "",
     list: [],
     currentFolder: "events",
     lastLoadedAt: 0,
     lastTabLoadAt: 0,
-
     settings: loadSettings(),
   };
 
@@ -428,7 +448,6 @@
     S.busy = !!on;
     const r = R();
 
-    // ✅ NO bloquear URL/copy: se ocupa copiar aunque esté subiendo
     try {
       const els = panel.querySelectorAll("input, select, button, textarea");
       els.forEach((el) => {
@@ -444,14 +463,12 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ Settings UI injection (sin tocar HTML)
+  // ✅ Settings UI injection (sin tocar HTML) — solo imágenes
   // ------------------------------------------------------------
   function ensureSettingsUI() {
     if (panel.querySelector('[data-media-settings="1"]')) return;
 
     const r = R();
-    const anchor = r.formEl || panel;
-
     const wrap = document.createElement("div");
     wrap.setAttribute("data-media-settings", "1");
     wrap.style.margin = "12px 0";
@@ -467,7 +484,7 @@
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
             <input type="checkbox" id="mediaOptToggle" ${S.settings.optimize ? "checked" : ""}>
-            <span style="opacity:.95;">Optimizar antes de subir</span>
+            <span style="opacity:.95;">Optimizar antes de subir (solo imágenes)</span>
           </label>
 
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; opacity:${webpOK ? "1" : ".55"};">
@@ -488,13 +505,13 @@
         <div style="opacity:.75; font-size:12px;">
           Resize máx: <b id="mediaMaxDimVal">${S.settings.maxDim}</b>px ·
           <span style="opacity:.75;">(automático)</span>
+          <span style="margin-left:10px; opacity:.75;">Buckets: <b>${BUCKET_IMG}</b> (img) + <b>${BUCKET_VID}</b> (video)</span>
         </div>
 
         <button type="button" class="btn" id="mediaResetSettingsBtn" style="white-space:nowrap;">Reset settings</button>
       </div>
     `;
 
-    // Insertar arriba del form (sin romper layout)
     try {
       if (r.formEl && r.formEl.parentNode) r.formEl.parentNode.insertBefore(wrap, r.formEl);
       else panel.insertBefore(wrap, panel.firstChild);
@@ -570,7 +587,7 @@
   }
 
   // ------------------------------------------------------------
-  // Preview
+  // Preview (img/video)
   // ------------------------------------------------------------
   function resetPreview() {
     const r = R();
@@ -578,7 +595,8 @@
       try { URL.revokeObjectURL(S.previewUrl); } catch (_) {}
       S.previewUrl = "";
     }
-    if (r.previewImg) r.previewImg.src = "";
+
+    if (r.previewWrap) r.previewWrap.innerHTML = "";
     if (r.previewMeta) r.previewMeta.textContent = "";
     if (r.previewWrap) r.previewWrap.hidden = true;
     if (r.previewEmpty) r.previewEmpty.hidden = false;
@@ -591,15 +609,36 @@
     try { if (S.previewUrl) URL.revokeObjectURL(S.previewUrl); } catch (_) {}
     S.previewUrl = URL.createObjectURL(file);
 
-    if (r.previewImg) {
-      r.previewImg.src = S.previewUrl;
-      r.previewImg.alt = file.name || "Preview";
+    if (r.previewWrap) {
+      r.previewWrap.innerHTML = "";
+
+      if (isVideoFile(file)) {
+        const v = document.createElement("video");
+        v.src = S.previewUrl;
+        v.muted = true;
+        v.loop = true;
+        v.playsInline = true;
+        v.autoplay = true;
+        v.controls = true;
+        v.style.width = "100%";
+        v.style.height = "auto";
+        v.style.border = "1px solid rgba(255,255,255,.10)";
+        r.previewWrap.appendChild(v);
+      } else {
+        const img = document.createElement("img");
+        img.src = S.previewUrl;
+        img.alt = file.name || "Preview";
+        img.style.width = "100%";
+        img.style.height = "auto";
+        img.style.border = "1px solid rgba(255,255,255,.10)";
+        r.previewWrap.appendChild(img);
+      }
     }
 
     const meta = [
       file.name || "archivo",
       humanKB(file.size),
-      (file.type || "image/*"),
+      (file.type || "*/*"),
       fmtShortDate(Date.now()),
     ].join(" · ");
 
@@ -610,16 +649,17 @@
   }
 
   // ------------------------------------------------------------
-  // Storage ops
+  // Storage ops (multi-bucket)
   // ------------------------------------------------------------
-  async function listFolder(folder) {
+  async function listFolderFromBucket(bucket, folder) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
+    const b = cleanSpaces(bucket);
     const f = sanitizeFolder(folder);
 
     const { data, error } = await sb.storage
-      .from(BUCKET)
+      .from(b)
       .list(f, { limit: LIST_LIMIT, offset: 0, sortBy: { column: "updated_at", order: "desc" } });
 
     if (error) throw error;
@@ -631,32 +671,53 @@
         const path = `${f}/${x.name}`;
         const updated = x.updated_at || x.created_at || x.last_accessed_at || "";
         return {
+          bucket: b,
           name: x.name,
           path,
-          url: publicUrlFromPath(path),
+          url: publicUrlFromPath(b, path),
           updated_at: updated,
           size: x.metadata?.size || 0,
           mime: x.metadata?.mimetype || "",
         };
-      })
-      .sort((a, b) => safeStr(b.updated_at).localeCompare(safeStr(a.updated_at)));
+      });
   }
 
-  async function uploadFile(file, folder, customName) {
+  async function listFolder(folder) {
+    const f = sanitizeFolder(folder);
+
+    // Mezcla: imágenes (media) + videos (video)
+    const [a, b] = await Promise.allSettled([
+      listFolderFromBucket(BUCKET_IMG, f),
+      listFolderFromBucket(BUCKET_VID, f),
+    ]);
+
+    const imgList = a.status === "fulfilled" ? a.value : [];
+    const vidList = b.status === "fulfilled" ? b.value : [];
+
+    const all = []
+      .concat(imgList, vidList)
+      .filter(Boolean)
+      .sort((x, y) => safeStr(y.updated_at).localeCompare(safeStr(x.updated_at)));
+
+    return all;
+  }
+
+  async function uploadFile(bucket, file, folder, customName) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
+    const b = cleanSpaces(bucket);
     const f = sanitizeFolder(folder);
     const ext = extFromNameOrMime(file);
 
     const base =
       slugify(customName) ||
       slugify(String(file.name || "").replace(/\.[a-z0-9]+$/i, "")) ||
-      "img";
+      "media";
 
     const path = `${f}/${base}_${Date.now()}.${ext}`;
 
-    const { error } = await sb.storage.from(BUCKET).upload(path, file, {
+    const { error } = await sb.storage.from(b).upload(path, file, {
       cacheControl: "3600",
       upsert: false,
     });
@@ -665,22 +726,29 @@
     return path;
   }
 
-  async function deleteObject(path) {
+  async function deleteObject(bucket, path) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
+    const b = cleanSpaces(bucket);
     const p = cleanSpaces(path);
-    if (!p) return;
+    if (!b || !p) return;
 
-    const { error } = await sb.storage.from(BUCKET).remove([p]);
+    const { error } = await sb.storage.from(b).remove([p]);
     if (error) throw error;
     return true;
   }
 
   // ------------------------------------------------------------
-  // Render list
+  // Render list (img/video)
   // ------------------------------------------------------------
   function esc(s) { return escapeHtml(safeStr(s)); }
+
+  function isVideoPathOrMime(it) {
+    const name = safeStr(it?.name || "").toLowerCase();
+    const mime = safeStr(it?.mime || "").toLowerCase();
+    return mime.startsWith("video/") || name.endsWith(".mp4") || name.endsWith(".webm");
+  }
 
   function renderList() {
     const r = R();
@@ -694,7 +762,7 @@
         <div class="item" style="cursor:default;">
           <div>
             <p class="itemTitle">Sin archivos en <b>${esc(S.currentFolder)}</b></p>
-            <p class="itemMeta">Subí una imagen para que aparezca aquí.</p>
+            <p class="itemMeta">Subí un medio para que aparezca aquí (media + video).</p>
           </div>
         </div>`;
       return;
@@ -703,19 +771,27 @@
     const frag = document.createDocumentFragment();
 
     arr.forEach((it) => {
+      const isVid = isVideoPathOrMime(it);
+
+      const thumb = isVid
+        ? `<video src="${esc(it.url)}" muted playsinline preload="metadata"
+             style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;"></video>`
+        : `<img src="${esc(it.url)}" alt="${esc(it.name)}"
+             style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;" loading="lazy">`;
+
       const row = document.createElement("div");
       row.className = "item";
+      row.dataset.bucket = it.bucket || "";
       row.dataset.path = it.path || "";
       row.dataset.url = it.url || "";
 
       row.innerHTML = `
         <div style="display:flex; gap:12px; align-items:flex-start; width:100%;">
-          <img src="${esc(it.url)}" alt="${esc(it.name)}"
-               style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;" loading="lazy">
+          ${thumb}
           <div style="flex:1 1 auto;">
             <p class="itemTitle">${esc(it.name)}</p>
-            <p class="itemMeta">${esc(fmtShortDate(it.updated_at))} · ${esc(humanKB(it.size))}</p>
-            <p class="itemMeta" style="opacity:.75;">${esc(it.path)}</p>
+            <p class="itemMeta">${esc(fmtShortDate(it.updated_at))} · ${esc(humanKB(it.size))} · ${esc(it.mime || (isVid ? "video/*" : "image/*"))}</p>
+            <p class="itemMeta" style="opacity:.75;">${esc(it.bucket)} · ${esc(it.path)}</p>
           </div>
           <div class="pills" style="justify-content:flex-end; flex:0 0 auto;">
             <button class="btn" type="button" data-act="use">Usar</button>
@@ -763,11 +839,11 @@
       console.error("[admin-media]", err);
 
       if (looksLikeRLSError(err)) {
-        toast("RLS", "Acceso bloqueado. Revisá policies del bucket media (SELECT/INSERT/DELETE).", 5200);
+        toast("RLS", `Acceso bloqueado. Revisá policies de buckets (${BUCKET_IMG}/${BUCKET_VID}).`, 5200);
       } else if (looksLikeStorageError(err)) {
-        toast("Storage", "Error en bucket media (existe? policies? nombre?).", 5200);
+        toast("Storage", `Error en buckets (${BUCKET_IMG}/${BUCKET_VID}). (existen? policies? nombre?)`, 5200);
       } else {
-        toast("Error", "No se pudo cargar la lista del bucket media.", 4200);
+        toast("Error", "No se pudo cargar la lista de Storage.", 4200);
       }
     }
   }
@@ -802,7 +878,6 @@
       const ok = document.execCommand("copy");
       ta.remove();
       toast("Copiado", ok ? "URL copiada al portapapeles." : "Copiala manualmente.", 2200);
-      return;
     } catch (_) {
       toast("Copiar", "No pude acceder al portapapeles. Copiala manualmente.", 2800);
     }
@@ -816,15 +891,21 @@
     const f = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
     if (!f) { resetPreview(); return; }
 
-    if (!/^image\//.test(f.type)) {
-      toast("Archivo inválido", "Seleccioná una imagen (JPG/PNG/WebP).");
+    const isImg = isImageFile(f);
+    const isVid = isVideoFile(f);
+
+    if (!isImg && !isVid) {
+      toast("Archivo inválido", "Seleccioná una imagen (JPG/PNG/WebP) o un video (MP4/WebM).");
       try { r.fileInp.value = ""; } catch (_) {}
       resetPreview();
       return;
     }
 
-    if (Number(f.size || 0) > MAX_BYTES) {
-      toast("Muy pesada", `La imagen pesa ${humanKB(f.size)}. Usá una menor a ~${MAX_MB}MB.`);
+    const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
+    const maxMb = isVid ? MAX_VID_MB : MAX_IMG_MB;
+
+    if (Number(f.size || 0) > maxBytes) {
+      toast("Muy pesado", `El archivo pesa ${humanKB(f.size)}. Usá uno menor a ~${maxMb}MB.`);
       try { r.fileInp.value = ""; } catch (_) {}
       resetPreview();
       return;
@@ -840,7 +921,15 @@
     const originalFile = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
 
     if (!originalFile) {
-      toast("Falta imagen", "Seleccioná una imagen antes de subir.");
+      toast("Falta archivo", "Seleccioná un archivo antes de subir.");
+      return;
+    }
+
+    const isVid = isVideoFile(originalFile);
+    const isImg = isImageFile(originalFile);
+
+    if (!isVid && !isImg) {
+      toast("Formato no soportado", "Solo imágenes (JPG/PNG/WebP) o videos (MP4/WebM).");
       return;
     }
 
@@ -849,36 +938,42 @@
 
     setBusy(true);
     try {
-      setNote("Optimizando imagen…", "info");
-
       let fileToUpload = originalFile;
 
-      // ✅ compresión automática con settings
-      try {
-        const out = await compressImageSmart(originalFile, S.settings);
-        if (out && out.file) {
-          fileToUpload = out.file;
-          if (out.changed) {
-            const from = out?.meta?.from;
-            const to = out?.meta?.to;
-            const q = Math.round((out?.meta?.quality || S.settings.quality) * 100);
-            const md = out?.meta?.maxDim || S.settings.maxDim;
+      // ✅ solo imágenes se optimizan
+      if (isImg) {
+        setNote("Optimizando imagen…", "info");
+        try {
+          const out = await compressImageSmart(originalFile, S.settings);
+          if (out && out.file) {
+            fileToUpload = out.file;
+            if (out.changed) {
+              const from = out?.meta?.from;
+              const to = out?.meta?.to;
+              const q = Math.round((out?.meta?.quality || S.settings.quality) * 100);
+              const md = out?.meta?.maxDim || S.settings.maxDim;
 
-            const msg =
-              `${out.note} · Q${q} · Max ${md}px ` +
-              `(${humanKB(from?.size)} → ${humanKB(to?.size)} | ${from?.w}×${from?.h} → ${to?.w}×${to?.h})`;
+              const msg =
+                `${out.note} · Q${q} · Max ${md}px ` +
+                `(${humanKB(from?.size)} → ${humanKB(to?.size)} | ${from?.w}×${from?.h} → ${to?.w}×${to?.h})`;
 
-            setNote(msg, "ok");
-          } else {
-            setNote("Imagen lista (sin cambios).", "ok");
+              setNote(msg, "ok");
+            } else {
+              setNote("Imagen lista (sin cambios).", "ok");
+            }
           }
+        } catch (_) {
+          setNote("Imagen lista (sin optimización).", "ok");
         }
-      } catch (_) {
-        setNote("Imagen lista (sin optimización).", "ok");
+      } else {
+        setNote(`Video listo para subir (bucket: ${BUCKET_VID}).`, "ok");
       }
 
-      if (Number(fileToUpload.size || 0) > MAX_BYTES) {
-        toast("Muy pesada", `Luego de optimizar, pesa ${humanKB(fileToUpload.size)}. Probá con otra imagen.`, 4200);
+      // validación final tamaño
+      const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
+      const maxMb = isVid ? MAX_VID_MB : MAX_IMG_MB;
+      if (Number(fileToUpload.size || 0) > maxBytes) {
+        toast("Muy pesado", `El archivo pesa ${humanKB(fileToUpload.size)}. Probá uno < ${maxMb}MB.`, 4200);
         setNote("⚠️ Archivo excede el límite.", "warn");
         return;
       }
@@ -887,14 +982,17 @@
       const s = await ensureSession();
       if (!s) return;
 
-      const path = await uploadFile(fileToUpload, folder, customName);
-      const url = publicUrlFromPath(path);
+      const bucket = pickBucketForFile(originalFile);
+      const path = await uploadFile(bucket, fileToUpload, folder, customName);
+      const url = publicUrlFromPath(bucket, path);
 
+      S.lastUploadedBucket = bucket;
       S.lastUploadedPath = path;
+
       if (r.urlInp) r.urlInp.value = url || "";
 
-      setNote("Listo. URL pública generada.", "ok");
-      toast("Subido", "Imagen subida y URL lista para copiar.", 2200);
+      setNote(`Listo. URL pública generada (${bucket}).`, "ok");
+      toast("Subido", isVid ? "Video subido (bucket video) y URL lista." : "Imagen subida (bucket media) y URL lista.", 2200);
 
       await refreshList({ silent: true, force: true });
 
@@ -905,11 +1003,11 @@
       setNote("", "");
 
       if (looksLikeRLSError(err)) {
-        toast("RLS", "Bloqueado. Falta policy INSERT en bucket media para authenticated.", 5200);
+        toast("RLS", `Bloqueado. Falta policy INSERT en buckets (${BUCKET_IMG}/${BUCKET_VID}) para authenticated.`, 5200);
       } else if (looksLikeStorageError(err)) {
-        toast("Storage", "Error en bucket media (policies / nombre / ruta).", 5200);
+        toast("Storage", `Error en Storage (${BUCKET_IMG}/${BUCKET_VID}) (policies / nombre / ruta).`, 5200);
       } else {
-        toast("Error", "No se pudo subir la imagen.", 4200);
+        toast("Error", "No se pudo subir el archivo.", 4200);
       }
     } finally {
       setBusy(false);
@@ -933,6 +1031,7 @@
     if (!row) return;
 
     const act = btn.dataset.act;
+    const bucket = row.dataset.bucket || "";
     const path = row.dataset.path || "";
     const url = row.dataset.url || "";
 
@@ -942,12 +1041,37 @@
       if (r.urlInp) r.urlInp.value = url || "";
       setNote("URL lista. Pegala en Eventos/Promos/Galería.", "ok");
 
-      if (r.previewImg && url) {
+      // preview desde URL (img/video)
+      if (r.previewWrap && url) {
         if (r.previewEmpty) r.previewEmpty.hidden = true;
-        if (r.previewWrap) r.previewWrap.hidden = false;
-        r.previewImg.src = url;
-        r.previewImg.alt = "Seleccionada";
-        if (r.previewMeta) r.previewMeta.textContent = `${path} · ${fmtShortDate(Date.now())}`;
+        r.previewWrap.hidden = false;
+        r.previewWrap.innerHTML = "";
+
+        const isVid = /\.(mp4|webm)(\?|#|$)/i.test(url);
+
+        if (isVid) {
+          const v = document.createElement("video");
+          v.src = url;
+          v.muted = true;
+          v.loop = true;
+          v.playsInline = true;
+          v.autoplay = true;
+          v.controls = true;
+          v.style.width = "100%";
+          v.style.height = "auto";
+          v.style.border = "1px solid rgba(255,255,255,.10)";
+          r.previewWrap.appendChild(v);
+        } else {
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "Seleccionada";
+          img.style.width = "100%";
+          img.style.height = "auto";
+          img.style.border = "1px solid rgba(255,255,255,.10)";
+          r.previewWrap.appendChild(img);
+        }
+
+        if (r.previewMeta) r.previewMeta.textContent = `${bucket} · ${path} · ${fmtShortDate(Date.now())}`;
       }
 
       toast("Seleccionada", "URL cargada en el campo.", 1600);
@@ -960,7 +1084,7 @@
     }
 
     if (act === "delete") {
-      const ok = confirm(`¿Eliminar este archivo?\n\n${path}\n\n(Se borra del bucket media)`);
+      const ok = confirm(`¿Eliminar este archivo?\n\n${bucket} :: ${path}\n\n(Se borra del bucket correspondiente)`);
       if (!ok) return;
 
       setBusy(true);
@@ -968,7 +1092,7 @@
         const s = await ensureSession();
         if (!s) return;
 
-        await deleteObject(path);
+        await deleteObject(bucket, path);
 
         if (cleanSpaces(r.urlInp?.value || "") === cleanSpaces(url)) {
           if (r.urlInp) r.urlInp.value = "";
@@ -978,7 +1102,7 @@
         await refreshList({ silent: true, force: true });
       } catch (err) {
         console.error(err);
-        if (looksLikeRLSError(err)) toast("RLS", "Bloqueado. Falta policy DELETE en bucket media.", 5200);
+        if (looksLikeRLSError(err)) toast("RLS", `Bloqueado. Falta policy DELETE en buckets (${BUCKET_IMG}/${BUCKET_VID}).`, 5200);
         else toast("Error", "No se pudo eliminar el archivo.", 4200);
       } finally {
         setBusy(false);
@@ -1000,7 +1124,6 @@
       return;
     }
 
-    // ✅ Settings UI (sin editar HTML)
     ensureSettingsUI();
 
     r.fileInp.addEventListener("change", onFileChange);
@@ -1032,11 +1155,9 @@
       return;
     }
 
-    // refrescar settings en cada boot
     S.settings = loadSettings();
-
     bindOnce();
-    console.log("[admin-media] boot", { VERSION, BUCKET });
+    console.log("[admin-media] boot", { VERSION, BUCKET_IMG, BUCKET_VID });
   }
 
   // ------------------------------------------------------------
@@ -1052,20 +1173,17 @@
     if (now - S.lastTabLoadAt < 300) return;
     S.lastTabLoadAt = now;
 
-    // por si cambió algo en otro refresh
     S.settings = loadSettings();
     ensureSettingsUI();
 
     await refreshList({ silent: true, force: false });
   }
 
-  // init wiring
   if (window.APP && APP.__adminReady) boot();
   else window.addEventListener("admin:ready", boot, { once: true });
 
   window.addEventListener("admin:tab", onTab);
 
-  // Si el usuario ya cae con media activa (hard refresh)
   try {
     const btn = document.querySelector('.tab[data-tab="media"]');
     const selected = btn ? btn.getAttribute("aria-selected") === "true" : false;
