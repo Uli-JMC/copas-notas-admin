@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-15.4";
+  const VERSION = "2026-02-15.5";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -36,9 +36,9 @@
   const BUCKET_IMG = "media";
   const BUCKET_VID = "video";
 
-  // ✅ Límites separados
-  const MAX_IMG_MB = 6;
-  const MAX_VID_MB = 15;
+  // ✅ Límites separados (ACTUALIZADO a 25MB)
+  const MAX_IMG_MB = 25;
+  const MAX_VID_MB = 25;
 
   const MAX_IMG_BYTES = MAX_IMG_MB * 1024 * 1024;
   const MAX_VID_BYTES = MAX_VID_MB * 1024 * 1024;
@@ -483,22 +483,16 @@
     const r = R();
     const b = normalizeBucket(bucket);
 
-    // Ajusta accept para evitar errores de selección
     if (r.fileInp) {
       r.fileInp.accept = (b === BUCKET_VID) ? "video/*" : "image/*,video/*";
-      // Nota: dejamos video/* habilitado siempre por si el user lo escoge primero,
-      // pero el bucket dirige el flujo.
-      // Si querés ultra estricto, cambiá media a: "image/*"
       if (b === BUCKET_IMG) r.fileInp.accept = "image/*,video/*";
       if (b === BUCKET_VID) r.fileInp.accept = "video/*";
     }
 
-    // Hint visual (sin tocar HTML)
     setBucketHint(b);
   }
 
   function setBucketHint(bucket) {
-    // Inyecta/actualiza un hint pequeño debajo del selector de bucket
     const r = R();
     if (!r.bucketSel) return;
 
@@ -514,7 +508,6 @@
       hint.style.border = "1px solid rgba(255,255,255,.10)";
       hint.style.background = "rgba(255,255,255,.03)";
 
-      // lo ponemos justo después del select (dentro del mismo field)
       const field = r.bucketSel.closest(".field");
       if (field) field.appendChild(hint);
       else r.bucketSel.parentNode?.appendChild(hint);
@@ -522,10 +515,10 @@
 
     const isVid = normalizeBucket(bucket) === BUCKET_VID;
     if (isVid) {
-      hint.textContent = "Bucket video: sin optimización. Recomendado MP4/WebM (≤ ~15MB).";
+      hint.textContent = `Bucket video: sin optimización. Recomendado MP4/WebM (≤ ~${MAX_VID_MB}MB).`;
       hint.style.opacity = "1";
     } else {
-      hint.textContent = "Bucket media: imágenes. Optimización disponible (WebP/JPG) antes de subir.";
+      hint.textContent = `Bucket media: imágenes. Optimización disponible (WebP/JPG) antes de subir (≤ ~${MAX_IMG_MB}MB).`;
       hint.style.opacity = ".85";
     }
   }
@@ -1011,7 +1004,7 @@
     try {
       let fileToUpload = originalFile;
 
-      // ✅ solo imágenes se optimizan (aunque el accept permita seleccionar video)
+      // ✅ solo imágenes se optimizan
       if (isImg) {
         setNote("Optimizando imagen…", "info");
         try {
@@ -1091,7 +1084,6 @@
     setNote("", "");
     resetPreview();
 
-    // re-aplica accept según bucket actual
     const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
     applyAcceptForBucket(b);
 
@@ -1116,7 +1108,6 @@
       if (r.urlInp) r.urlInp.value = url || "";
       setNote("URL lista. Pegala en Eventos/Promos/Galería.", "ok");
 
-      // preview desde URL (img/video)
       if (r.previewWrap && url) {
         if (r.previewEmpty) r.previewEmpty.hidden = true;
         r.previewWrap.hidden = false;
@@ -1201,11 +1192,9 @@
 
     ensureSettingsUI();
 
-    // defaults
     S.currentBucket = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
     S.currentFolder = sanitizeFolder(r.folderSel.value || "events");
 
-    // aplica accept/hint inicial
     applyAcceptForBucket(S.currentBucket);
 
     r.fileInp.addEventListener("change", onFileChange);
@@ -1245,7 +1234,7 @@
 
     S.settings = loadSettings();
     bindOnce();
-    console.log("[admin-media] boot", { VERSION, BUCKET_IMG, BUCKET_VID });
+    console.log("[admin-media] boot", { VERSION, BUCKET_IMG, BUCKET_VID, MAX_IMG_MB, MAX_VID_MB });
   }
 
   // ------------------------------------------------------------
