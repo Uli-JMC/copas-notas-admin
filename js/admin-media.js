@@ -1,11 +1,11 @@
 /* ============================================================
-   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 VIDEO PATCH
+   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 VIDEO PRO PATCH
    - Buckets:
        - "media" (PUBLIC)   -> imágenes
        - "video" (PUBLIC)   -> videos (MP4/WebM)
-   - ✅ Sube imágenes y videos y genera URL pública
-   - ✅ Lista ambos buckets (por carpeta) en una sola lista
-   - Preview (img/video) + copiar URL + eliminar (según bucket)
+   - ✅ Selector PRO: #mediaBucket (sube/lista/borrar por bucket seleccionado)
+   - ✅ Auto-switch: si el archivo es video -> selecciona "video"; si es imagen -> "media"
+   - Preview (img/video) + copiar URL + eliminar
    - No usa DB (ideal para "copiar y pegar URL")
    - ✅ Settings PRO (solo aplica a imágenes):
        - Toggle Optimizar
@@ -16,7 +16,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-15.2";
+  const VERSION = "2026-02-15.3";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -33,7 +33,7 @@
   const BUCKET_IMG = "media";
   const BUCKET_VID = "video";
 
-  // ✅ Límites separados (tu bucket video muestra 15MB)
+  // ✅ Límites separados
   const MAX_IMG_MB = 6;
   const MAX_VID_MB = 15;
 
@@ -227,8 +227,10 @@
     }
   }
 
-  function pickBucketForFile(file) {
-    return isVideoFile(file) ? BUCKET_VID : BUCKET_IMG;
+  function normalizeBucket(b) {
+    const v = cleanSpaces(b || "").toLowerCase();
+    if (v === BUCKET_VID) return BUCKET_VID;
+    return BUCKET_IMG;
   }
 
   // ------------------------------------------------------------
@@ -402,7 +404,10 @@
     return {
       formEl: $("#mediaForm", panel),
       fileInp: $("#mediaFile", panel),
+
+      bucketSel: $("#mediaBucket", panel),
       folderSel: $("#mediaFolder", panel),
+
       nameInp: $("#mediaName", panel),
       urlInp: $("#mediaUrl", panel),
 
@@ -434,13 +439,19 @@
     didBind: false,
     didBoot: false,
     busy: false,
+
     previewUrl: "",
+
     lastUploadedPath: "",
     lastUploadedBucket: "",
+
     list: [],
     currentFolder: "events",
+    currentBucket: BUCKET_IMG,
+
     lastLoadedAt: 0,
     lastTabLoadAt: 0,
+
     settings: loadSettings(),
   };
 
@@ -468,7 +479,6 @@
   function ensureSettingsUI() {
     if (panel.querySelector('[data-media-settings="1"]')) return;
 
-    const r = R();
     const wrap = document.createElement("div");
     wrap.setAttribute("data-media-settings", "1");
     wrap.style.margin = "12px 0";
@@ -505,7 +515,7 @@
         <div style="opacity:.75; font-size:12px;">
           Resize máx: <b id="mediaMaxDimVal">${S.settings.maxDim}</b>px ·
           <span style="opacity:.75;">(automático)</span>
-          <span style="margin-left:10px; opacity:.75;">Buckets: <b>${BUCKET_IMG}</b> (img) + <b>${BUCKET_VID}</b> (video)</span>
+          <span style="margin-left:10px; opacity:.75;">Buckets: <b>${BUCKET_IMG}</b> (img) / <b>${BUCKET_VID}</b> (video)</span>
         </div>
 
         <button type="button" class="btn" id="mediaResetSettingsBtn" style="white-space:nowrap;">Reset settings</button>
@@ -513,6 +523,7 @@
     `;
 
     try {
+      const r = R();
       if (r.formEl && r.formEl.parentNode) r.formEl.parentNode.insertBefore(wrap, r.formEl);
       else panel.insertBefore(wrap, panel.firstChild);
     } catch (_) {
@@ -649,13 +660,13 @@
   }
 
   // ------------------------------------------------------------
-  // Storage ops (multi-bucket)
+  // Storage ops (bucket seleccionado)
   // ------------------------------------------------------------
   async function listFolderFromBucket(bucket, folder) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
-    const b = cleanSpaces(bucket);
+    const b = normalizeBucket(bucket);
     const f = sanitizeFolder(folder);
 
     const { data, error } = await sb.storage
@@ -679,34 +690,15 @@
           size: x.metadata?.size || 0,
           mime: x.metadata?.mimetype || "",
         };
-      });
-  }
-
-  async function listFolder(folder) {
-    const f = sanitizeFolder(folder);
-
-    // Mezcla: imágenes (media) + videos (video)
-    const [a, b] = await Promise.allSettled([
-      listFolderFromBucket(BUCKET_IMG, f),
-      listFolderFromBucket(BUCKET_VID, f),
-    ]);
-
-    const imgList = a.status === "fulfilled" ? a.value : [];
-    const vidList = b.status === "fulfilled" ? b.value : [];
-
-    const all = []
-      .concat(imgList, vidList)
-      .filter(Boolean)
-      .sort((x, y) => safeStr(y.updated_at).localeCompare(safeStr(x.updated_at)));
-
-    return all;
+      })
+      .sort((a, b) => safeStr(b.updated_at).localeCompare(safeStr(a.updated_at)));
   }
 
   async function uploadFile(bucket, file, folder, customName) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
-    const b = cleanSpaces(bucket);
+    const b = normalizeBucket(bucket);
     const f = sanitizeFolder(folder);
     const ext = extFromNameOrMime(file);
 
@@ -723,14 +715,14 @@
     });
     if (error) throw error;
 
-    return path;
+    return { bucket: b, path };
   }
 
   async function deleteObject(bucket, path) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
-    const b = cleanSpaces(bucket);
+    const b = normalizeBucket(bucket);
     const p = cleanSpaces(path);
     if (!b || !p) return;
 
@@ -761,8 +753,8 @@
       r.listEl.innerHTML = `
         <div class="item" style="cursor:default;">
           <div>
-            <p class="itemTitle">Sin archivos en <b>${esc(S.currentFolder)}</b></p>
-            <p class="itemMeta">Subí un medio para que aparezca aquí (media + video).</p>
+            <p class="itemTitle">Sin archivos en <b>${esc(S.currentBucket)}/${esc(S.currentFolder)}</b></p>
+            <p class="itemMeta">Subí un medio para que aparezca aquí.</p>
           </div>
         </div>`;
       return;
@@ -827,11 +819,14 @@
 
       const r = R();
       const folder = sanitizeFolder(r.folderSel?.value || S.currentFolder || "events");
+      const bucket = normalizeBucket(r.bucketSel?.value || S.currentBucket || BUCKET_IMG);
+
       S.currentFolder = folder;
+      S.currentBucket = bucket;
 
       if (!silent) toast("Media", "Cargando…", 800);
 
-      S.list = await listFolder(folder);
+      S.list = await listFolderFromBucket(bucket, folder);
       renderList();
 
       if (!silent) toast("Listo", "Media actualizada.", 900);
@@ -839,9 +834,9 @@
       console.error("[admin-media]", err);
 
       if (looksLikeRLSError(err)) {
-        toast("RLS", `Acceso bloqueado. Revisá policies de buckets (${BUCKET_IMG}/${BUCKET_VID}).`, 5200);
+        toast("RLS", `Acceso bloqueado. Revisá policies del bucket (${S.currentBucket}).`, 5200);
       } else if (looksLikeStorageError(err)) {
-        toast("Storage", `Error en buckets (${BUCKET_IMG}/${BUCKET_VID}). (existen? policies? nombre?)`, 5200);
+        toast("Storage", `Error en bucket (${S.currentBucket}). (existe? policies? nombre?)`, 5200);
       } else {
         toast("Error", "No se pudo cargar la lista de Storage.", 4200);
       }
@@ -901,6 +896,12 @@
       return;
     }
 
+    // ✅ Auto-switch bucket
+    if (r.bucketSel) {
+      r.bucketSel.value = isVid ? BUCKET_VID : BUCKET_IMG;
+      S.currentBucket = normalizeBucket(r.bucketSel.value);
+    }
+
     const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
     const maxMb = isVid ? MAX_VID_MB : MAX_IMG_MB;
 
@@ -935,6 +936,15 @@
 
     const folder = sanitizeFolder(r.folderSel?.value || "events");
     const customName = cleanSpaces(r.nameInp?.value || "");
+
+    // ✅ bucket elegido (PRO)
+    let bucket = normalizeBucket(r.bucketSel?.value || (isVid ? BUCKET_VID : BUCKET_IMG));
+
+    // ✅ si el archivo es video y el bucket es media, lo corregimos para evitar confusión
+    if (isVid && bucket !== BUCKET_VID) bucket = BUCKET_VID;
+    if (isImg && bucket !== BUCKET_IMG) bucket = BUCKET_IMG;
+
+    if (r.bucketSel) r.bucketSel.value = bucket;
 
     setBusy(true);
     try {
@@ -982,18 +992,18 @@
       const s = await ensureSession();
       if (!s) return;
 
-      const bucket = pickBucketForFile(originalFile);
-      const path = await uploadFile(bucket, fileToUpload, folder, customName);
-      const url = publicUrlFromPath(bucket, path);
+      const up = await uploadFile(bucket, fileToUpload, folder, customName);
+      const url = publicUrlFromPath(up.bucket, up.path);
 
-      S.lastUploadedBucket = bucket;
-      S.lastUploadedPath = path;
+      S.lastUploadedBucket = up.bucket;
+      S.lastUploadedPath = up.path;
 
       if (r.urlInp) r.urlInp.value = url || "";
 
-      setNote(`Listo. URL pública generada (${bucket}).`, "ok");
-      toast("Subido", isVid ? "Video subido (bucket video) y URL lista." : "Imagen subida (bucket media) y URL lista.", 2200);
+      setNote(`Listo. URL pública generada (${up.bucket}).`, "ok");
+      toast("Subido", isVid ? "Video subido y URL lista." : "Imagen subida y URL lista.", 2200);
 
+      // refresca la lista del bucket seleccionado
       await refreshList({ silent: true, force: true });
 
       try { r.fileInp.value = ""; } catch (_) {}
@@ -1003,9 +1013,9 @@
       setNote("", "");
 
       if (looksLikeRLSError(err)) {
-        toast("RLS", `Bloqueado. Falta policy INSERT en buckets (${BUCKET_IMG}/${BUCKET_VID}) para authenticated.`, 5200);
+        toast("RLS", `Bloqueado. Falta policy INSERT en bucket (${bucket}) para authenticated.`, 5200);
       } else if (looksLikeStorageError(err)) {
-        toast("Storage", `Error en Storage (${BUCKET_IMG}/${BUCKET_VID}) (policies / nombre / ruta).`, 5200);
+        toast("Storage", `Error en bucket (${bucket}) (policies / nombre / ruta).`, 5200);
       } else {
         toast("Error", "No se pudo subir el archivo.", 4200);
       }
@@ -1102,7 +1112,7 @@
         await refreshList({ silent: true, force: true });
       } catch (err) {
         console.error(err);
-        if (looksLikeRLSError(err)) toast("RLS", `Bloqueado. Falta policy DELETE en buckets (${BUCKET_IMG}/${BUCKET_VID}).`, 5200);
+        if (looksLikeRLSError(err)) toast("RLS", `Bloqueado. Falta policy DELETE en bucket (${bucket}).`, 5200);
         else toast("Error", "No se pudo eliminar el archivo.", 4200);
       } finally {
         setBusy(false);
@@ -1119,15 +1129,22 @@
     S.didBind = true;
 
     const r = R();
-    if (!r.formEl || !r.fileInp || !r.folderSel || !r.urlInp || !r.uploadBtn || !r.copyBtn || !r.resetBtn || !r.refreshBtn || !r.listEl) {
+    if (!r.formEl || !r.fileInp || !r.bucketSel || !r.folderSel || !r.urlInp || !r.uploadBtn || !r.copyBtn || !r.resetBtn || !r.refreshBtn || !r.listEl) {
       console.warn("[admin-media] Faltan elementos en el HTML del tab-media.");
       return;
     }
 
     ensureSettingsUI();
 
+    // defaults
+    S.currentBucket = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
+    S.currentFolder = sanitizeFolder(r.folderSel.value || "events");
+
     r.fileInp.addEventListener("change", onFileChange);
+
+    r.bucketSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
     r.folderSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
+
     r.refreshBtn.addEventListener("click", () => refreshList({ silent: false, force: true }));
 
     r.formEl.addEventListener("submit", onUpload);
@@ -1138,8 +1155,6 @@
 
     resetPreview();
     setNote("", "");
-
-    S.currentFolder = sanitizeFolder(r.folderSel?.value || "events");
   }
 
   // ------------------------------------------------------------

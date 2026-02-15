@@ -175,7 +175,7 @@
                       <div class="field">
                         <label class="label" for="evVideoUrl">Video (url) — desktop (MP4/WebM)</label>
                         <input class="input" id="evVideoUrl" type="text" placeholder="https://…/hero.mp4" />
-                        <div class="mini">Tip: usá bucket <b>video</b> (PUBLIC) y pegá aquí la URL pública.</div>
+                        <div class="mini">Tip: usá el tab <b>Medios</b>, seleccioná bucket <b>video</b> y pegá aquí la URL pública.</div>
                       </div>
                       <div class="field">
                         <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
@@ -366,10 +366,20 @@
                     <div class="field">
                       <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP/MP4/WebM)</label>
                       <input class="input" id="mediaFile" type="file" accept="image/*,video/*" required />
-                      <div class="mini">Imágenes van a <b>media</b>. Videos recomendados a bucket <b>video</b>.</div>
+                      <div class="mini">Tip: Si subís MP4/WebM, seleccioná bucket <b>video</b>.</div>
                     </div>
 
                     <div class="row">
+                      <!-- ✅ NUEVO: BUCKET SELECTOR (PRO) -->
+                      <div class="field">
+                        <label class="label" for="mediaBucket">Bucket</label>
+                        <select class="select" id="mediaBucket">
+                          <option value="media">media (imágenes)</option>
+                          <option value="video">video (videos)</option>
+                        </select>
+                        <div class="mini">La lista y la subida trabajan sobre el bucket seleccionado.</div>
+                      </div>
+
                       <div class="field">
                         <label class="label" for="mediaFolder">Carpeta</label>
                         <select class="select" id="mediaFolder">
