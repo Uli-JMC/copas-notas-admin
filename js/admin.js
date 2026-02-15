@@ -1,14 +1,15 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-02 PATCH (precio) + FIX description
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-02 PATCH (precio) + FIX description + VIDEO (mínimo)
  * - Soporta: events.price_amount (numeric) y events.price_currency (text)
  * - ✅ FIX: reemplaza "desc" por "description" (DB ya no tiene desc)
+ * - ✅ VIDEO: agrega soporte opcional a events.video_url (text)
  * - No rompe si inputs no existen todavía (fallbacks).
  */
 
 (function () {
-  const VERSION = "2026-02-14.1";
+  const VERSION = "2026-02-15.2";
 
   // ============================================================
   // Selectores
@@ -186,6 +187,7 @@
     month_key,
     description,
     img,
+    video_url,
     location,
     time_range,
     duration_hours,
@@ -341,7 +343,7 @@
 
   function clearEditorForm() {
     const ids = [
-      "eventId","evTitle","evType","evMonth","evImg","evDesc",
+      "eventId","evTitle","evType","evMonth","evImg","evDesc","evVideoUrl",
       "evLocation","evTimeRange","evDurationHours","evDuration",
       "evPriceAmount","evPriceCurrency",
     ];
@@ -456,6 +458,10 @@
     $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
     $("#evImg") && ($("#evImg").value = ev.img || "");
 
+    // ✅ Video URL (opcional)
+    const vEl = $("#evVideoUrl");
+    if (vEl) vEl.value = ev.video_url || "";
+
     const d = ev.description || "";
     $("#evDesc") && ($("#evDesc").value = d);
     $("#descCount") && ($("#descCount").textContent = String(String(d).length));
@@ -532,6 +538,7 @@
         type: typeFallback,
         month_key: "ENERO",
         img: "./assets/img/hero-1.jpg",
+        video_url: "",
         description: "",
         location: "Por confirmar",
         time_range: "",
@@ -579,6 +586,7 @@
         type: ev.type || ($("#evType")?.value || "Cata de vino"),
         month_key: normalizeMonth(ev.month_key || "ENERO"),
         img: ev.img || "./assets/img/hero-1.jpg",
+        video_url: ev.video_url || "",
         description: ev.description || "",
         location: ev.location || "Por confirmar",
         time_range: ev.time_range || "",
@@ -653,6 +661,7 @@
     const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
     const img = cleanSpaces($("#evImg")?.value || "");
+    const video_url = cleanSpaces($("#evVideoUrl")?.value || "");
     const description = cleanSpaces($("#evDesc")?.value || "");
 
     const location = cleanSpaces($("#evLocation")?.value || "");
@@ -683,6 +692,7 @@
       type,
       month_key,
       img: img || "./assets/img/hero-1.jpg",
+      video_url: video_url || "",
       description,
       location: location || "Por confirmar",
       time_range,
