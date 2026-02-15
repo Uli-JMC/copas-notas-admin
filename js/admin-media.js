@@ -5,6 +5,9 @@
        - "video" (PUBLIC)   -> videos (MP4/WebM)
    - ✅ Selector PRO: #mediaBucket (sube/lista/borrar por bucket seleccionado)
    - ✅ Auto-switch: si el archivo es video -> selecciona "video"; si es imagen -> "media"
+   - ✅ UX PRO:
+       - Cambia accept: bucket media -> image/* | bucket video -> video/*
+       - Warning visible cuando bucket = video (sin optimización)
    - Preview (img/video) + copiar URL + eliminar
    - No usa DB (ideal para "copiar y pegar URL")
    - ✅ Settings PRO (solo aplica a imágenes):
@@ -16,7 +19,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-15.3";
+  const VERSION = "2026-02-15.4";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -474,6 +477,60 @@
   }
 
   // ------------------------------------------------------------
+  // ✅ UX PRO helpers: accept + bucket hint
+  // ------------------------------------------------------------
+  function applyAcceptForBucket(bucket) {
+    const r = R();
+    const b = normalizeBucket(bucket);
+
+    // Ajusta accept para evitar errores de selección
+    if (r.fileInp) {
+      r.fileInp.accept = (b === BUCKET_VID) ? "video/*" : "image/*,video/*";
+      // Nota: dejamos video/* habilitado siempre por si el user lo escoge primero,
+      // pero el bucket dirige el flujo.
+      // Si querés ultra estricto, cambiá media a: "image/*"
+      if (b === BUCKET_IMG) r.fileInp.accept = "image/*,video/*";
+      if (b === BUCKET_VID) r.fileInp.accept = "video/*";
+    }
+
+    // Hint visual (sin tocar HTML)
+    setBucketHint(b);
+  }
+
+  function setBucketHint(bucket) {
+    // Inyecta/actualiza un hint pequeño debajo del selector de bucket
+    const r = R();
+    if (!r.bucketSel) return;
+
+    let hint = panel.querySelector('[data-media-bucket-hint="1"]');
+    if (!hint) {
+      hint = document.createElement("div");
+      hint.setAttribute("data-media-bucket-hint", "1");
+      hint.style.marginTop = "6px";
+      hint.style.fontSize = "12px";
+      hint.style.opacity = ".85";
+      hint.style.padding = "6px 10px";
+      hint.style.borderRadius = "10px";
+      hint.style.border = "1px solid rgba(255,255,255,.10)";
+      hint.style.background = "rgba(255,255,255,.03)";
+
+      // lo ponemos justo después del select (dentro del mismo field)
+      const field = r.bucketSel.closest(".field");
+      if (field) field.appendChild(hint);
+      else r.bucketSel.parentNode?.appendChild(hint);
+    }
+
+    const isVid = normalizeBucket(bucket) === BUCKET_VID;
+    if (isVid) {
+      hint.textContent = "Bucket video: sin optimización. Recomendado MP4/WebM (≤ ~15MB).";
+      hint.style.opacity = "1";
+    } else {
+      hint.textContent = "Bucket media: imágenes. Optimización disponible (WebP/JPG) antes de subir.";
+      hint.style.opacity = ".85";
+    }
+  }
+
+  // ------------------------------------------------------------
   // ✅ Settings UI injection (sin tocar HTML) — solo imágenes
   // ------------------------------------------------------------
   function ensureSettingsUI() {
@@ -824,6 +881,8 @@
       S.currentFolder = folder;
       S.currentBucket = bucket;
 
+      applyAcceptForBucket(bucket);
+
       if (!silent) toast("Media", "Cargando…", 800);
 
       S.list = await listFolderFromBucket(bucket, folder);
@@ -896,10 +955,11 @@
       return;
     }
 
-    // ✅ Auto-switch bucket
+    // ✅ Auto-switch bucket + accept
     if (r.bucketSel) {
       r.bucketSel.value = isVid ? BUCKET_VID : BUCKET_IMG;
       S.currentBucket = normalizeBucket(r.bucketSel.value);
+      applyAcceptForBucket(S.currentBucket);
     }
 
     const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
@@ -940,17 +1000,18 @@
     // ✅ bucket elegido (PRO)
     let bucket = normalizeBucket(r.bucketSel?.value || (isVid ? BUCKET_VID : BUCKET_IMG));
 
-    // ✅ si el archivo es video y el bucket es media, lo corregimos para evitar confusión
+    // ✅ coherencia automática
     if (isVid && bucket !== BUCKET_VID) bucket = BUCKET_VID;
     if (isImg && bucket !== BUCKET_IMG) bucket = BUCKET_IMG;
 
     if (r.bucketSel) r.bucketSel.value = bucket;
+    applyAcceptForBucket(bucket);
 
     setBusy(true);
     try {
       let fileToUpload = originalFile;
 
-      // ✅ solo imágenes se optimizan
+      // ✅ solo imágenes se optimizan (aunque el accept permita seleccionar video)
       if (isImg) {
         setNote("Optimizando imagen…", "info");
         try {
@@ -1003,7 +1064,6 @@
       setNote(`Listo. URL pública generada (${up.bucket}).`, "ok");
       toast("Subido", isVid ? "Video subido y URL lista." : "Imagen subida y URL lista.", 2200);
 
-      // refresca la lista del bucket seleccionado
       await refreshList({ silent: true, force: true });
 
       try { r.fileInp.value = ""; } catch (_) {}
@@ -1030,6 +1090,11 @@
     if (r.urlInp) r.urlInp.value = "";
     setNote("", "");
     resetPreview();
+
+    // re-aplica accept según bucket actual
+    const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
+    applyAcceptForBucket(b);
+
     toast("Limpiado", "Formulario reiniciado.");
   }
 
@@ -1140,11 +1205,19 @@
     S.currentBucket = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
     S.currentFolder = sanitizeFolder(r.folderSel.value || "events");
 
+    // aplica accept/hint inicial
+    applyAcceptForBucket(S.currentBucket);
+
     r.fileInp.addEventListener("change", onFileChange);
 
-    r.bucketSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
-    r.folderSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
+    r.bucketSel.addEventListener("change", () => {
+      const b = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
+      S.currentBucket = b;
+      applyAcceptForBucket(b);
+      refreshList({ silent: true, force: true });
+    });
 
+    r.folderSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
     r.refreshBtn.addEventListener("click", () => refreshList({ silent: false, force: true }));
 
     r.formEl.addEventListener("submit", onUpload);
@@ -1190,6 +1263,10 @@
 
     S.settings = loadSettings();
     ensureSettingsUI();
+
+    const r = R();
+    const b = normalizeBucket(r.bucketSel?.value || S.currentBucket || BUCKET_IMG);
+    applyAcceptForBucket(b);
 
     await refreshList({ silent: true, force: false });
   }
