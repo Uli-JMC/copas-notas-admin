@@ -5,11 +5,13 @@
  * - Soporta: events.price_amount (numeric) y events.price_currency (text)
  * - ✅ FIX: reemplaza "desc" por "description" (DB ya no tiene desc)
  * - ✅ VIDEO: agrega soporte opcional a events.video_url (text)
+ * - ✅ FIX 2026-02-15.3: NO PISAR video_url cuando el input no existe o viene vacío
+ *   (evita borrar el video guardado en DB).
  * - No rompe si inputs no existen todavía (fallbacks).
  */
 
 (function () {
-  const VERSION = "2026-02-15.2";
+  const VERSION = "2026-02-15.3";
 
   // ============================================================
   // Selectores
@@ -661,7 +663,10 @@
     const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
     const img = cleanSpaces($("#evImg")?.value || "");
-    const video_url = cleanSpaces($("#evVideoUrl")?.value || "");
+
+    // ✅ Importante: si el input no existe o está vacío, NO queremos borrar el valor en DB.
+    const video_url_input = cleanSpaces($("#evVideoUrl")?.value || "");
+
     const description = cleanSpaces($("#evDesc")?.value || "");
 
     const location = cleanSpaces($("#evLocation")?.value || "");
@@ -687,12 +692,15 @@
       return false;
     }
 
+    // ✅ FIX: mantener el video previo si no hay valor nuevo
+    const final_video_url = video_url_input || (ev.video_url || "");
+
     const payload = {
       title,
       type,
       month_key,
       img: img || "./assets/img/hero-1.jpg",
-      video_url: video_url || "",
+      video_url: final_video_url,
       description,
       location: location || "Por confirmar",
       time_range,
