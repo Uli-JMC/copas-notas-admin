@@ -1,16 +1,19 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02 PATCH
- * FIXES:
- * - ✅ Guarda y carga #evVideoUrl usando media_items folder = event_video
- * - ✅ EVENT_FOLDERS incluye event_video
- * - ✅ upsert onConflict robusto: target,event_id,folder
- * - ✅ delete en media_items revisa error (si RLS bloquea, lo vas a ver)
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02-18 PATCH
+ *
+ * ✅ FIXES / CHANGES:
+ * - ✅ Folders oficiales:
+ *   HOME (asociado a evento): slide_img | slide_video
+ *   EVENT PAGE: desktop_event | mobile_event | event_more
+ * - ✅ upsert onConflict alineado a tu BD: event_id,folder (evita 400 Bad Request)
+ * - ✅ Carga/guarda media_items desde el editor sin tocar admin.html
+ * - ✅ Duplicado copia también media_items con folders oficiales
  */
 
 (function () {
-  const VERSION = "2026-02-18.2";
+  const VERSION = "2026-02-18.3";
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -18,6 +21,9 @@
   const appPanel = $("#appPanel");
   if (!appPanel) return;
 
+  // ---------------------------
+  // Utils
+  // ---------------------------
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -123,10 +129,7 @@
     const raw = cleanSpaces(input);
     if (!raw) return null;
 
-    const cleaned = raw
-      .replace(/[^\d.,-]/g, "")
-      .replace(",", ".");
-
+    const cleaned = raw.replace(/[^\d.,-]/g, "").replace(",", ".");
     const m = cleaned.match(/-?\d+(\.\d+)?/);
     if (!m) return null;
 
@@ -162,9 +165,9 @@
     return msg || "Ocurrió un error.";
   }
 
-  // ============================================================
+  // ---------------------------
   // DB mapping
-  // ============================================================
+  // ---------------------------
   const EVENTS_TABLE = "events";
   const MEDIA_TABLE = "media_items";
 
@@ -211,8 +214,8 @@
   // ============================================================
   // Media helpers (event)
   // ============================================================
-  // ✅ incluye VIDEO
-  const EVENT_FOLDERS = ["event_img_desktop", "event_img_mobile", "event_video", "event_more_img"];
+  // ✅ folders oficiales
+  const EVENT_FOLDERS = ["slide_img", "slide_video", "desktop_event", "mobile_event", "event_more"];
 
   async function fetchEventMedia(eventId) {
     const sb = getSB();
@@ -268,7 +271,7 @@
 
     if (!eid || !f) return;
 
-    // vacío => borrar (y si RLS bloquea, lo vemos)
+    // vacío => borrar
     if (!u) {
       await deleteEventMedia(eid, f);
       return;
@@ -283,10 +286,10 @@
       event_id: eid,
     };
 
-    // ✅ robusto si tu unique es (target,event_id,folder)
+    // ✅ Alineado a tu UNIQUE real: (event_id, folder)
     const { error } = await sb
       .from(MEDIA_TABLE)
-      .upsert(payload, { onConflict: "target,event_id,folder" });
+      .upsert(payload, { onConflict: "event_id,folder" });
 
     if (error) throw error;
   }
@@ -497,7 +500,7 @@
     });
   }
 
-  // ✅ Carga media_items y llena campos del editor
+  // ✅ Carga media_items y llena campos del editor (mapeo a folders oficiales)
   async function renderEventEditor() {
     const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
@@ -537,7 +540,6 @@
 
     const priceAmountEl = $("#evPriceAmount");
     const priceCurrencyEl = $("#evPriceCurrency");
-
     if (priceAmountEl) priceAmountEl.value = ev.price_amount == null ? "" : String(ev.price_amount);
     if (priceCurrencyEl) priceCurrencyEl.value = normalizeCurrency(ev.price_currency, "USD");
 
@@ -545,20 +547,28 @@
     const altEl = $("#evMoreImgAlt");
     if (altEl) altEl.value = ev.more_img_alt || "";
 
-    // ✅ Media desde media_items (incluye video)
+    // ✅ Media desde media_items
     try {
       const media = await fetchEventMedia(ev.id);
 
-      const imgDesktopEl = $("#evImgDesktop") || $("#evImg");
-      const imgMobileEl = $("#evImgMobile");
-      const videoEl = $("#evVideoUrl");
-      const moreImgEl = $("#evMoreImg");
+      // UI existente:
+      // evImg -> slide_img
+      // evVideoUrl -> slide_video
+      // evImgDesktop -> desktop_event
+      // evImgMobile -> mobile_event
+      // evMoreImg -> event_more
+      const slideImgEl = $("#evImg");
+      const slideVideoEl = $("#evVideoUrl");
+      const deskEl = $("#evImgDesktop") || $("#evImg");
+      const mobEl = $("#evImgMobile");
+      const moreEl = $("#evMoreImg");
 
-      if (imgDesktopEl) imgDesktopEl.value = media.event_img_desktop || "";
-      if ($("#evImg")) $("#evImg").value = media.event_img_mobile || $("#evImg")?.value || ""; // fallback legacy
-      if (imgMobileEl) imgMobileEl.value = media.event_img_mobile || "";
-      if (videoEl) videoEl.value = media.event_video || "";
-      if (moreImgEl) moreImgEl.value = media.event_more_img || "";
+      if (slideImgEl) slideImgEl.value = media.slide_img || "";
+      if (slideVideoEl) slideVideoEl.value = media.slide_video || "";
+
+      if (deskEl) deskEl.value = media.desktop_event || "";
+      if (mobEl) mobEl.value = media.mobile_event || "";
+      if (moreEl) moreEl.value = media.event_more || "";
     } catch (err) {
       console.error(err);
       toast("Media", "No se pudo cargar media_items (revisá RLS de media_items).", 4200);
@@ -655,13 +665,14 @@
 
       const created = await insertEvent(payload);
 
-      // Duplicar media_items del evento original
+      // Duplicar media_items del evento original (folders oficiales)
       try {
         const m = await fetchEventMedia(ev.id);
-        await upsertEventMedia(created.id, "event_img_desktop", m.event_img_desktop || "");
-        await upsertEventMedia(created.id, "event_img_mobile", m.event_img_mobile || "");
-        await upsertEventMedia(created.id, "event_video", m.event_video || "");
-        await upsertEventMedia(created.id, "event_more_img", m.event_more_img || "");
+        await upsertEventMedia(created.id, "slide_img", m.slide_img || "");
+        await upsertEventMedia(created.id, "slide_video", m.slide_video || "");
+        await upsertEventMedia(created.id, "desktop_event", m.desktop_event || "");
+        await upsertEventMedia(created.id, "mobile_event", m.mobile_event || "");
+        await upsertEventMedia(created.id, "event_more", m.event_more || "");
       } catch (e) {
         console.warn("[admin] duplicate media failed:", e);
       }
@@ -755,16 +766,18 @@
       more_img_alt: moreAlt,
     };
 
-    // Media inputs
-    const imgDesktopEl = $("#evImgDesktop") || $("#evImg");
-    const imgMobileEl = $("#evImgMobile");
-    const videoEl = $("#evVideoUrl");
-    const moreImgEl = $("#evMoreImg");
+    // Media inputs (UI existente mapeada a folders oficiales)
+    const slideImgEl = $("#evImg");
+    const deskEl = $("#evImgDesktop") || $("#evImg");
+    const mobEl = $("#evImgMobile");
+    const slideVideoEl = $("#evVideoUrl");
+    const moreEl = $("#evMoreImg");
 
-    const imgDesktopUrl = cleanSpaces(imgDesktopEl?.value || "");
-    const imgMobileUrl = cleanSpaces(imgMobileEl?.value || $("#evImg")?.value || "");
-    const videoUrl = cleanSpaces(videoEl?.value || "");
-    const moreImgUrl = cleanSpaces(moreImgEl?.value || "");
+    const slideImgUrl = cleanSpaces(slideImgEl?.value || "");
+    const deskUrl = cleanSpaces(deskEl?.value || "");
+    const mobUrl = cleanSpaces(mobEl?.value || "");
+    const slideVideoUrl = cleanSpaces(slideVideoEl?.value || "");
+    const moreUrl = cleanSpaces(moreEl?.value || "");
 
     try {
       if (state.mode !== "supabase") return false;
@@ -773,11 +786,13 @@
 
       const updated = await updateEvent(ev.id, payload);
 
-      // ✅ upsert/delete media_items (incluye video)
-      await upsertEventMedia(ev.id, "event_img_desktop", imgDesktopUrl);
-      await upsertEventMedia(ev.id, "event_img_mobile", imgMobileUrl);
-      await upsertEventMedia(ev.id, "event_video", videoUrl);
-      await upsertEventMedia(ev.id, "event_more_img", moreImgUrl);
+      // ✅ upsert/delete media_items (folders oficiales)
+      await upsertEventMedia(ev.id, "slide_img", slideImgUrl);
+      await upsertEventMedia(ev.id, "slide_video", slideVideoUrl);
+
+      await upsertEventMedia(ev.id, "desktop_event", deskUrl);
+      await upsertEventMedia(ev.id, "mobile_event", mobUrl);
+      await upsertEventMedia(ev.id, "event_more", moreUrl);
 
       state.events = (state.events || []).map((x) =>
         String(x.id) === String(updated.id) ? updated : x

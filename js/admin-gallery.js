@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * admin-gallery.js ✅ PRO (DOM REAL 2026-01) — 2026-01 PATCH alineado
+ * admin-gallery.js ✅ PRO (DOM REAL) — 2026-02-18 PATCH (depurado)
  * ✅ Sin recargar:
  * - Espera admin:ready (admin-auth.js) o APP.__adminReady
  * - Carga SOLO al abrir tab "gallery" vía evento admin:tab
@@ -33,7 +33,7 @@
   // ---------------------------
   // Config
   // ---------------------------
-  const VERSION = "2026-01-20.scrollfix.1";
+  const VERSION = "2026-02-18.gallery.depured.1";
   const TABLE = "gallery_items";
   const BUCKET = "gallery";
   const TARGET_DEFAULT = "home";
@@ -108,7 +108,9 @@
     try {
       const d = new Date(safeStr(iso));
       if (isNaN(d.getTime())) return "—";
-      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+      return d
+        .toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" })
+        .replace(".", "");
     } catch (_) {
       return "—";
     }
@@ -170,7 +172,7 @@
     if (!sb) {
       toast(
         "Supabase",
-        "APP.supabase no existe. Revisá el orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-gallery.js",
+        "APP.supabase no existe. Orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-gallery.js",
         5200
       );
       return null;
@@ -389,10 +391,8 @@
   }
 
   // ---------------------------
-  // ✅ Modal Nuevo (DEPURADO + scroll estable)
+  // Modal Nuevo (depurado)
   // ---------------------------
-
-  // ✅ Depurado: solo bloquea body, NO toca <html> (evita bugs raros de scroll en overlay)
   function lockBodyScroll(on) {
     const body = document.body;
     if (!body) return;
@@ -413,7 +413,6 @@
     m = document.createElement("div");
     m.id = "ecnGalleryModal";
 
-    // ✅ Overlay con scroll real
     m.style.position = "fixed";
     m.style.inset = "0";
     m.style.background = "rgba(0,0,0,.65)";
@@ -434,11 +433,8 @@
         background: rgba(20,20,20,.96);
         border:1px solid rgba(255,255,255,.10);
         border-radius:16px;
-
-        /* ✅ clave: el card NO puede crecer infinito */
         max-height: calc(100vh - 36px);
         overflow: auto;
-
         box-shadow: 0 18px 60px rgba(0,0,0,.55);
       ">
         <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10);">
@@ -453,8 +449,6 @@
           padding:14px;
           display:grid;
           gap:12px;
-
-          /* ✅ el form scrollea adentro y deja el footer sticky visible */
           max-height: calc(100vh - 170px);
           overflow:auto;
           -webkit-overflow-scrolling: touch;
@@ -504,12 +498,10 @@
             display:flex;
             gap:10px;
             justify-content:flex-end;
-
             position: sticky;
             bottom: 0;
             padding-top: 10px;
             padding-bottom: 10px;
-
             background: rgba(20,20,20,.96);
             border-top: 1px solid rgba(255,255,255,.08);
           ">
@@ -522,18 +514,15 @@
 
     document.body.appendChild(m);
 
-    // preview
     const file = m.querySelector("#ecnGalFile");
     const prevBox = m.querySelector("#ecnGalPreview");
     const prevImg = m.querySelector("#ecnGalPreviewImg");
     let prevUrl = "";
 
-    // ✅ FIX: resetear SIEMPRE el modal al cerrar/abrir (evita datos pegados)
     const resetModal = () => {
       const form = m.querySelector("#ecnGalleryForm");
       form?.reset();
 
-      // limpia file + preview
       if (file) file.value = "";
 
       if (prevUrl) {
@@ -545,26 +534,23 @@
       if (prevImg) prevImg.src = "";
     };
 
+    // ✅ ESC listener: se agrega al abrir y se quita al cerrar
+    let escHandler = null;
+
     const close = () => {
-      resetModal(); // ✅ FIX
+      resetModal();
       m.style.display = "none";
       lockBodyScroll(false);
+
+      if (escHandler) {
+        window.removeEventListener("keydown", escHandler);
+        escHandler = null;
+      }
     };
 
-    // click fuera
     m.addEventListener("click", (e) => {
       if (e.target === m) close();
     });
-
-    // ✅ depurado: listener de ESC se agrega una sola vez y se quita al cerrar
-    let escBound = false;
-    const onEsc = (e) => {
-      if (e.key === "Escape" && m.style.display !== "none") close();
-    };
-    if (!escBound) {
-      window.addEventListener("keydown", onEsc);
-      escBound = true;
-    }
 
     m.querySelector("#ecnGalleryClose")?.addEventListener("click", close);
 
@@ -593,12 +579,8 @@
       if (prevBox) prevBox.style.display = "block";
     });
 
-    // reset
-    m.querySelector("#ecnGalReset")?.addEventListener("click", () => {
-      resetModal(); // ✅ FIX
-    });
+    m.querySelector("#ecnGalReset")?.addEventListener("click", () => resetModal());
 
-    // submit
     m.querySelector("#ecnGalleryForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (state.busy) return;
@@ -621,10 +603,8 @@
         const base = slugify(name) || "foto";
         const path = `${type}/${yyyyMm}/${base}_${Date.now()}.${ext}`;
 
-        // 1) storage
         await uploadToStorage(f, path);
 
-        // 2) db
         const publicUrl = publicUrlFromPath(path);
         const payload = {
           type,
@@ -639,8 +619,6 @@
 
         toast("Listo", "Se agregó el ítem a la galería.", 2000);
         close();
-
-        // refresh UI
         await refresh({ silent: true });
       } catch (err) {
         console.error("[admin-gallery] upload/insert error:", err);
@@ -654,25 +632,38 @@
       }
     });
 
-    // expone close + reset internamente sin romper
+    // Exponer control interno
     m._ecnClose = close;
-    m._ecnReset = resetModal; // ✅ FIX
+    m._ecnReset = resetModal;
+
+    // Hook para “open”
+    m._ecnOpen = () => {
+      // reset siempre antes de mostrar
+      try { resetModal(); } catch (_) {}
+
+      lockBodyScroll(true);
+      m.style.display = "flex";
+      m.scrollTop = 0;
+
+      // add ESC
+      if (!escHandler) {
+        escHandler = (e) => {
+          if (e.key === "Escape" && m.style.display !== "none") close();
+        };
+        window.addEventListener("keydown", escHandler);
+      }
+
+      try {
+        m.querySelector("#ecnGalleryCard")?.scrollIntoView({ block: "start" });
+      } catch (_) {}
+    };
 
     return m;
   }
 
   function openNewModal() {
     const m = ensureModal();
-    // ✅ FIX: por si algún flujo dejó algo “pegado”
-    try { m._ecnReset?.(); } catch (_) {}
-
-    lockBodyScroll(true);
-    m.style.display = "flex";
-    m.scrollTop = 0;
-    // ✅ extra: asegura que el card quede arriba visible en pantallas chicas
-    try {
-      m.querySelector("#ecnGalleryCard")?.scrollIntoView({ block: "start" });
-    } catch (_) {}
+    m._ecnOpen?.();
   }
 
   // ---------------------------
@@ -737,7 +728,7 @@
   }
 
   // ---------------------------
-  // Bind / Load (alineado con el resto)
+  // Bind / Load
   // ---------------------------
   function bindOnce() {
     if (state.didBind) return;
@@ -748,7 +739,6 @@
 
     tbody?.addEventListener("click", onTableClick);
 
-    // búsqueda global (local)
     $("#search")?.addEventListener("input", () => renderTable());
   }
 
@@ -758,7 +748,6 @@
     const isHidden = !!$("#tab-gallery")?.hidden;
     if (!force && isHidden) return;
 
-    // throttle anti doble-disparo (click + admin:tab)
     const now = Date.now();
     if (!force && now - state.lastLoadAt < 600) return;
     if (force && now - state.lastLoadAt < 250) return;
@@ -784,13 +773,11 @@
     const wake = () => {
       bindOnce();
 
-      // admin:tab (on-demand)
       window.addEventListener("admin:tab", (e) => {
         const t = e?.detail?.tab;
         if (t === "gallery") ensureLoaded(true);
       });
 
-      // fallback: si ya está visible (hard refresh)
       try {
         if ($("#tab-gallery") && $("#tab-gallery").hidden === false) ensureLoaded(true);
       } catch (_) {}
