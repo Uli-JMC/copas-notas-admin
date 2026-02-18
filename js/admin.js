@@ -16,7 +16,7 @@
  */
 
 (function () {
-  const VERSION = "2026-02-17.1";
+  const VERSION = "2026-02-17.2"; // ✅ bump por fix missing-column detector
 
   // ============================================================
   // Selectores
@@ -178,15 +178,28 @@
     );
   }
 
-  // ✅ Column missing (schema legacy)
+  // ✅ Column missing (schema legacy) — FIX robusto para PostgREST
   function isMissingColumnError(err) {
-    const code = String(err?.code || "").toLowerCase();
+    const code = String(err?.code || "").toUpperCase();
     const msg = String(err?.message || "").toLowerCase();
-    // Postgres undefined_column = 42703, PostgREST suele decir "column ... does not exist"
-    return (
-      code === "42703" ||
-      msg.includes("does not exist") && msg.includes("column")
-    );
+    const details = String(err?.details || "").toLowerCase();
+    const hint = String(err?.hint || "").toLowerCase();
+
+    // Postgres undefined_column = 42703
+    if (code === "42703") return true;
+
+    // PostgREST: "Could not find the 'xyz' column..." (suele ser PGRST204)
+    if (code === "PGRST204") return true;
+
+    // Fallback por texto (varía según versión)
+    const hayColumnaInexistente =
+      (msg.includes("does not exist") && msg.includes("column")) ||
+      msg.includes("could not find the") ||
+      msg.includes("unknown field") ||
+      details.includes("could not find the") ||
+      hint.includes("could not find the");
+
+    return hayColumnaInexistente;
   }
 
   function prettyError(err) {
