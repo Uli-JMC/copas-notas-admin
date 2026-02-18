@@ -16,7 +16,7 @@
  */
 
 (function () {
-  const VERSION = "2026-02-17.2"; // ✅ bump por fix missing-column detector
+  const VERSION = "2026-02-17.2"; // ✅ bump por fix missing-column detection
 
   // ============================================================
   // Selectores
@@ -178,28 +178,40 @@
     );
   }
 
-  // ✅ Column missing (schema legacy) — FIX robusto para PostgREST
+  // ✅ Column missing (schema legacy) — FIX PRO para PostgREST/Supabase
   function isMissingColumnError(err) {
     const code = String(err?.code || "").toUpperCase();
-    const msg = String(err?.message || "").toLowerCase();
+    const message = String(err?.message || "").toLowerCase();
     const details = String(err?.details || "").toLowerCase();
     const hint = String(err?.hint || "").toLowerCase();
+    const status = Number(err?.status || err?.statusCode || 0);
 
-    // Postgres undefined_column = 42703
+    // Postgres undefined_column
     if (code === "42703") return true;
 
-    // PostgREST: "Could not find the 'xyz' column..." (suele ser PGRST204)
-    if (code === "PGRST204") return true;
+    // PostgREST suele usar códigos PGRST*** para errores de query/select
+    const isPgrst = code.startsWith("PGRST");
 
-    // Fallback por texto (varía según versión)
-    const hayColumnaInexistente =
-      (msg.includes("does not exist") && msg.includes("column")) ||
-      msg.includes("could not find the") ||
-      msg.includes("unknown field") ||
-      details.includes("could not find the") ||
-      hint.includes("could not find the");
+    // Textos típicos
+    const textHasMissing =
+      (message.includes("column") && message.includes("does not exist")) ||
+      (details.includes("column") && details.includes("does not exist")) ||
+      (hint.includes("column") && hint.includes("does not exist")) ||
+      (message.includes("unknown field")) ||
+      (details.includes("unknown field")) ||
+      (message.includes("failed to parse") && message.includes("select")) ||
+      (details.includes("failed to parse") && details.includes("select"));
 
-    return hayColumnaInexistente;
+    // Muchos 400 de select inválido vienen sin 42703
+    if (isPgrst && textHasMissing) return true;
+
+    // Si es 400 y menciona column/field, lo tratamos como schema mismatch
+    if (status === 400 && (message.includes("column") || details.includes("column") || message.includes("field") || details.includes("field"))) {
+      // OJO: no queremos confundir con otros 400, pero acá el patrón es claro.
+      return true;
+    }
+
+    return false;
   }
 
   function prettyError(err) {
@@ -347,8 +359,9 @@
 
     if (tryV2First) {
       ({ data, error } = await runSelect(SELECT_EVENTS_V2));
+
+      // ✅ FIX: fallback más robusto
       if (error && isMissingColumnError(error)) {
-        // fallback a legacy
         state.schema.selectV2 = false;
         ({ data, error } = await runSelect(SELECT_EVENTS_V1));
       } else if (!error) {
@@ -787,10 +800,7 @@
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
 
     const img = cleanSpaces($("#evImg")?.value || "");
-
-    // ✅ Importante: si el input no existe o está vacío, NO queremos borrar el valor en DB.
     const video_url_input = cleanSpaces($("#evVideoUrl")?.value || "");
-
     const description = cleanSpaces($("#evDesc")?.value || "");
 
     const location = cleanSpaces($("#evLocation")?.value || "");
@@ -816,16 +826,13 @@
       return false;
     }
 
-    // ✅ FIX: mantener el video previo si no hay valor nuevo
     const final_video_url = video_url_input || (ev.video_url || "");
 
-    // ✅ Nuevos inputs opcionales (si existen en el HTML)
     const imgDesk = readOptionalInputValue("evImgDesktop");
     const imgMob = readOptionalInputValue("evImgMobile");
     const moreImg = readOptionalInputValue("evMoreImg");
     const moreAlt = readOptionalInputValue("evMoreImgAlt");
 
-    // ✅ payload base (legacy seguro)
     const payload = {
       title,
       type,
@@ -840,18 +847,12 @@
       price_currency,
     };
 
-    // ✅ Solo incluir columnas V2 si el schema existe (evita errores)
     if (state.schema.selectV2 === true) {
-      // Si el input existe:
-      // - si trae valor -> actualiza
-      // - si viene vacío -> conserva el valor anterior (no pisa)
       payload.img_desktop = imgDesk.exists ? (imgDesk.value || (ev.img_desktop || "")) : (ev.img_desktop || "");
       payload.img_mobile  = imgMob.exists  ? (imgMob.value  || (ev.img_mobile  || "")) : (ev.img_mobile  || "");
       payload.more_img    = moreImg.exists ? (moreImg.value || (ev.more_img    || "")) : (ev.more_img    || "");
       payload.more_img_alt= moreAlt.exists ? (moreAlt.value || (ev.more_img_alt|| "")) : (ev.more_img_alt|| "");
 
-      // ✅ Mantener "img" como fallback coherente:
-      // preferimos mobile, si no desktop, si no el img actual.
       const fallbackImg = payload.img_mobile || payload.img_desktop || payload.img || (ev.img || "");
       payload.img = fallbackImg || "./assets/img/hero-1.jpg";
     }
@@ -878,12 +879,10 @@
     } catch (err) {
       console.error(err);
 
-      // ✅ Si por alguna razón falló por columnas faltantes, degradamos schema y reintentamos 1 vez (sin romper)
       if (isMissingColumnError(err) && state.schema.selectV2 !== false) {
         try {
           state.schema.selectV2 = false;
 
-          // Remover campos V2 del payload y reintentar
           const payloadLegacy = { ...payload };
           delete payloadLegacy.img_desktop;
           delete payloadLegacy.img_mobile;
