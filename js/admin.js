@@ -1,31 +1,24 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-02 PATCH (precio) + FIX description + VIDEO (mínimo)
- * - Soporta: events.price_amount (numeric) y events.price_currency (text)
- * - ✅ FIX: reemplaza "desc" por "description" (DB ya no tiene desc)
- * - ✅ VIDEO: agrega soporte opcional a events.video_url (text)
- * - ✅ FIX 2026-02-15.3: NO PISAR video_url cuando el input no existe o viene vacío
- *   (evita borrar el video guardado en DB).
- * - No rompe si inputs no existen todavía (fallbacks).
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02 DB CLEAN PATCH
+ * - events: SOLO datos + more_img_alt
+ * - media_items: fuente de verdad de media por evento:
+ *    - event_img_desktop
+ *    - event_img_mobile (opcional)
+ *    - event_more_img (modal)
+ * - NO usa events.img / events.video_url (ya no existen)
  */
 
 (function () {
-  const VERSION = "2026-02-15.3";
+  const VERSION = "2026-02-18.1";
 
-  // ============================================================
-  // Selectores
-  // ============================================================
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-  // Guard: solo corre en admin.html real
   const appPanel = $("#appPanel");
   if (!appPanel) return;
 
-  // ============================================================
-  // UI helpers
-  // ============================================================
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -79,9 +72,6 @@
     note.textContent = on ? (msg || "Procesando…") : (msg || "");
   }
 
-  // ============================================================
-  // Utils
-  // ============================================================
   function cleanSpaces(s) {
     return String(s ?? "").replace(/\s+/g, " ").trim();
   }
@@ -96,7 +86,6 @@
     return MONTHS.includes(up) ? up : "ENERO";
   }
 
-  // DB guarda duration_hours como TEXT: aceptamos "2", "2.5", "".
   function parseHoursNumber(input) {
     const raw = cleanSpaces(input);
     if (!raw) return "";
@@ -122,7 +111,6 @@
     return "Por confirmar";
   }
 
-  // ✅ Precio
   function normalizeCurrency(input, fallback = "USD") {
     const v = cleanSpaces(input).toUpperCase();
     if (!v) return fallback;
@@ -149,9 +137,6 @@
     return Math.round(n * 100) / 100;
   }
 
-  // ============================================================
-  // Supabase helpers
-  // ============================================================
   function getSB() {
     return window.APP && (window.APP.supabase || window.APP.sb)
       ? window.APP.supabase || window.APP.sb
@@ -182,32 +167,30 @@
   // DB mapping
   // ============================================================
   const EVENTS_TABLE = "events";
+  const MEDIA_TABLE = "media_items";
+
   const SELECT_EVENTS = `
     id,
     title,
     type,
     month_key,
     description,
-    img,
-    video_url,
     location,
     time_range,
     duration_hours,
     price_amount,
     price_currency,
+    more_img_alt,
     created_at,
     updated_at
   `;
 
-  // ============================================================
-  // State
-  // ============================================================
   const state = {
     activeTab: "events",
     query: "",
     activeEventId: null,
     events: [],
-    mode: "supabase", // supabase | blocked | missing
+    mode: "supabase",
     busy: false,
     didBind: false,
     didBoot: false,
@@ -224,6 +207,75 @@
         state.busy = false;
       }
     };
+  }
+
+  // ============================================================
+  // Media helpers (event)
+  // ============================================================
+  const EVENT_FOLDERS = ["event_img_desktop", "event_img_mobile", "event_more_img"];
+
+  async function fetchEventMedia(eventId) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    if (!eid) return {};
+
+    const { data, error } = await sb
+      .from(MEDIA_TABLE)
+      .select("folder, public_url, path")
+      .eq("target", "event")
+      .eq("event_id", eid)
+      .in("folder", EVENT_FOLDERS);
+
+    if (error) throw error;
+
+    const map = {};
+    (Array.isArray(data) ? data : []).forEach((row) => {
+      const f = String(row?.folder || "").trim();
+      const url = String(row?.public_url || row?.path || "").trim();
+      if (f) map[f] = url;
+    });
+
+    return map;
+  }
+
+  async function upsertEventMedia(eventId, folder, url) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    const f = String(folder || "").trim();
+    const u = String(url || "").trim();
+
+    if (!eid || !f) return;
+
+    // si vacío => borramos
+    if (!u) {
+      await sb
+        .from(MEDIA_TABLE)
+        .delete()
+        .eq("target", "event")
+        .eq("event_id", eid)
+        .eq("folder", f);
+      return;
+    }
+
+    const payload = {
+      target: "event",
+      folder: f,
+      name: f,
+      path: u,
+      public_url: u,
+      event_id: eid,
+    };
+
+    // onConflict: event_id,folder (tu índice único parcial aplica para target='event')
+    const { error } = await sb
+      .from(MEDIA_TABLE)
+      .upsert(payload, { onConflict: "event_id,folder" });
+
+    if (error) throw error;
   }
 
   // ============================================================
@@ -333,6 +385,11 @@
 
     const { error } = await sb.from(EVENTS_TABLE).delete().eq("id", id);
     if (error) throw error;
+
+    // Limpieza media asociada (best effort)
+    try {
+      await sb.from(MEDIA_TABLE).delete().eq("target", "event").eq("event_id", id);
+    } catch (_) {}
   }
 
   // ============================================================
@@ -345,9 +402,12 @@
 
   function clearEditorForm() {
     const ids = [
-      "eventId","evTitle","evType","evMonth","evImg","evDesc","evVideoUrl",
-      "evLocation","evTimeRange","evDurationHours","evDuration",
+      "eventId","evTitle","evType","evMonth",
+      "evDesc","evLocation","evTimeRange","evDurationHours","evDuration",
       "evPriceAmount","evPriceCurrency",
+      // media fields (tolerantes)
+      "evImg", "evImgDesktop", "evImgMobile", "evMoreImg",
+      "evMoreImgAlt",
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -424,16 +484,17 @@
         <div class="pills"><span class="pill">SUPABASE</span></div>
       `;
 
-      item.addEventListener("click", () => {
+      item.addEventListener("click", async () => {
         state.activeEventId = ev.id;
-        renderAll();
+        await renderAll(); // ahora renderAll es async para traer media
       });
 
       box.appendChild(item);
     });
   }
 
-  function renderEventEditor() {
+  // ✅ Carga media_items y llena campos del editor
+  async function renderEventEditor() {
     const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
     if (!ev) {
@@ -458,12 +519,6 @@
     }
 
     $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
-    $("#evImg") && ($("#evImg").value = ev.img || "");
-
-    // ✅ Video URL (opcional)
-    const vEl = $("#evVideoUrl");
-    if (vEl) vEl.value = ev.video_url || "";
-
     const d = ev.description || "";
     $("#evDesc") && ($("#evDesc").value = d);
     $("#descCount") && ($("#descCount").textContent = String(String(d).length));
@@ -478,7 +533,6 @@
       dur.value = label === "Por confirmar" ? "" : label;
     }
 
-    // ✅ Precio (si los inputs existen)
     const priceAmountEl = $("#evPriceAmount");
     const priceCurrencyEl = $("#evPriceCurrency");
 
@@ -489,17 +543,34 @@
     if (priceCurrencyEl) {
       priceCurrencyEl.value = normalizeCurrency(ev.price_currency, "USD");
     }
+
+    // ✅ more_img_alt vive en events
+    const altEl = $("#evMoreImgAlt");
+    if (altEl) altEl.value = ev.more_img_alt || "";
+
+    // ✅ Media desde media_items
+    try {
+      const media = await fetchEventMedia(ev.id);
+
+      const imgDesktopEl = $("#evImgDesktop") || $("#evImg"); // compat legacy
+      const imgMobileEl = $("#evImgMobile");
+      const moreImgEl = $("#evMoreImg");
+
+      if (imgDesktopEl) imgDesktopEl.value = media.event_img_desktop || "";
+      if (imgMobileEl) imgMobileEl.value = media.event_img_mobile || "";
+      if (moreImgEl) moreImgEl.value = media.event_more_img || "";
+    } catch (err) {
+      console.error(err);
+      toast("Media", "No se pudo cargar media_items del evento (revisá RLS de media_items).", 4200);
+    }
   }
 
-  function renderAll() {
+  async function renderAll() {
     if (state.activeTab !== "events") return;
     renderEventList();
-    renderEventEditor();
+    await renderEventEditor();
   }
 
-  // ============================================================
-  // On-demand loader
-  // ============================================================
   async function ensureEventsLoaded(force) {
     if (state.mode === "missing") return;
     if (state.didLoadOnce && !force) return;
@@ -518,7 +589,7 @@
         toast("Supabase", "No se pudieron cargar eventos. Revisá consola.", 5200);
       }
     } finally {
-      renderAll();
+      await renderAll();
     }
   }
 
@@ -539,14 +610,13 @@
         title: "Nuevo evento",
         type: typeFallback,
         month_key: "ENERO",
-        img: "./assets/img/hero-1.jpg",
-        video_url: "",
         description: "",
         location: "Por confirmar",
         time_range: "",
         duration_hours: "",
         price_amount: null,
         price_currency: "USD",
+        more_img_alt: "",
       };
 
       const created = await insertEvent(payload);
@@ -555,7 +625,7 @@
       state.activeEventId = created.id;
 
       toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
-      renderAll();
+      await renderAll();
 
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
@@ -587,23 +657,30 @@
         title: `${ev.title || "Evento"} (Copia)`,
         type: ev.type || ($("#evType")?.value || "Cata de vino"),
         month_key: normalizeMonth(ev.month_key || "ENERO"),
-        img: ev.img || "./assets/img/hero-1.jpg",
-        video_url: ev.video_url || "",
         description: ev.description || "",
         location: ev.location || "Por confirmar",
         time_range: ev.time_range || "",
         duration_hours: ev.duration_hours || "",
         price_amount: ev.price_amount == null ? null : ev.price_amount,
         price_currency: normalizeCurrency(ev.price_currency, "USD"),
+        more_img_alt: ev.more_img_alt || "",
       };
 
       const created = await insertEvent(payload);
+
+      // Duplicar media_items del evento original (si existe)
+      try {
+        const m = await fetchEventMedia(ev.id);
+        await upsertEventMedia(created.id, "event_img_desktop", m.event_img_desktop || "");
+        await upsertEventMedia(created.id, "event_img_mobile", m.event_img_mobile || "");
+        await upsertEventMedia(created.id, "event_more_img", m.event_more_img || "");
+      } catch (_) {}
 
       state.events.unshift(created);
       state.activeEventId = created.id;
 
       toast("Duplicado", "Copia creada.", 1500);
-      renderAll();
+      await renderAll();
 
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
@@ -639,7 +716,7 @@
       state.activeEventId = null;
 
       toast("Evento eliminado", "Se eliminó correctamente.", 1600);
-      renderAll();
+      await renderAll();
 
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
@@ -662,13 +739,8 @@
     const title = cleanSpaces($("#evTitle")?.value || "");
     const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
-    const img = cleanSpaces($("#evImg")?.value || "");
-
-    // ✅ Importante: si el input no existe o está vacío, NO queremos borrar el valor en DB.
-    const video_url_input = cleanSpaces($("#evVideoUrl")?.value || "");
 
     const description = cleanSpaces($("#evDesc")?.value || "");
-
     const location = cleanSpaces($("#evLocation")?.value || "");
     const time_range = normalizeTimeRange($("#evTimeRange")?.value || "");
     const duration_hours = parseHoursNumber($("#evDurationHours")?.value || "");
@@ -679,35 +751,38 @@
     let price_amount = ev.price_amount == null ? null : ev.price_amount;
     let price_currency = normalizeCurrency(ev.price_currency, "USD");
 
-    if (priceAmountEl) {
-      const parsed = parseMoneyAmount(priceAmountEl.value);
-      price_amount = parsed;
-    }
-    if (priceCurrencyEl) {
-      price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
-    }
+    if (priceAmountEl) price_amount = parseMoneyAmount(priceAmountEl.value);
+    if (priceCurrencyEl) price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
+
+    // more_img_alt en events
+    const moreAlt = cleanSpaces(($("#evMoreImgAlt")?.value) || ev.more_img_alt || "");
 
     if (!title) {
       toast("Falta el nombre", "Ingresá el nombre del evento.");
       return false;
     }
 
-    // ✅ FIX: mantener el video previo si no hay valor nuevo
-    const final_video_url = video_url_input || (ev.video_url || "");
-
     const payload = {
       title,
       type,
       month_key,
-      img: img || "./assets/img/hero-1.jpg",
-      video_url: final_video_url,
       description,
       location: location || "Por confirmar",
       time_range,
       duration_hours: duration_hours === "0" ? "" : duration_hours,
       price_amount,
       price_currency,
+      more_img_alt: moreAlt,
     };
+
+    // Media inputs (compat)
+    const imgDesktopEl = $("#evImgDesktop") || $("#evImg"); // legacy
+    const imgMobileEl = $("#evImgMobile");
+    const moreImgEl = $("#evMoreImg");
+
+    const imgDesktopUrl = cleanSpaces(imgDesktopEl?.value || "");
+    const imgMobileUrl = cleanSpaces(imgMobileEl?.value || "");
+    const moreImgUrl = cleanSpaces(moreImgEl?.value || "");
 
     try {
       if (state.mode !== "supabase") {
@@ -716,7 +791,13 @@
       }
 
       setBusy(true, "Guardando cambios…");
+
       const updated = await updateEvent(ev.id, payload);
+
+      // upsert/delete media_items
+      await upsertEventMedia(ev.id, "event_img_desktop", imgDesktopUrl);
+      await upsertEventMedia(ev.id, "event_img_mobile", imgMobileUrl);
+      await upsertEventMedia(ev.id, "event_more_img", moreImgUrl);
 
       state.events = (state.events || []).map((x) =>
         String(x.id) === String(updated.id) ? updated : x
@@ -724,7 +805,7 @@
 
       toast("Guardado", "Evento actualizado en Supabase.", 1400);
       setNote("");
-      renderAll();
+      await renderAll();
 
       try { await ensureEventsLoaded(true); } catch (_) {}
       return true;
@@ -732,7 +813,7 @@
       console.error(err);
       if (isRLSError(err)) {
         state.mode = "blocked";
-        toast("RLS", "Falta policy UPDATE para events (admins).", 5200);
+        toast("RLS", "Falta policy UPDATE (events/media_items) para admins.", 5200);
       } else {
         toast("Error", prettyError(err), 5200);
       }
@@ -797,9 +878,6 @@
     });
   }
 
-  // ============================================================
-  // Boot (espera admin:ready)
-  // ============================================================
   function boot() {
     if (state.didBoot) return;
     state.didBoot = true;
