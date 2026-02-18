@@ -164,13 +164,33 @@
                           <option>SEPTIEMBRE</option><option>OCTUBRE</option><option>NOVIEMBRE</option><option>DICIEMBRE</option>
                         </select>
                       </div>
+
+                      <!-- ✅ Mantener evImg como mobile/fallback (compat + admin.js) -->
                       <div class="field">
                         <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
                         <input class="input" id="evImg" type="text" placeholder="https://…" />
                       </div>
                     </div>
 
-                    <!-- ✅ VIDEO URL DESKTOP -->
+                    <!-- ✅ NUEVO: imagen desktop (no rompe si DB no tiene columna / admin.js ya hace fallback) -->
+                    <div class="row">
+                      <div class="field">
+                        <label class="label" for="evImgDesktop">Imagen (url) — desktop</label>
+                        <input class="input" id="evImgDesktop" type="text" placeholder="https://…/hero-desktop.webp" />
+                        <div class="mini">
+                          Opcional. Si lo dejás vacío, se usa la imagen de mobile/fallback.
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="evImgMobile">Imagen (url) — mobile (opcional)</label>
+                        <input class="input" id="evImgMobile" type="text" placeholder="https://…/hero-mobile.webp" />
+                        <div class="mini">
+                          Opcional. Si no lo usás, <b>evImg</b> sigue siendo el fallback principal.
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- ✅ VIDEO URL DESKTOP + VER MÁS -->
                     <div class="row">
                       <div class="field">
                         <label class="label" for="evVideoUrl">Video (url) — desktop (MP4/WebM)</label>
@@ -179,9 +199,21 @@
                           Tip: usá el tab <b>Medios</b>, seleccioná bucket <b>video</b> y pegá aquí la URL pública.
                         </div>
                       </div>
+
                       <div class="field">
-                        <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
-                        <input class="input" id="evImg_dup" type="text" placeholder="(opcional) repetido para layout" hidden />
+                        <label class="label" for="evMoreImg">Imagen “Ver más” (url)</label>
+                        <input class="input" id="evMoreImg" type="text" placeholder="https://…/detalle.webp" />
+                        <div class="mini">
+                          Opcional. Para una imagen adicional en la sección “Ver más”.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="field">
+                      <label class="label" for="evMoreImgAlt">Texto alternativo “Ver más”</label>
+                      <input class="input" id="evMoreImgAlt" type="text" placeholder="Descripción corta de la imagen" maxlength="120" />
+                      <div class="mini">
+                        Opcional. Ayuda con accesibilidad/SEO.
                       </div>
                     </div>
 
@@ -435,6 +467,7 @@
 
                   <div class="empty" id="mediaPreviewEmpty">Seleccioná un archivo para previsualizar.</div>
 
+                  <!-- admin-media.js usa #mediaPreview como contenedor (no requiere mediaPreviewImg) -->
                   <div id="mediaPreview" hidden>
                     <img id="mediaPreviewImg" alt="Preview" style="width:100%; height:auto; border:1px solid rgba(255,255,255,.10);" />
                     <div class="note" id="mediaPreviewMeta"></div>
@@ -616,17 +649,21 @@
       });
 
       // Validación antes de subir (bloquea submit si excede)
-      form.addEventListener("submit", (e) => {
-        const f = file.files && file.files[0];
-        if (!f) return;
+      form.addEventListener(
+        "submit",
+        (e) => {
+          const f = file.files && file.files[0];
+          if (!f) return;
 
-        const max = getMaxBytes();
-        if (f.size > max) {
-          e.preventDefault();
-          e.stopPropagation();
-          toast("No se puede subir", `El archivo excede ${fmtMB(max)}. Reducilo o exportalo más liviano.`);
-        }
-      }, true);
+          const max = getMaxBytes();
+          if (f.size > max) {
+            e.preventDefault();
+            e.stopPropagation();
+            toast("No se puede subir", `El archivo excede ${fmtMB(max)}. Reducilo o exportalo más liviano.`);
+          }
+        },
+        true
+      );
     })();
   </script>
 </body>
