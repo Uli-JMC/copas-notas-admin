@@ -1,43 +1,58 @@
-"use strict";
-
-/**
- * admin-media.js ✅ (Supabase Storage + media_items bridge) — v2026-02-18
- *
- * Objetivo:
- * - Subir archivos a Storage (bucket)
- * - Guardar la referencia en DB: media_items (source of truth)
- *
- * Soporta:
- * - target='event' con event_id + folder:
- *    - event_img_desktop
- *    - event_img_mobile
- *    - event_more_img
- *
- * Requiere:
- * - window.APP.supabase listo
- * - Tabla media_items con (target, event_id, folder, path, public_url, name)
- * - Unique / upsert por (event_id, folder) (como ya definiste)
- *
- * IDs esperados en tu HTML (si no existen, no rompe; solo algunas funciones no aparecerán):
- * - #mediaEventSelect (select con lista de eventos)  [opcional]
- * - #mediaFolderSelect (select de folder)            [opcional]
- * - #mediaFile (input type=file)                    [recomendado]
- * - #mediaUploadBtn (button)                        [opcional]
- * - #mediaList (contenedor lista)                   [recomendado]
- * - #mediaNote (texto de estado)                    [opcional]
- *
- * Si tu HTML usa otros IDs, decime cuáles y te lo adapto 1:1.
- */
-
+/* ============================================================
+   admin-media.js ✅ PRO + EVENTS BRIDGE (media_items) — 2026-02-18
+   - Mantiene tu flujo actual: Storage PUBLIC (media/video) + lista + preview
+   - ✅ NUEVO: “Asignar a evento” guardando en DB: media_items (target='event')
+     - folders: event_img_desktop | event_img_mobile | event_more_img
+     - usa URL pública generada (mediaUrl) + path detectado desde la lista/subida
+   - NO requiere modificar admin.html: inyecta UI dentro de #tab-media
+============================================================ */
 (function () {
-  const VERSION = "2026-02-18.1";
+  "use strict";
 
-  // =========================
+  const VERSION = "2026-02-18.2";
+  const $ = (sel, root = document) => root.querySelector(sel);
+
+  // ------------------------------------------------------------
+  // Guards base
+  // ------------------------------------------------------------
+  if (!document.getElementById("appPanel")) return;
+
+  const panel = document.getElementById("tab-media");
+  if (!panel) return;
+
+  // ------------------------------------------------------------
   // Config
-  // =========================
-  const STORAGE_BUCKET = "media"; // ⬅️ cambia si tu bucket se llama distinto
+  // ------------------------------------------------------------
+  const BUCKET_IMG = "media";
+  const BUCKET_VID = "video";
+
+  // ✅ límites (25MB)
+  const MAX_IMG_MB = 25;
+  const MAX_VID_MB = 25;
+
+  const MAX_IMG_BYTES = MAX_IMG_MB * 1024 * 1024;
+  const MAX_VID_BYTES = MAX_VID_MB * 1024 * 1024;
+
+  const LIST_LIMIT = 60;
+
+  // ✅ Auto-compress config (solo imágenes)
+  const COMPRESS_MAX_DIM_DEFAULT = 1920;
+  const COMPRESS_QUALITY_DEFAULT = 0.82;
+  const COMPRESS_MIN_BYTES = 900 * 1024;
+  const COMPRESS_TIMEOUT_MS = 12000;
+
+  // ✅ Settings localStorage keys
+  const LS_KEYS = {
+    optimize: "admin_media_optimize",
+    forceWebp: "admin_media_force_webp",
+    quality: "admin_media_quality",
+    maxDim: "admin_media_max_dim",
+  };
+
+  // ✅ DB bridge
   const MEDIA_TABLE = "media_items";
   const EVENTS_TABLE = "events";
+  const EVENT_TARGET = "event";
 
   const EVENT_FOLDERS = [
     { value: "event_img_desktop", label: "Evento · Imagen Desktop (hero)" },
@@ -45,11 +60,9 @@
     { value: "event_more_img", label: "Evento · “Ver más info” (modal)" },
   ];
 
-  // =========================
-  // DOM helpers
-  // =========================
-  const $ = (sel, root = document) => root.querySelector(sel);
-
+  // ------------------------------------------------------------
+  // Toast
+  // ------------------------------------------------------------
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -59,517 +72,1515 @@
       .replaceAll("'", "&#039;");
   }
 
-  function clean(s) {
-    return String(s ?? "").trim();
-  }
-
-  function hasSB() {
-    return !!(window.APP && APP.supabase);
-  }
-
-  function sb() {
-    return APP.supabase;
-  }
-
-  function setNote(msg) {
-    const el = $("#mediaNote");
-    if (!el) return;
-    el.textContent = String(msg || "");
-  }
-
   function toast(title, msg, timeoutMs = 3200) {
-    try {
-      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
-    } catch (_) {}
-    try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
-    } catch (_) {}
+    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs); } catch (_) {}
+    try { if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs); } catch (_) {}
 
-    // fallback mínimo
-    console.log(`[toast] ${title}: ${msg}`);
+    const toastsEl = document.getElementById("toasts");
+    if (!toastsEl) return;
+
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.innerHTML = `
+      <div>
+        <p class="tTitle">${escapeHtml(title)}</p>
+        <p class="tMsg">${escapeHtml(msg)}</p>
+      </div>
+      <button class="close" aria-label="Cerrar" type="button">✕</button>
+    `;
+    toastsEl.appendChild(el);
+
+    const kill = () => {
+      el.style.opacity = "0";
+      el.style.transform = "translateY(-6px)";
+      setTimeout(() => el.remove(), 180);
+    };
+    el.querySelector(".close")?.addEventListener("click", kill, { once: true });
+    setTimeout(kill, timeoutMs);
   }
 
-  function isRLSError(err) {
-    const m = String(err?.message || "").toLowerCase();
-    const code = String(err?.code || "").toLowerCase();
+  // ------------------------------------------------------------
+  // Helpers
+  // ------------------------------------------------------------
+  function safeStr(x) { return String(x ?? ""); }
+  function cleanSpaces(s) { return safeStr(s).replace(/\s+/g, " ").trim(); }
+
+  function clampNum(n, min, max) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return min;
+    return Math.max(min, Math.min(max, x));
+  }
+
+  function sanitizeFolder(folder) {
+    let f = cleanSpaces(folder || "events").toLowerCase();
+    f = f.replace(/\\/g, "/");
+    f = f.replace(/\.\./g, "");
+    f = f.replace(/\/+/g, "/");
+    f = f.replace(/^\/|\/$/g, "");
+    if (!f) f = "events";
+    return f;
+  }
+
+  function slugify(s) {
+    return cleanSpaces(s)
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9\-]/g, "")
+      .replace(/\-+/g, "-")
+      .replace(/^\-|\-$/g, "");
+  }
+
+  function isVideoFile(file) {
+    return !!file && /^video\//i.test(file.type || "");
+  }
+  function isImageFile(file) {
+    return !!file && /^image\//i.test(file.type || "");
+  }
+
+  function extFromNameOrMime(file) {
+    const name = safeStr(file?.name || "");
+    const m = safeStr(file?.type || "").toLowerCase();
+    const fromName = (name.split(".").pop() || "").toLowerCase();
+
+    // videos
+    if (["mp4", "webm"].includes(fromName)) return fromName;
+    if (m.includes("mp4")) return "mp4";
+    if (m.includes("webm")) return "webm";
+
+    // images
+    if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
+    if (m.includes("webp")) return "webp";
+    if (m.includes("png")) return "png";
+    if (m.includes("gif")) return "gif";
+    if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
+
+    return isVideoFile(file) ? "mp4" : "jpg";
+  }
+
+  function humanKB(bytes) {
+    const b = Number(bytes || 0);
+    if (!Number.isFinite(b) || b <= 0) return "—";
+    const kb = b / 1024;
+    if (kb < 1024) return `${Math.round(kb)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
+  }
+
+  function fmtShortDate(isoOrMs) {
+    try {
+      const d = typeof isoOrMs === "number" ? new Date(isoOrMs) : new Date(safeStr(isoOrMs));
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+    } catch (_) {
+      return "—";
+    }
+  }
+
+  function looksLikeRLSError(err) {
+    const m = safeStr(err?.message || err || "").toLowerCase();
+    const c = safeStr(err?.code || "").toLowerCase();
     return (
-      code === "42501" ||
+      c === "42501" ||
       m.includes("42501") ||
       m.includes("rls") ||
+      m.includes("row level security") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
-      m.includes("row level security") ||
-      m.includes("violates row-level security") ||
-      m.includes("new row violates row-level security")
+      m.includes("violates row-level security")
     );
   }
 
-  // =========================
+  function looksLikeStorageError(err) {
+    const m = safeStr(err?.message || err || "").toLowerCase();
+    return m.includes("bucket") || m.includes("storage") || m.includes("object") || m.includes("not found");
+  }
+
+  function getSB() {
+    return window.APP && (APP.supabase || APP.sb) ? (APP.supabase || APP.sb) : null;
+  }
+
+  async function ensureSession() {
+    const sb = getSB();
+    if (!sb) return null;
+
+    try {
+      const res = await sb.auth.getSession();
+      const s = res?.data?.session || null;
+      if (!s) {
+        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
+        return null;
+      }
+      return s;
+    } catch (_) {
+      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
+      return null;
+    }
+  }
+
+  function publicUrlFromPath(bucket, path) {
+    const sb = getSB();
+    const b = cleanSpaces(bucket);
+    const p = cleanSpaces(path);
+    if (!sb || !b || !p) return "";
+    try {
+      const res = sb.storage.from(b).getPublicUrl(p);
+      return res?.data?.publicUrl || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function normalizeBucket(b) {
+    const v = cleanSpaces(b || "").toLowerCase();
+    if (v === BUCKET_VID) return BUCKET_VID;
+    return BUCKET_IMG;
+  }
+
+  // ------------------------------------------------------------
+  // Settings (localStorage) — solo imágenes
+  // ------------------------------------------------------------
+  function readLS(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v == null) return fallback;
+      return v;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeLS(key, value) {
+    try { localStorage.setItem(key, String(value)); } catch (_) {}
+  }
+
+  function loadSettings() {
+    const optimize = readLS(LS_KEYS.optimize, "1") !== "0";
+    const forceWebp = readLS(LS_KEYS.forceWebp, "0") === "1";
+    const quality = clampNum(Number(readLS(LS_KEYS.quality, String(COMPRESS_QUALITY_DEFAULT))), 0.55, 0.95);
+    const maxDim = Math.round(clampNum(Number(readLS(LS_KEYS.maxDim, String(COMPRESS_MAX_DIM_DEFAULT))), 800, 4096));
+    return { optimize, forceWebp, quality, maxDim };
+  }
+
+  // ------------------------------------------------------------
+  // Auto-compress helpers (solo imágenes)
+  // ------------------------------------------------------------
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("timeout")), ms);
+      promise
+        .then((v) => { clearTimeout(t); resolve(v); })
+        .catch((e) => { clearTimeout(t); reject(e); });
+    });
+  }
+
+  function canvasToBlob(canvas, mime, quality) {
+    return new Promise((resolve) => {
+      try { canvas.toBlob((blob) => resolve(blob || null), mime, quality); }
+      catch (_) { resolve(null); }
+    });
+  }
+
+  function supportsWebP() {
+    try {
+      const c = document.createElement("canvas");
+      if (!c.getContext) return false;
+      return c.toDataURL("image/webp").startsWith("data:image/webp");
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function loadImageFromFile(file) {
+    if (typeof createImageBitmap === "function") {
+      try {
+        const bmp = await createImageBitmap(file);
+        return { kind: "bitmap", img: bmp, width: bmp.width, height: bmp.height };
+      } catch (_) {}
+    }
+
+    return await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ kind: "img", img, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+      };
+      img.onerror = () => {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+        reject(new Error("image_load_failed"));
+      };
+      img.src = url;
+    });
+  }
+
+  function computeTargetSize(w, h, maxDim) {
+    const W = Number(w || 0), H = Number(h || 0);
+    if (!W || !H) return { tw: W, th: H, scale: 1 };
+    const maxSide = Math.max(W, H);
+    if (maxSide <= maxDim) return { tw: W, th: H, scale: 1 };
+    const scale = maxDim / maxSide;
+    return { tw: Math.max(1, Math.round(W * scale)), th: Math.max(1, Math.round(H * scale)), scale };
+  }
+
+  async function compressImageSmart(originalFile, opts) {
+    const file = originalFile;
+
+    const enabled = !!opts?.optimize;
+    if (!enabled) return { file, changed: false, note: "" };
+
+    const quality = clampNum(Number(opts?.quality ?? COMPRESS_QUALITY_DEFAULT), 0.55, 0.95);
+    const maxDim = Math.round(clampNum(Number(opts?.maxDim ?? COMPRESS_MAX_DIM_DEFAULT), 800, 4096));
+    const forceWebp = !!opts?.forceWebp;
+
+    if (!file || !/^image\//.test(file.type)) return { file, changed: false, note: "" };
+
+    const size = Number(file.size || 0);
+    const maybeSkipBySize = size > 0 && size < COMPRESS_MIN_BYTES;
+
+    let info;
+    try {
+      info = await withTimeout(loadImageFromFile(file), COMPRESS_TIMEOUT_MS);
+    } catch (_) {
+      return { file, changed: false, note: "" };
+    }
+
+    const w = info.width, h = info.height;
+    const { tw, th, scale } = computeTargetSize(w, h, maxDim);
+
+    if (scale === 1 && maybeSkipBySize) {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      return { file, changed: false, note: "" };
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = tw || w;
+    canvas.height = th || h;
+
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      return { file, changed: false, note: "" };
+    }
+
+    try {
+      ctx.drawImage(info.img, 0, 0, canvas.width, canvas.height);
+    } catch (_) {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      return { file, changed: false, note: "" };
+    } finally {
+      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+    }
+
+    const webpOK = supportsWebP();
+    const useWebP = forceWebp ? webpOK : webpOK;
+    const mime = useWebP ? "image/webp" : "image/jpeg";
+
+    let blob = await withTimeout(canvasToBlob(canvas, mime, quality), COMPRESS_TIMEOUT_MS).catch(() => null);
+    if (!blob) return { file, changed: false, note: "" };
+
+    if (Number(blob.size || 0) >= size && scale === 1) {
+      return { file, changed: false, note: "" };
+    }
+
+    const baseName = (file.name || "img").replace(/\.[a-z0-9]+$/i, "");
+    const ext = useWebP ? "webp" : "jpg";
+    const newName = `${baseName}.${ext}`;
+    const out = new File([blob], newName, { type: mime, lastModified: Date.now() });
+
+    const note = useWebP
+      ? (forceWebp ? "Optimizada a WebP (forzado)" : "Optimizada a WebP")
+      : "Optimizada a JPG";
+
+    return {
+      file: out,
+      changed: true,
+      note,
+      meta: { from: { w, h, size }, to: { w: canvas.width, h: canvas.height, size: out.size }, quality, maxDim },
+    };
+  }
+
+  // ------------------------------------------------------------
+  // DOM refs (panel)
+  // ------------------------------------------------------------
+  function R() {
+    return {
+      formEl: $("#mediaForm", panel),
+      fileInp: $("#mediaFile", panel),
+
+      bucketSel: $("#mediaBucket", panel),
+      folderSel: $("#mediaFolder", panel),
+
+      nameInp: $("#mediaName", panel),
+      urlInp: $("#mediaUrl", panel),
+
+      uploadBtn: $("#mediaUploadBtn", panel),
+      copyBtn: $("#mediaCopyBtn", panel),
+      resetBtn: $("#mediaResetBtn", panel),
+      noteEl: $("#mediaNote", panel),
+
+      previewEmpty: $("#mediaPreviewEmpty", panel),
+      previewWrap: $("#mediaPreview", panel),
+      previewMeta: $("#mediaPreviewMeta", panel),
+
+      refreshBtn: $("#mediaRefreshBtn", panel),
+      listEl: $("#mediaList", panel),
+    };
+  }
+
+  function setNote(msg, kind) {
+    const r = R();
+    if (!r.noteEl) return;
+    r.noteEl.textContent = msg || "";
+    r.noteEl.dataset.kind = kind || "";
+  }
+
+  // ------------------------------------------------------------
   // State
-  // =========================
-  const state = {
-    ready: false,
-    events: [],
-    eventId: "",
-    folder: "event_img_desktop",
+  // ------------------------------------------------------------
+  const S = {
+    didBind: false,
+    didBoot: false,
     busy: false,
-    items: [], // media_items for selected event
+
+    previewUrl: "",
+
+    // Para el bridge: último objeto seleccionado
+    selected: {
+      bucket: "",
+      path: "",
+      url: "",
+      name: "",
+      mime: "",
+      size: 0,
+      updated_at: "",
+    },
+
+    lastUploadedPath: "",
+    lastUploadedBucket: "",
+
+    list: [],
+    currentFolder: "events",
+    currentBucket: BUCKET_IMG,
+
+    lastLoadedAt: 0,
+    lastTabLoadAt: 0,
+
+    settings: loadSettings(),
+
+    // DB bridge
+    events: [],
+    bridgeMounted: false,
   };
 
-  function withLock(fn) {
-    return async (...args) => {
-      if (state.busy) return;
-      state.busy = true;
-      try {
-        return await fn(...args);
-      } finally {
-        state.busy = false;
+  function setBusy(on) {
+    S.busy = !!on;
+    const r = R();
+
+    try {
+      const els = panel.querySelectorAll("input, select, button, textarea");
+      els.forEach((el) => {
+        const id = (el && el.id) ? el.id : "";
+        const keepEnabled = (id === "mediaUrl" || id === "mediaCopyBtn");
+        el.disabled = S.busy ? !keepEnabled : false;
+      });
+    } catch (_) {}
+
+    try {
+      if (r.uploadBtn) r.uploadBtn.textContent = S.busy ? "Subiendo…" : "Subir";
+    } catch (_) {}
+  }
+
+  // ------------------------------------------------------------
+  // UX: accept + bucket hint
+  // ------------------------------------------------------------
+  function applyAcceptForBucket(bucket) {
+    const r = R();
+    const b = normalizeBucket(bucket);
+
+    if (r.fileInp) {
+      if (b === BUCKET_IMG) r.fileInp.accept = "image/*,video/*";
+      if (b === BUCKET_VID) r.fileInp.accept = "video/*";
+    }
+
+    setBucketHint(b);
+  }
+
+  function setBucketHint(bucket) {
+    const r = R();
+    if (!r.bucketSel) return;
+
+    let hint = panel.querySelector('[data-media-bucket-hint="1"]');
+    if (!hint) {
+      hint = document.createElement("div");
+      hint.setAttribute("data-media-bucket-hint", "1");
+      hint.style.marginTop = "6px";
+      hint.style.fontSize = "12px";
+      hint.style.opacity = ".85";
+      hint.style.padding = "6px 10px";
+      hint.style.borderRadius = "10px";
+      hint.style.border = "1px solid rgba(255,255,255,.10)";
+      hint.style.background = "rgba(255,255,255,.03)";
+
+      const field = r.bucketSel.closest(".field");
+      if (field) field.appendChild(hint);
+      else r.bucketSel.parentNode?.appendChild(hint);
+    }
+
+    const isVid = normalizeBucket(bucket) === BUCKET_VID;
+    if (isVid) {
+      hint.textContent = `Bucket video: sin optimización. Recomendado MP4/WebM (≤ ~${MAX_VID_MB}MB).`;
+      hint.style.opacity = "1";
+    } else {
+      hint.textContent = `Bucket media: imágenes. Optimización disponible (WebP/JPG) antes de subir (≤ ~${MAX_IMG_MB}MB).`;
+      hint.style.opacity = ".85";
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Settings UI injection
+  // ------------------------------------------------------------
+  function ensureSettingsUI() {
+    if (panel.querySelector('[data-media-settings="1"]')) return;
+
+    const wrap = document.createElement("div");
+    wrap.setAttribute("data-media-settings", "1");
+    wrap.style.margin = "12px 0";
+    wrap.style.padding = "10px 12px";
+    wrap.style.border = "1px solid rgba(255,255,255,.10)";
+    wrap.style.background = "rgba(255,255,255,.03)";
+    wrap.style.borderRadius = "10px";
+
+    const webpOK = supportsWebP();
+
+    wrap.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="mediaOptToggle" ${S.settings.optimize ? "checked" : ""}>
+            <span style="opacity:.95;">Optimizar antes de subir (solo imágenes)</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; opacity:${webpOK ? "1" : ".55"};">
+            <input type="checkbox" id="mediaForceWebp" ${S.settings.forceWebp ? "checked" : ""} ${webpOK ? "" : "disabled"}>
+            <span>Forzar WebP</span>
+            <span style="font-size:12px; opacity:.75;">${webpOK ? "" : "(no soportado)"}</span>
+          </label>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="opacity:.85; font-size:12px;">Calidad</span>
+          <input type="range" id="mediaQuality" min="55" max="95" step="1" value="${Math.round(S.settings.quality * 100)}" style="width:160px;">
+          <span id="mediaQualityVal" style="min-width:36px; text-align:right; font-variant-numeric:tabular-nums;">${Math.round(S.settings.quality * 100)}</span>
+        </div>
+      </div>
+
+      <div style="margin-top:8px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="opacity:.75; font-size:12px;">
+          Resize máx: <b id="mediaMaxDimVal">${S.settings.maxDim}</b>px ·
+          <span style="opacity:.75;">(automático)</span>
+          <span style="margin-left:10px; opacity:.75;">Buckets: <b>${BUCKET_IMG}</b> (img) / <b>${BUCKET_VID}</b> (video)</span>
+        </div>
+
+        <button type="button" class="btn" id="mediaResetSettingsBtn" style="white-space:nowrap;">Reset settings</button>
+      </div>
+    `;
+
+    try {
+      const r = R();
+      if (r.formEl && r.formEl.parentNode) r.formEl.parentNode.insertBefore(wrap, r.formEl);
+      else panel.insertBefore(wrap, panel.firstChild);
+    } catch (_) {
+      panel.insertBefore(wrap, panel.firstChild);
+    }
+
+    const optToggle = wrap.querySelector("#mediaOptToggle");
+    const forceWebp = wrap.querySelector("#mediaForceWebp");
+    const quality = wrap.querySelector("#mediaQuality");
+    const qualityVal = wrap.querySelector("#mediaQualityVal");
+    const resetBtn = wrap.querySelector("#mediaResetSettingsBtn");
+
+    function syncUI() {
+      const webp = supportsWebP();
+      if (forceWebp) {
+        forceWebp.disabled = !webp;
+        forceWebp.parentElement.style.opacity = webp ? "1" : ".55";
+        if (!webp) {
+          forceWebp.checked = false;
+          S.settings.forceWebp = false;
+          writeLS(LS_KEYS.forceWebp, "0");
+        }
       }
-    };
+      if (quality && qualityVal) {
+        const q = clampNum(Number(quality.value) / 100, 0.55, 0.95);
+        qualityVal.textContent = String(Math.round(q * 100));
+      }
+    }
+
+    optToggle?.addEventListener("change", () => {
+      S.settings.optimize = !!optToggle.checked;
+      writeLS(LS_KEYS.optimize, S.settings.optimize ? "1" : "0");
+      toast("Media", S.settings.optimize ? "Optimización activada." : "Optimización desactivada.", 1200);
+    });
+
+    forceWebp?.addEventListener("change", () => {
+      S.settings.forceWebp = !!forceWebp.checked;
+      writeLS(LS_KEYS.forceWebp, S.settings.forceWebp ? "1" : "0");
+      toast("Media", S.settings.forceWebp ? "Forzar WebP activado." : "Forzar WebP desactivado.", 1200);
+    });
+
+    quality?.addEventListener("input", () => {
+      const q = clampNum(Number(quality.value) / 100, 0.55, 0.95);
+      S.settings.quality = q;
+      writeLS(LS_KEYS.quality, String(q));
+      if (qualityVal) qualityVal.textContent = String(Math.round(q * 100));
+    });
+
+    resetBtn?.addEventListener("click", () => {
+      S.settings = {
+        optimize: true,
+        forceWebp: false,
+        quality: COMPRESS_QUALITY_DEFAULT,
+        maxDim: COMPRESS_MAX_DIM_DEFAULT,
+      };
+      writeLS(LS_KEYS.optimize, "1");
+      writeLS(LS_KEYS.forceWebp, "0");
+      writeLS(LS_KEYS.quality, String(COMPRESS_QUALITY_DEFAULT));
+      writeLS(LS_KEYS.maxDim, String(COMPRESS_MAX_DIM_DEFAULT));
+
+      if (optToggle) optToggle.checked = true;
+      if (forceWebp) forceWebp.checked = false;
+      if (quality) quality.value = String(Math.round(COMPRESS_QUALITY_DEFAULT * 100));
+      const md = wrap.querySelector("#mediaMaxDimVal");
+      if (md) md.textContent = String(COMPRESS_MAX_DIM_DEFAULT);
+
+      syncUI();
+      toast("Media", "Settings reiniciados.", 1200);
+    });
+
+    syncUI();
   }
 
-  // =========================
-  // Storage helpers
-  // =========================
-  function guessExt(filename) {
-    const name = String(filename || "").trim();
-    const i = name.lastIndexOf(".");
-    if (i <= -1) return "";
-    return name.slice(i + 1).toLowerCase();
+  // ------------------------------------------------------------
+  // Preview (img/video)
+  // ------------------------------------------------------------
+  function resetPreview() {
+    const r = R();
+    if (S.previewUrl) {
+      try { URL.revokeObjectURL(S.previewUrl); } catch (_) {}
+      S.previewUrl = "";
+    }
+
+    if (r.previewWrap) r.previewWrap.innerHTML = "";
+    if (r.previewMeta) r.previewMeta.textContent = "";
+    if (r.previewWrap) r.previewWrap.hidden = true;
+    if (r.previewEmpty) r.previewEmpty.hidden = false;
   }
 
-  function buildStoragePath({ target, folder, eventId, filename }) {
-    // ruta estable (recomendado): target/event/<eventId>/<folder>/<timestamp>_<filename>
-    const ts = Date.now();
-    const safeName = String(filename || "file").replace(/[^\w.\-]+/g, "_");
-    return `${target}/event/${eventId}/${folder}/${ts}_${safeName}`;
+  function renderPreview(file) {
+    const r = R();
+    if (!file) { resetPreview(); return; }
+
+    try { if (S.previewUrl) URL.revokeObjectURL(S.previewUrl); } catch (_) {}
+    S.previewUrl = URL.createObjectURL(file);
+
+    if (r.previewWrap) {
+      r.previewWrap.innerHTML = "";
+
+      if (isVideoFile(file)) {
+        const v = document.createElement("video");
+        v.src = S.previewUrl;
+        v.muted = true;
+        v.loop = true;
+        v.playsInline = true;
+        v.autoplay = true;
+        v.controls = true;
+        v.style.width = "100%";
+        v.style.height = "auto";
+        v.style.border = "1px solid rgba(255,255,255,.10)";
+        r.previewWrap.appendChild(v);
+      } else {
+        const img = document.createElement("img");
+        img.src = S.previewUrl;
+        img.alt = file.name || "Preview";
+        img.style.width = "100%";
+        img.style.height = "auto";
+        img.style.border = "1px solid rgba(255,255,255,.10)";
+        r.previewWrap.appendChild(img);
+      }
+    }
+
+    const meta = [
+      file.name || "archivo",
+      humanKB(file.size),
+      (file.type || "*/*"),
+      fmtShortDate(Date.now()),
+    ].join(" · ");
+
+    if (r.previewMeta) r.previewMeta.textContent = meta;
+
+    if (r.previewEmpty) r.previewEmpty.hidden = true;
+    if (r.previewWrap) r.previewWrap.hidden = false;
   }
 
-  async function uploadToStorage(file, path) {
-    const { data, error } = await sb().storage.from(STORAGE_BUCKET).upload(path, file, {
-      upsert: true,
+  // ------------------------------------------------------------
+  // Storage ops
+  // ------------------------------------------------------------
+  async function listFolderFromBucket(bucket, folder) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const b = normalizeBucket(bucket);
+    const f = sanitizeFolder(folder);
+
+    const { data, error } = await sb.storage
+      .from(b)
+      .list(f, { limit: LIST_LIMIT, offset: 0, sortBy: { column: "updated_at", order: "desc" } });
+
+    if (error) throw error;
+
+    const items = Array.isArray(data) ? data : [];
+    return items
+      .filter((x) => x && x.name && !String(x.name).endsWith("/"))
+      .map((x) => {
+        const path = `${f}/${x.name}`;
+        const updated = x.updated_at || x.created_at || x.last_accessed_at || "";
+        return {
+          bucket: b,
+          name: x.name,
+          path,
+          url: publicUrlFromPath(b, path),
+          updated_at: updated,
+          size: x.metadata?.size || 0,
+          mime: x.metadata?.mimetype || "",
+        };
+      })
+      .sort((a, b) => safeStr(b.updated_at).localeCompare(safeStr(a.updated_at)));
+  }
+
+  async function uploadFile(bucket, file, folder, customName) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const b = normalizeBucket(bucket);
+    const f = sanitizeFolder(folder);
+    const ext = extFromNameOrMime(file);
+
+    const base =
+      slugify(customName) ||
+      slugify(String(file.name || "").replace(/\.[a-z0-9]+$/i, "")) ||
+      "media";
+
+    const path = `${f}/${base}_${Date.now()}.${ext}`;
+
+    const { error } = await sb.storage.from(b).upload(path, file, {
       cacheControl: "3600",
-      contentType: file.type || undefined,
+      upsert: false,
     });
     if (error) throw error;
-    return data; // { path, ... }
+
+    return { bucket: b, path };
   }
 
-  function getPublicUrl(path) {
-    const res = sb().storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    return res?.data?.publicUrl || "";
-  }
+  async function deleteObject(bucket, path) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
 
-  async function removeFromStorage(path) {
-    // path dentro del bucket
-    const { error } = await sb().storage.from(STORAGE_BUCKET).remove([path]);
+    const b = normalizeBucket(bucket);
+    const p = cleanSpaces(path);
+    if (!b || !p) return;
+
+    const { error } = await sb.storage.from(b).remove([p]);
     if (error) throw error;
+    return true;
   }
 
-  // =========================
-  // DB: events list
-  // =========================
-  async function fetchEvents() {
-    const { data, error } = await sb()
-      .from(EVENTS_TABLE)
-      .select("id,title,month_key,type,created_at")
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-    return Array.isArray(data) ? data : [];
-  }
-
-  function renderEventSelect() {
-    const sel = $("#mediaEventSelect");
-    if (!sel) return;
-
-    sel.innerHTML = "";
-
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = "Seleccionar evento…";
-    sel.appendChild(opt0);
-
-    state.events.forEach((ev) => {
-      const opt = document.createElement("option");
-      opt.value = String(ev.id);
-      opt.textContent = `${ev.title || "Evento"} • ${(ev.month_key || "—").toUpperCase()} • ${ev.type || "—"}`;
-      sel.appendChild(opt);
-    });
-
-    if (state.eventId) sel.value = state.eventId;
-  }
-
-  // =========================
-  // UI: folder select
-  // =========================
-  function renderFolderSelect() {
-    const sel = $("#mediaFolderSelect");
-    if (!sel) return;
-
-    sel.innerHTML = "";
-    EVENT_FOLDERS.forEach((f) => {
-      const opt = document.createElement("option");
-      opt.value = f.value;
-      opt.textContent = f.label;
-      sel.appendChild(opt);
-    });
-
-    sel.value = state.folder;
-  }
-
-  // =========================
-  // DB: media_items (list/upsert/delete)
-  // =========================
-  async function fetchMediaItemsForEvent(eventId) {
-    const eid = clean(eventId);
-    if (!eid) return [];
-
-    const { data, error } = await sb()
-      .from(MEDIA_TABLE)
-      .select("id,target,folder,name,path,public_url,created_at,updated_at,event_id")
-      .eq("target", "event")
-      .eq("event_id", eid)
-      .order("updated_at", { ascending: false });
-
-    if (error) throw error;
-    return Array.isArray(data) ? data : [];
-  }
-
-  async function upsertMediaItem({ eventId, folder, path, publicUrl }) {
-    const eid = clean(eventId);
-    const f = clean(folder);
-    const p = clean(path);
-    const u = clean(publicUrl);
-
-    if (!eid || !f || !p || !u) throw new Error("Faltan datos para upsert de media_items.");
-
-    const payload = {
-      target: "event",
-      event_id: eid,
-      folder: f,
-      name: f,
-      path: p,
-      public_url: u,
-    };
-
-    // tu unique index está pensado para esto:
-    // onConflict: "event_id,folder"
-    const { data, error } = await sb()
-      .from(MEDIA_TABLE)
-      .upsert(payload, { onConflict: "event_id,folder" })
-      .select("id,target,folder,name,path,public_url,created_at,updated_at,event_id")
-      .single();
-
-    if (error) throw error;
-    return data;
-  }
-
-  async function deleteMediaItemLink({ eventId, folder }) {
-    const eid = clean(eventId);
-    const f = clean(folder);
-    if (!eid || !f) return;
-
-    const { error } = await sb()
-      .from(MEDIA_TABLE)
-      .delete()
-      .eq("target", "event")
-      .eq("event_id", eid)
-      .eq("folder", f);
-
-    if (error) throw error;
-  }
-
-  // =========================
+  // ------------------------------------------------------------
   // Render list
-  // =========================
-  function renderMediaList() {
-    const list = $("#mediaList");
-    if (!list) return;
+  // ------------------------------------------------------------
+  function esc(s) { return escapeHtml(safeStr(s)); }
 
-    if (!state.eventId) {
-      list.innerHTML = `<div class="emptyMonth">Seleccioná un evento para ver su media.</div>`;
-      return;
-    }
+  function isVideoPathOrMime(it) {
+    const name = safeStr(it?.name || "").toLowerCase();
+    const mime = safeStr(it?.mime || "").toLowerCase();
+    return mime.startsWith("video/") || name.endsWith(".mp4") || name.endsWith(".webm");
+  }
 
-    if (!state.items.length) {
-      list.innerHTML = `<div class="emptyMonth">Sin media registrada para este evento.</div>`;
-      return;
-    }
+  function renderList() {
+    const r = R();
+    const arr = Array.isArray(S.list) ? S.list : [];
 
-    const byFolder = {};
-    state.items.forEach((it) => {
-      const f = clean(it.folder);
-      byFolder[f] = it;
-    });
+    if (!r.listEl) return;
+    r.listEl.innerHTML = "";
 
-    const rows = EVENT_FOLDERS.map((f) => {
-      const it = byFolder[f.value];
-      const url = clean(it?.public_url || "");
-      const path = clean(it?.path || "");
-
-      return `
-        <div class="item" data-folder="${escapeHtml(f.value)}" style="gap:12px; align-items:flex-start;">
-          <div style="flex:1 1 auto;">
-            <p class="itemTitle">${escapeHtml(f.label)}</p>
-            <p class="itemMeta" style="word-break:break-all;">
-              ${url ? escapeHtml(url) : `<span style="opacity:.7;">(vacío)</span>`}
-            </p>
-            ${path ? `<p class="itemMeta" style="opacity:.75; word-break:break-all;">Path: ${escapeHtml(path)}</p>` : ``}
+    if (!arr.length) {
+      r.listEl.innerHTML = `
+        <div class="item" style="cursor:default;">
+          <div>
+            <p class="itemTitle">Sin archivos en <b>${esc(S.currentBucket)}/${esc(S.currentFolder)}</b></p>
+            <p class="itemMeta">Subí un medio para que aparezca aquí.</p>
           </div>
+        </div>`;
+      return;
+    }
 
-          <div style="display:flex; gap:8px; flex:0 0 auto; align-items:center;">
-            <button class="btn sm" type="button" data-act="copy" ${url ? "" : "disabled"}>Copiar URL</button>
-            <button class="btn sm" type="button" data-act="open" ${url ? "" : "disabled"}>Abrir</button>
-            <button class="btn sm danger" type="button" data-act="unlink" ${it ? "" : "disabled"}>Desvincular</button>
+    const frag = document.createDocumentFragment();
+
+    arr.forEach((it) => {
+      const isVid = isVideoPathOrMime(it);
+
+      const thumb = isVid
+        ? `<video src="${esc(it.url)}" muted playsinline preload="metadata"
+             style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;"></video>`
+        : `<img src="${esc(it.url)}" alt="${esc(it.name)}"
+             style="width:70px;height:70px;object-fit:cover;border-radius:0;border:1px solid rgba(255,255,255,.10);flex:0 0 auto;" loading="lazy">`;
+
+      const row = document.createElement("div");
+      row.className = "item";
+      row.dataset.bucket = it.bucket || "";
+      row.dataset.path = it.path || "";
+      row.dataset.url = it.url || "";
+      row.dataset.name = it.name || "";
+      row.dataset.mime = it.mime || "";
+      row.dataset.size = String(it.size || 0);
+      row.dataset.updated = it.updated_at || "";
+
+      row.innerHTML = `
+        <div style="display:flex; gap:12px; align-items:flex-start; width:100%;">
+          ${thumb}
+          <div style="flex:1 1 auto;">
+            <p class="itemTitle">${esc(it.name)}</p>
+            <p class="itemMeta">${esc(fmtShortDate(it.updated_at))} · ${esc(humanKB(it.size))} · ${esc(it.mime || (isVid ? "video/*" : "image/*"))}</p>
+            <p class="itemMeta" style="opacity:.75;">${esc(it.bucket)} · ${esc(it.path)}</p>
+          </div>
+          <div class="pills" style="justify-content:flex-end; flex:0 0 auto;">
+            <button class="btn" type="button" data-act="use">Usar</button>
+            <button class="btn" type="button" data-act="copy">Copiar URL</button>
+            <button class="btn" type="button" data-act="delete">Eliminar</button>
           </div>
         </div>
       `;
-    }).join("");
 
-    list.innerHTML = rows;
+      frag.appendChild(row);
+    });
 
-    // Bind actions
-    list.querySelectorAll("button[data-act]").forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        const b = e.currentTarget;
-        const row = b.closest("[data-folder]");
-        const folder = row?.getAttribute("data-folder") || "";
-        const act = b.getAttribute("data-act") || "";
+    r.listEl.appendChild(frag);
+  }
 
-        const it = state.items.find((x) => clean(x.folder) === clean(folder));
-        const url = clean(it?.public_url || "");
-        const path = clean(it?.path || "");
+  // ------------------------------------------------------------
+  // Refresh list
+  // ------------------------------------------------------------
+  async function refreshList(opts) {
+    const silent = !!opts?.silent;
+    const force = !!opts?.force;
 
-        if (act === "copy") {
-          if (!url) return;
-          try {
-            await navigator.clipboard.writeText(url);
-            toast("Copiado", "URL copiada al portapapeles.", 1400);
-          } catch (_) {
-            toast("Copiar", "No se pudo copiar. Copiala manualmente.");
+    if (S.busy) return;
+
+    const now = Date.now();
+    if (!force && now - S.lastLoadedAt < 600) return;
+    S.lastLoadedAt = now;
+
+    try {
+      setNote("", "");
+      const s = await ensureSession();
+      if (!s) return;
+
+      const r = R();
+      const folder = sanitizeFolder(r.folderSel?.value || S.currentFolder || "events");
+      const bucket = normalizeBucket(r.bucketSel?.value || S.currentBucket || BUCKET_IMG);
+
+      S.currentFolder = folder;
+      S.currentBucket = bucket;
+
+      applyAcceptForBucket(bucket);
+
+      if (!silent) toast("Media", "Cargando…", 800);
+
+      S.list = await listFolderFromBucket(bucket, folder);
+      renderList();
+
+      if (!silent) toast("Listo", "Media actualizada.", 900);
+    } catch (err) {
+      console.error("[admin-media]", err);
+
+      if (looksLikeRLSError(err)) {
+        toast("RLS", `Acceso bloqueado. Revisá policies del bucket (${S.currentBucket}).`, 5200);
+      } else if (looksLikeStorageError(err)) {
+        toast("Storage", `Error en bucket (${S.currentBucket}). (existe? policies? nombre?)`, 5200);
+      } else {
+        toast("Error", "No se pudo cargar la lista de Storage.", 4200);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Clipboard
+  // ------------------------------------------------------------
+  async function copyUrl(text) {
+    const t = cleanSpaces(text || "");
+    if (!t) {
+      toast("Sin URL", "Primero subí o seleccioná un archivo de la lista.");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(t);
+        toast("Copiado", "URL copiada al portapapeles.", 1800);
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      toast("Copiado", ok ? "URL copiada al portapapeles." : "Copiala manualmente.", 2200);
+    } catch (_) {
+      toast("Copiar", "No pude acceder al portapapeles. Copiala manualmente.", 2800);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Handlers (file)
+  // ------------------------------------------------------------
+  function onFileChange() {
+    const r = R();
+    const f = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
+    if (!f) { resetPreview(); return; }
+
+    const isImg = isImageFile(f);
+    const isVid = isVideoFile(f);
+
+    if (!isImg && !isVid) {
+      toast("Archivo inválido", "Seleccioná una imagen o un video (MP4/WebM).");
+      try { r.fileInp.value = ""; } catch (_) {}
+      resetPreview();
+      return;
+    }
+
+    // Auto-switch bucket + accept
+    if (r.bucketSel) {
+      r.bucketSel.value = isVid ? BUCKET_VID : BUCKET_IMG;
+      S.currentBucket = normalizeBucket(r.bucketSel.value);
+      applyAcceptForBucket(S.currentBucket);
+    }
+
+    const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
+    const maxMb = isVid ? MAX_VID_MB : MAX_IMG_MB;
+
+    if (Number(f.size || 0) > maxBytes) {
+      toast("Muy pesado", `El archivo pesa ${humanKB(f.size)}. Usá uno menor a ~${maxMb}MB.`);
+      try { r.fileInp.value = ""; } catch (_) {}
+      resetPreview();
+      return;
+    }
+
+    renderPreview(f);
+  }
+
+  async function onUpload(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+
+    const r = R();
+    const originalFile = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
+
+    if (!originalFile) {
+      toast("Falta archivo", "Seleccioná un archivo antes de subir.");
+      return;
+    }
+
+    const isVid = isVideoFile(originalFile);
+    const isImg = isImageFile(originalFile);
+
+    if (!isVid && !isImg) {
+      toast("Formato no soportado", "Solo imágenes o videos (MP4/WebM).");
+      return;
+    }
+
+    const folder = sanitizeFolder(r.folderSel?.value || "events");
+    const customName = cleanSpaces(r.nameInp?.value || "");
+
+    // bucket elegido
+    let bucket = normalizeBucket(r.bucketSel?.value || (isVid ? BUCKET_VID : BUCKET_IMG));
+
+    // coherencia automática
+    if (isVid && bucket !== BUCKET_VID) bucket = BUCKET_VID;
+    if (isImg && bucket !== BUCKET_IMG) bucket = BUCKET_IMG;
+
+    if (r.bucketSel) r.bucketSel.value = bucket;
+    applyAcceptForBucket(bucket);
+
+    setBusy(true);
+    try {
+      let fileToUpload = originalFile;
+
+      if (isImg) {
+        setNote("Optimizando imagen…", "info");
+        try {
+          const out = await compressImageSmart(originalFile, S.settings);
+          if (out && out.file) {
+            fileToUpload = out.file;
+            if (out.changed) {
+              const from = out?.meta?.from;
+              const to = out?.meta?.to;
+              const q = Math.round((out?.meta?.quality || S.settings.quality) * 100);
+              const md = out?.meta?.maxDim || S.settings.maxDim;
+
+              const msg =
+                `${out.note} · Q${q} · Max ${md}px ` +
+                `(${humanKB(from?.size)} → ${humanKB(to?.size)} | ${from?.w}×${from?.h} → ${to?.w}×${to?.h})`;
+
+              setNote(msg, "ok");
+            } else {
+              setNote("Imagen lista (sin cambios).", "ok");
+            }
           }
+        } catch (_) {
+          setNote("Imagen lista (sin optimización).", "ok");
+        }
+      } else {
+        setNote(`Video listo para subir (bucket: ${BUCKET_VID}).`, "ok");
+      }
+
+      // validación final tamaño
+      const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
+      const maxMb = isVid ? MAX_VID_MB : MAX_IMG_MB;
+      if (Number(fileToUpload.size || 0) > maxBytes) {
+        toast("Muy pesado", `El archivo pesa ${humanKB(fileToUpload.size)}. Probá uno < ${maxMb}MB.`, 4200);
+        setNote("⚠️ Archivo excede el límite.", "warn");
+        return;
+      }
+
+      setNote("Subiendo a Supabase…", "info");
+      const s = await ensureSession();
+      if (!s) return;
+
+      const up = await uploadFile(bucket, fileToUpload, folder, customName);
+      const url = publicUrlFromPath(up.bucket, up.path);
+
+      S.lastUploadedBucket = up.bucket;
+      S.lastUploadedPath = up.path;
+
+      // ✅ para bridge: guardamos selección actual “subida”
+      S.selected = {
+        bucket: up.bucket,
+        path: up.path,
+        url: url || "",
+        name: (fileToUpload && fileToUpload.name) ? fileToUpload.name : "",
+        mime: fileToUpload?.type || "",
+        size: fileToUpload?.size || 0,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (r.urlInp) r.urlInp.value = url || "";
+
+      setNote(`Listo. URL pública generada (${up.bucket}).`, "ok");
+      toast("Subido", isVid ? "Video subido y URL lista." : "Imagen subida y URL lista.", 2200);
+
+      await refreshList({ silent: true, force: true });
+
+      try { r.fileInp.value = ""; } catch (_) {}
+      resetPreview();
+    } catch (err) {
+      console.error(err);
+      setNote("", "");
+
+      if (looksLikeRLSError(err)) {
+        toast("RLS", `Bloqueado. Falta policy INSERT en bucket (${bucket}) para authenticated.`, 5200);
+      } else if (looksLikeStorageError(err)) {
+        toast("Storage", `Error en bucket (${bucket}) (policies / nombre / ruta).`, 5200);
+      } else {
+        toast("Error", "No se pudo subir el archivo.", 4200);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onReset() {
+    const r = R();
+    try { r.formEl?.reset(); } catch (_) {}
+    if (r.urlInp) r.urlInp.value = "";
+    setNote("", "");
+    resetPreview();
+
+    // reset bridge selection
+    S.selected = { bucket:"", path:"", url:"", name:"", mime:"", size:0, updated_at:"" };
+
+    const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
+    applyAcceptForBucket(b);
+
+    toast("Limpiado", "Formulario reiniciado.");
+  }
+
+  async function onListClick(e) {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-act]") : null;
+    if (!btn) return;
+
+    const row = btn.closest(".item");
+    if (!row) return;
+
+    const act = btn.dataset.act;
+    const bucket = row.dataset.bucket || "";
+    const path = row.dataset.path || "";
+    const url = row.dataset.url || "";
+
+    const r = R();
+
+    if (act === "use") {
+      if (r.urlInp) r.urlInp.value = url || "";
+      setNote("URL lista. Pegala en Eventos/Promos/Galería.", "ok");
+
+      // ✅ bridge: selección actual
+      S.selected = {
+        bucket,
+        path,
+        url,
+        name: row.dataset.name || "",
+        mime: row.dataset.mime || "",
+        size: Number(row.dataset.size || 0),
+        updated_at: row.dataset.updated || "",
+      };
+
+      if (r.previewWrap && url) {
+        if (r.previewEmpty) r.previewEmpty.hidden = true;
+        r.previewWrap.hidden = false;
+        r.previewWrap.innerHTML = "";
+
+        const isVid = /\.(mp4|webm)(\?|#|$)/i.test(url);
+
+        if (isVid) {
+          const v = document.createElement("video");
+          v.src = url;
+          v.muted = true;
+          v.loop = true;
+          v.playsInline = true;
+          v.autoplay = true;
+          v.controls = true;
+          v.style.width = "100%";
+          v.style.height = "auto";
+          v.style.border = "1px solid rgba(255,255,255,.10)";
+          r.previewWrap.appendChild(v);
+        } else {
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "Seleccionada";
+          img.style.width = "100%";
+          img.style.height = "auto";
+          img.style.border = "1px solid rgba(255,255,255,.10)";
+          r.previewWrap.appendChild(img);
         }
 
-        if (act === "open") {
-          if (!url) return;
-          window.open(url, "_blank", "noopener,noreferrer");
+        if (r.previewMeta) r.previewMeta.textContent = `${bucket} · ${path} · ${fmtShortDate(Date.now())}`;
+      }
+
+      toast("Seleccionada", "URL cargada en el campo.", 1600);
+      return;
+    }
+
+    if (act === "copy") {
+      await copyUrl(url || r.urlInp?.value || "");
+      return;
+    }
+
+    if (act === "delete") {
+      const ok = confirm(`¿Eliminar este archivo?\n\n${bucket} :: ${path}\n\n(Se borra del bucket correspondiente)`);
+      if (!ok) return;
+
+      setBusy(true);
+      try {
+        const s = await ensureSession();
+        if (!s) return;
+
+        await deleteObject(bucket, path);
+
+        // si borramos el seleccionado, limpiamos bridge selection
+        if (cleanSpaces(S.selected.path) === cleanSpaces(path)) {
+          S.selected = { bucket:"", path:"", url:"", name:"", mime:"", size:0, updated_at:"" };
         }
 
-        if (act === "unlink") {
-          if (!state.eventId || !folder) return;
-          const ok = window.confirm(`Desvincular media:\n\n${folder}\n\nEsto borra la fila en media_items. (El archivo en Storage puede quedarse.)`);
-          if (!ok) return;
-
-          await unlinkFlow({ folder, path });
+        if (cleanSpaces(r.urlInp?.value || "") === cleanSpaces(url)) {
+          if (r.urlInp) r.urlInp.value = "";
         }
-      });
+
+        toast("Eliminado", "Archivo eliminado del bucket.", 2200);
+        await refreshList({ silent: true, force: true });
+      } catch (err) {
+        console.error(err);
+        if (looksLikeRLSError(err)) toast("RLS", `Bloqueado. Falta policy DELETE en bucket (${bucket}).`, 5200);
+        else toast("Error", "No se pudo eliminar el archivo.", 4200);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // ✅ EVENTS BRIDGE UI (inject)
+  // ------------------------------------------------------------
+  function ensureBridgeUI() {
+    if (S.bridgeMounted) return;
+    S.bridgeMounted = true;
+
+    const form = $("#mediaForm", panel);
+    if (!form) return;
+
+    const box = document.createElement("div");
+    box.setAttribute("data-events-bridge", "1");
+    box.style.marginTop = "12px";
+    box.style.padding = "10px 12px";
+    box.style.border = "1px solid rgba(255,255,255,.10)";
+    box.style.background = "rgba(255,255,255,.03)";
+    box.style.borderRadius = "10px";
+
+    box.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:900; letter-spacing:.08em; text-transform:uppercase; font-size:12px; opacity:.95;">
+            Asignar a EVENTO (media_items)
+          </div>
+          <div style="font-size:12px; opacity:.75; margin-top:4px;">
+            Seleccioná un evento y un folder. Luego “Asignar” usa la URL actual (o la seleccionada en la lista) y la guarda en DB.
+          </div>
+        </div>
+        <div style="font-size:12px; opacity:.7;">v${VERSION}</div>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+        <div style="flex:1 1 260px;">
+          <label style="display:block; font-size:12px; opacity:.8; margin-bottom:6px;">Evento</label>
+          <select class="select" id="bridgeEventSelect"></select>
+        </div>
+
+        <div style="flex:1 1 260px;">
+          <label style="display:block; font-size:12px; opacity:.8; margin-bottom:6px;">Folder (target=event)</label>
+          <select class="select" id="bridgeFolderSelect"></select>
+        </div>
+
+        <div style="flex:0 0 auto; display:flex; align-items:flex-end; gap:8px;">
+          <button class="btn primary" type="button" id="bridgeAssignBtn">Asignar</button>
+          <button class="btn" type="button" id="bridgeViewBtn">Ver asignados</button>
+        </div>
+      </div>
+
+      <div id="bridgeNote" style="margin-top:10px; font-size:12px; opacity:.85;"></div>
+      <div id="bridgeList" style="margin-top:10px;"></div>
+    `;
+
+    form.insertAdjacentElement("afterend", box);
+
+    // folder options
+    const folderSel = $("#bridgeFolderSelect", box);
+    if (folderSel) {
+      folderSel.innerHTML = EVENT_FOLDERS.map(f => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join("");
+    }
+
+    $("#bridgeAssignBtn", box)?.addEventListener("click", () => assignSelectedToEvent());
+    $("#bridgeViewBtn", box)?.addEventListener("click", () => viewAssignedForEvent());
+    $("#bridgeEventSelect", box)?.addEventListener("change", () => {
+      $("#bridgeList", box).innerHTML = "";
+      $("#bridgeNote", box).textContent = "";
     });
   }
 
-  // =========================
-  // Load for selected event
-  // =========================
-  const loadSelectedEventMedia = withLock(async function () {
-    if (!state.eventId) {
-      state.items = [];
-      renderMediaList();
-      return;
-    }
+  function setBridgeNote(msg) {
+    const el = panel.querySelector("#bridgeNote");
+    if (!el) return;
+    el.textContent = msg || "";
+  }
+
+  function setBridgeList(html) {
+    const el = panel.querySelector("#bridgeList");
+    if (!el) return;
+    el.innerHTML = html || "";
+  }
+
+  async function loadEventsForBridge() {
+    const sb = getSB();
+    if (!sb) return;
+
+    const sel = panel.querySelector("#bridgeEventSelect");
+    if (!sel) return;
+
+    sel.innerHTML = `<option value="">Cargando eventos…</option>`;
 
     try {
-      setNote("Cargando media del evento…");
-      const items = await fetchMediaItemsForEvent(state.eventId);
-      state.items = items;
-      renderMediaList();
-      setNote("");
+      const { data, error } = await sb
+        .from(EVENTS_TABLE)
+        .select("id,title,month_key,type,created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const arr = Array.isArray(data) ? data : [];
+      S.events = arr;
+
+      sel.innerHTML = `<option value="">Seleccionar evento…</option>` + arr.map(ev => {
+        const t = `${ev.title || "Evento"} • ${(ev.month_key || "—").toUpperCase()} • ${ev.type || "—"}`;
+        return `<option value="${escapeHtml(ev.id)}">${escapeHtml(t)}</option>`;
+      }).join("");
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        toast("RLS", "No se pudo leer media_items. Falta policy SELECT para admins.", 5200);
+      if (looksLikeRLSError(err)) {
+        sel.innerHTML = `<option value="">RLS bloquea events</option>`;
+        toast("RLS", "No se pudieron leer eventos (policy SELECT).", 5200);
       } else {
-        toast("Error", "No se pudo cargar media del evento. Revisá consola.", 5200);
+        sel.innerHTML = `<option value="">Error cargando eventos</option>`;
+        toast("Error", "No se pudieron cargar eventos para asignar media.", 5200);
       }
-      setNote("No se pudo cargar media_items.");
     }
-  });
+  }
 
-  // =========================
-  // Upload flow (Storage + media_items)
-  // =========================
-  const uploadFlow = withLock(async function () {
-    if (!hasSB()) {
-      toast("Supabase", "APP.supabase no está listo.");
+  function pickUrlAndPathForBridge() {
+    const r = R();
+
+    // Preferimos la selección de lista/subida porque trae path real
+    const selUrl = cleanSpaces(S.selected.url);
+    const selPath = cleanSpaces(S.selected.path);
+    const selBucket = cleanSpaces(S.selected.bucket);
+
+    // fallback: usar campo mediaUrl si existe
+    const inputUrl = cleanSpaces(r.urlInp?.value || "");
+
+    // Si no hay path, igual podemos guardar public_url, pero lo ideal es path.
+    const url = selUrl || inputUrl;
+    const path = selPath || ""; // si vacío, guardamos solo url (pero mejor elegir desde la lista)
+
+    const bucket = selBucket || normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
+
+    return { url, path, bucket };
+  }
+
+  async function assignSelectedToEvent() {
+    const sb = getSB();
+    if (!sb) return toast("Supabase", "APP.supabase no existe.");
+
+    const s = await ensureSession();
+    if (!s) return;
+
+    const eventId = cleanSpaces(panel.querySelector("#bridgeEventSelect")?.value || "");
+    const folder = cleanSpaces(panel.querySelector("#bridgeFolderSelect")?.value || "");
+
+    if (!eventId) return toast("Falta evento", "Seleccioná un evento.");
+    if (!folder) return toast("Falta folder", "Seleccioná un folder.");
+
+    const picked = pickUrlAndPathForBridge();
+    if (!picked.url) {
+      toast("Falta URL", "Primero subí un archivo o presioná “Usar” en uno de la lista.");
       return;
     }
 
-    const eid = clean(state.eventId || $("#mediaEventSelect")?.value);
-    if (!eid) {
-      toast("Falta evento", "Seleccioná un evento primero.");
-      return;
-    }
-
-    const folderSel = $("#mediaFolderSelect");
-    const folder = clean(folderSel?.value || state.folder || "event_img_desktop");
-
-    const fileInput = $("#mediaFile");
-    const file = fileInput?.files?.[0];
-    if (!file) {
-      toast("Falta archivo", "Seleccioná un archivo para subir.");
-      return;
-    }
+    // Validación: si hay path, debe corresponder al bucket actual/seleccionado, pero no es obligatorio.
+    setBridgeNote("Asignando en media_items…");
 
     try {
-      setNote("Subiendo archivo a Storage…");
-
-      const path = buildStoragePath({
-        target: "event",
+      const payload = {
+        target: EVENT_TARGET,
+        event_id: eventId,
         folder,
-        eventId: eid,
-        filename: file.name || `file.${guessExt(file.name) || "bin"}`,
-      });
+        name: folder,            // como definiste
+        path: picked.path || "", // recomendado
+        public_url: picked.url,  // requerido para render en public
+      };
 
-      await uploadToStorage(file, path);
-      const publicUrl = getPublicUrl(path);
+      const { data, error } = await sb
+        .from(MEDIA_TABLE)
+        .upsert(payload, { onConflict: "event_id,folder" })
+        .select("id,event_id,folder,public_url,path,updated_at")
+        .single();
 
-      setNote("Guardando referencia en media_items…");
-      await upsertMediaItem({ eventId: eid, folder, path, publicUrl });
+      if (error) throw error;
 
-      toast("Listo", "Subido y guardado en media_items.", 1600);
-
-      // reset input
-      if (fileInput) fileInput.value = "";
-
-      // refrescar
-      state.eventId = eid;
-      state.folder = folder;
-      await loadSelectedEventMedia();
-
-      setNote("");
+      toast("Listo", "Asignado a evento (media_items).", 1600);
+      setBridgeNote(`✅ Guardado: ${folder} → ${picked.url}`);
+      await viewAssignedForEvent(true);
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        toast("RLS", "Bloqueado por policies (Storage o media_items).", 5200);
-      } else {
-        toast("Error", String(err?.message || err || "Error al subir."), 5200);
-      }
-      setNote("Error al subir.");
+      if (looksLikeRLSError(err)) toast("RLS", "Bloqueado: faltan policies en media_items (INSERT/UPDATE).", 5200);
+      else toast("Error", "No se pudo asignar en media_items.", 5200);
+      setBridgeNote("❌ Error asignando.");
     }
-  });
-
-  // =========================
-  // Unlink flow (delete DB row + optional delete storage)
-  // =========================
-  const unlinkFlow = withLock(async function ({ folder, path }) {
-    const eid = clean(state.eventId);
-    const f = clean(folder);
-    const p = clean(path);
-
-    if (!eid || !f) return;
-
-    try {
-      setNote("Desvinculando…");
-      await deleteMediaItemLink({ eventId: eid, folder: f });
-
-      // Preguntar si quieres borrar el archivo del bucket
-      if (p) {
-        const remove = window.confirm("¿También querés borrar el archivo del Storage (bucket)?\n\nOK = borrar archivo\nCancelar = solo desvincular");
-        if (remove) {
-          try {
-            await removeFromStorage(p);
-          } catch (e) {
-            console.warn("No se pudo borrar en Storage:", e);
-            toast("Aviso", "Se desvinculó, pero no se pudo borrar del bucket.", 4200);
-          }
-        }
-      }
-
-      toast("Listo", "Media desvinculada.", 1400);
-      await loadSelectedEventMedia();
-      setNote("");
-    } catch (err) {
-      console.error(err);
-      if (isRLSError(err)) {
-        toast("RLS", "No se pudo eliminar en media_items. Falta policy DELETE.", 5200);
-      } else {
-        toast("Error", String(err?.message || err || "Error al desvincular."), 5200);
-      }
-      setNote("Error al desvincular.");
-    }
-  });
-
-  // =========================
-  // Wiring
-  // =========================
-  function bind() {
-    // event select
-    $("#mediaEventSelect")?.addEventListener("change", async (e) => {
-      state.eventId = clean(e.target.value);
-      await loadSelectedEventMedia();
-    });
-
-    // folder select
-    $("#mediaFolderSelect")?.addEventListener("change", (e) => {
-      state.folder = clean(e.target.value);
-    });
-
-    // upload btn
-    $("#mediaUploadBtn")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      uploadFlow();
-    });
-
-    // allow upload on file change (opcional)
-    $("#mediaFile")?.addEventListener("change", () => {
-      // no auto-upload por defecto (evita accidentes)
-      // si querés auto-upload, descomentá:
-      // uploadFlow();
-    });
   }
 
-  // =========================
-  // Boot
-  // =========================
-  const boot = withLock(async function () {
-    console.log("[admin-media.js] boot", { VERSION });
+  async function viewAssignedForEvent(silent) {
+    const sb = getSB();
+    if (!sb) return;
 
-    if (!hasSB()) {
-      setNote("Supabase no está listo. Cargá supabaseClient.js antes.");
-      toast("Supabase", "APP.supabase no está listo.");
+    const s = await ensureSession();
+    if (!s) return;
+
+    const eventId = cleanSpaces(panel.querySelector("#bridgeEventSelect")?.value || "");
+    if (!eventId) {
+      toast("Falta evento", "Seleccioná un evento para ver asignados.");
       return;
     }
 
-    bind();
-    renderFolderSelect();
+    if (!silent) setBridgeNote("Cargando asignados…");
 
     try {
-      setNote("Cargando eventos…");
-      state.events = await fetchEvents();
-      renderEventSelect();
-      setNote("");
+      const { data, error } = await sb
+        .from(MEDIA_TABLE)
+        .select("id,folder,public_url,path,updated_at")
+        .eq("target", EVENT_TARGET)
+        .eq("event_id", eventId)
+        .order("updated_at", { ascending: false });
 
-      // Si ya hay seleccionado (por HTML), tomarlo y cargar
-      const pre = clean($("#mediaEventSelect")?.value || "");
-      if (pre) {
-        state.eventId = pre;
-        await loadSelectedEventMedia();
-      } else {
-        renderMediaList();
+      if (error) throw error;
+
+      const arr = Array.isArray(data) ? data : [];
+      if (!arr.length) {
+        setBridgeList(`<div class="emptyMonth">Sin media asignada a este evento.</div>`);
+        setBridgeNote("");
+        return;
       }
+
+      const rows = EVENT_FOLDERS.map(f => {
+        const it = arr.find(x => cleanSpaces(x.folder) === f.value);
+        const url = cleanSpaces(it?.public_url || "");
+        const path = cleanSpaces(it?.path || "");
+        return `
+          <div class="item" style="cursor:default; gap:12px;">
+            <div style="flex:1 1 auto;">
+              <p class="itemTitle">${escapeHtml(f.label)}</p>
+              <p class="itemMeta" style="word-break:break-all;">${url ? escapeHtml(url) : `<span style="opacity:.7">(vacío)</span>`}</p>
+              ${path ? `<p class="itemMeta" style="opacity:.75; word-break:break-all;">Path: ${escapeHtml(path)}</p>` : ``}
+            </div>
+            <div class="pills" style="justify-content:flex-end;">
+              <button class="btn" type="button" data-bridge-act="copy" data-url="${escapeHtml(url)}" ${url ? "" : "disabled"}>Copiar</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      setBridgeList(rows);
+      setBridgeNote("");
+
+      panel.querySelectorAll('[data-bridge-act="copy"]').forEach((b) => {
+        b.addEventListener("click", async () => {
+          const u = cleanSpaces(b.getAttribute("data-url") || "");
+          if (!u) return;
+          await copyUrl(u);
+        });
+      });
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        toast("RLS", "No se pudieron leer eventos. Falta policy SELECT para admins en events.", 5200);
-        setNote("RLS bloquea lectura de events.");
-      } else {
-        toast("Error", "No se pudieron cargar eventos. Revisá consola.", 5200);
-        setNote("Error cargando eventos.");
-      }
+      if (looksLikeRLSError(err)) toast("RLS", "No se pudo leer media_items (policy SELECT).", 5200);
+      else toast("Error", "No se pudieron leer asignados.", 5200);
+      setBridgeNote("❌ Error cargando asignados.");
+      setBridgeList("");
     }
-  });
+  }
 
-  // ejecuta cuando admin esté listo (si usás el evento), si no, igual intenta
+  // ------------------------------------------------------------
+  // Bind once
+  // ------------------------------------------------------------
+  function bindOnce() {
+    if (S.didBind) return;
+    S.didBind = true;
+
+    const r = R();
+    if (!r.formEl || !r.fileInp || !r.bucketSel || !r.folderSel || !r.urlInp || !r.uploadBtn || !r.copyBtn || !r.resetBtn || !r.refreshBtn || !r.listEl) {
+      console.warn("[admin-media] Faltan elementos en el HTML del tab-media.");
+      return;
+    }
+
+    ensureSettingsUI();
+    ensureBridgeUI();
+
+    S.currentBucket = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
+    S.currentFolder = sanitizeFolder(r.folderSel.value || "events");
+
+    applyAcceptForBucket(S.currentBucket);
+
+    r.fileInp.addEventListener("change", onFileChange);
+
+    r.bucketSel.addEventListener("change", () => {
+      const b = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
+      S.currentBucket = b;
+      applyAcceptForBucket(b);
+      refreshList({ silent: true, force: true });
+    });
+
+    r.folderSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
+    r.refreshBtn.addEventListener("click", () => refreshList({ silent: false, force: true }));
+
+    r.formEl.addEventListener("submit", onUpload);
+    r.copyBtn.addEventListener("click", () => copyUrl(r.urlInp.value));
+    r.resetBtn.addEventListener("click", onReset);
+
+    r.listEl.addEventListener("click", onListClick);
+
+    resetPreview();
+    setNote("", "");
+  }
+
+  // ------------------------------------------------------------
+  // Boot (admin:ready)
+  // ------------------------------------------------------------
+  async function boot() {
+    if (S.didBoot) return;
+    S.didBoot = true;
+
+    const sb = getSB();
+    if (!sb) {
+      console.error("[admin-media] APP.supabase no existe (orden scripts incorrecto).");
+      return;
+    }
+
+    S.settings = loadSettings();
+    bindOnce();
+    console.log("[admin-media] boot", { VERSION, BUCKET_IMG, BUCKET_VID, MAX_IMG_MB, MAX_VID_MB });
+
+    // cargar eventos para el bridge (cuando exista UI)
+    try { await loadEventsForBridge(); } catch (_) {}
+  }
+
+  // ------------------------------------------------------------
+  // Activación por tab (admin:tab)
+  // ------------------------------------------------------------
+  async function onTab(e) {
+    const t = e?.detail?.tab || "";
+    if (t !== "media") return;
+
+    try { if (panel.hidden) return; } catch (_) {}
+
+    const now = Date.now();
+    if (now - S.lastTabLoadAt < 300) return;
+    S.lastTabLoadAt = now;
+
+    S.settings = loadSettings();
+    ensureSettingsUI();
+    ensureBridgeUI();
+
+    const r = R();
+    const b = normalizeBucket(r.bucketSel?.value || S.currentBucket || BUCKET_IMG);
+    applyAcceptForBucket(b);
+
+    await refreshList({ silent: true, force: false });
+    try { await loadEventsForBridge(); } catch (_) {}
+  }
+
   if (window.APP && APP.__adminReady) boot();
   else window.addEventListener("admin:ready", boot, { once: true });
 
+  window.addEventListener("admin:tab", onTab);
+
+  try {
+    const btn = document.querySelector('.tab[data-tab="media"]');
+    const selected = btn ? btn.getAttribute("aria-selected") === "true" : false;
+    if (selected && !panel.hidden) {
+      if (window.APP && APP.__adminReady) {
+        boot();
+        refreshList({ silent: true, force: true });
+      }
+    }
+  } catch (_) {}
 })();
