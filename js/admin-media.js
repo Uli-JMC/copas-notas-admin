@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-18.2";
+  const VERSION = "2026-02-18.3"; // ✅ bump (fix path NOT NULL)
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -73,8 +73,12 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
-    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs); } catch (_) {}
-    try { if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs); } catch (_) {}
+    try {
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
+    } catch (_) {}
+    try {
+      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
+    } catch (_) {}
 
     const toastsEl = document.getElementById("toasts");
     if (!toastsEl) return;
@@ -102,8 +106,12 @@
   // ------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------
-  function safeStr(x) { return String(x ?? ""); }
-  function cleanSpaces(s) { return safeStr(s).replace(/\s+/g, " ").trim(); }
+  function safeStr(x) {
+    return String(x ?? "");
+  }
+  function cleanSpaces(s) {
+    return safeStr(s).replace(/\s+/g, " ").trim();
+  }
 
   function clampNum(n, min, max) {
     const x = Number(n);
@@ -236,6 +244,41 @@
     return BUCKET_IMG;
   }
 
+  // ✅ NUEVO: inferir bucket/path desde una URL pública de Supabase Storage
+  // Formato típico:
+  // https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
+  function inferFromSupabasePublicUrl(url) {
+    const u = cleanSpaces(url || "");
+    if (!u) return { bucket: "", path: "" };
+
+    try {
+      const parsed = new URL(u);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+
+      // buscar ".../storage/v1/object/public/<bucket>/<path...>"
+      const idx = parts.findIndex((p) => p === "public");
+      if (idx >= 0 && parts[idx + 1]) {
+        const bucket = parts[idx + 1];
+        const path = parts.slice(idx + 2).join("/");
+        if (bucket && path) return { bucket, path };
+      }
+
+      // fallback: a veces vienen sin "public" en algunos proxys
+      // ".../object/public/<bucket>/<path...>"
+      const idx2 = parts.findIndex((p) => p === "object");
+      if (idx2 >= 0) {
+        const pubIdx = parts.findIndex((p, i) => i > idx2 && p === "public");
+        if (pubIdx >= 0 && parts[pubIdx + 1]) {
+          const bucket = parts[pubIdx + 1];
+          const path = parts.slice(pubIdx + 2).join("/");
+          if (bucket && path) return { bucket, path };
+        }
+      }
+    } catch (_) {}
+
+    return { bucket: "", path: "" };
+  }
+
   // ------------------------------------------------------------
   // Settings (localStorage) — solo imágenes
   // ------------------------------------------------------------
@@ -250,7 +293,9 @@
   }
 
   function writeLS(key, value) {
-    try { localStorage.setItem(key, String(value)); } catch (_) {}
+    try {
+      localStorage.setItem(key, String(value));
+    } catch (_) {}
   }
 
   function loadSettings() {
@@ -268,15 +313,24 @@
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("timeout")), ms);
       promise
-        .then((v) => { clearTimeout(t); resolve(v); })
-        .catch((e) => { clearTimeout(t); reject(e); });
+        .then((v) => {
+          clearTimeout(t);
+          resolve(v);
+        })
+        .catch((e) => {
+          clearTimeout(t);
+          reject(e);
+        });
     });
   }
 
   function canvasToBlob(canvas, mime, quality) {
     return new Promise((resolve) => {
-      try { canvas.toBlob((blob) => resolve(blob || null), mime, quality); }
-      catch (_) { resolve(null); }
+      try {
+        canvas.toBlob((blob) => resolve(blob || null), mime, quality);
+      } catch (_) {
+        resolve(null);
+      }
     });
   }
 
@@ -306,7 +360,9 @@
         resolve({ kind: "img", img, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
       };
       img.onerror = () => {
-        try { URL.revokeObjectURL(url); } catch (_) {}
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
         reject(new Error("image_load_failed"));
       };
       img.src = url;
@@ -314,7 +370,8 @@
   }
 
   function computeTargetSize(w, h, maxDim) {
-    const W = Number(w || 0), H = Number(h || 0);
+    const W = Number(w || 0),
+      H = Number(h || 0);
     if (!W || !H) return { tw: W, th: H, scale: 1 };
     const maxSide = Math.max(W, H);
     if (maxSide <= maxDim) return { tw: W, th: H, scale: 1 };
@@ -344,11 +401,14 @@
       return { file, changed: false, note: "" };
     }
 
-    const w = info.width, h = info.height;
+    const w = info.width,
+      h = info.height;
     const { tw, th, scale } = computeTargetSize(w, h, maxDim);
 
     if (scale === 1 && maybeSkipBySize) {
-      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      try {
+        if (info.kind === "bitmap" && info.img && info.img.close) info.img.close();
+      } catch (_) {}
       return { file, changed: false, note: "" };
     }
 
@@ -358,17 +418,23 @@
 
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) {
-      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      try {
+        if (info.kind === "bitmap" && info.img && info.img.close) info.img.close();
+      } catch (_) {}
       return { file, changed: false, note: "" };
     }
 
     try {
       ctx.drawImage(info.img, 0, 0, canvas.width, canvas.height);
     } catch (_) {
-      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      try {
+        if (info.kind === "bitmap" && info.img && info.img.close) info.img.close();
+      } catch (_) {}
       return { file, changed: false, note: "" };
     } finally {
-      try { if (info.kind === "bitmap" && info.img && info.img.close) info.img.close(); } catch (_) {}
+      try {
+        if (info.kind === "bitmap" && info.img && info.img.close) info.img.close();
+      } catch (_) {}
     }
 
     const webpOK = supportsWebP();
@@ -387,9 +453,7 @@
     const newName = `${baseName}.${ext}`;
     const out = new File([blob], newName, { type: mime, lastModified: Date.now() });
 
-    const note = useWebP
-      ? (forceWebp ? "Optimizada a WebP (forzado)" : "Optimizada a WebP")
-      : "Optimizada a JPG";
+    const note = useWebP ? (forceWebp ? "Optimizada a WebP (forzado)" : "Optimizada a WebP") : "Optimizada a JPG";
 
     return {
       file: out,
@@ -479,8 +543,8 @@
     try {
       const els = panel.querySelectorAll("input, select, button, textarea");
       els.forEach((el) => {
-        const id = (el && el.id) ? el.id : "";
-        const keepEnabled = (id === "mediaUrl" || id === "mediaCopyBtn");
+        const id = el && el.id ? el.id : "";
+        const keepEnabled = id === "mediaUrl" || id === "mediaCopyBtn";
         el.disabled = S.busy ? !keepEnabled : false;
       });
     } catch (_) {}
@@ -666,7 +730,9 @@
   function resetPreview() {
     const r = R();
     if (S.previewUrl) {
-      try { URL.revokeObjectURL(S.previewUrl); } catch (_) {}
+      try {
+        URL.revokeObjectURL(S.previewUrl);
+      } catch (_) {}
       S.previewUrl = "";
     }
 
@@ -678,9 +744,14 @@
 
   function renderPreview(file) {
     const r = R();
-    if (!file) { resetPreview(); return; }
+    if (!file) {
+      resetPreview();
+      return;
+    }
 
-    try { if (S.previewUrl) URL.revokeObjectURL(S.previewUrl); } catch (_) {}
+    try {
+      if (S.previewUrl) URL.revokeObjectURL(S.previewUrl);
+    } catch (_) {}
     S.previewUrl = URL.createObjectURL(file);
 
     if (r.previewWrap) {
@@ -709,12 +780,7 @@
       }
     }
 
-    const meta = [
-      file.name || "archivo",
-      humanKB(file.size),
-      (file.type || "*/*"),
-      fmtShortDate(Date.now()),
-    ].join(" · ");
+    const meta = [file.name || "archivo", humanKB(file.size), file.type || "*/*", fmtShortDate(Date.now())].join(" · ");
 
     if (r.previewMeta) r.previewMeta.textContent = meta;
 
@@ -797,7 +863,9 @@
   // ------------------------------------------------------------
   // Render list
   // ------------------------------------------------------------
-  function esc(s) { return escapeHtml(safeStr(s)); }
+  function esc(s) {
+    return escapeHtml(safeStr(s));
+  }
 
   function isVideoPathOrMime(it) {
     const name = safeStr(it?.name || "").toLowerCase();
@@ -953,14 +1021,19 @@
   function onFileChange() {
     const r = R();
     const f = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
-    if (!f) { resetPreview(); return; }
+    if (!f) {
+      resetPreview();
+      return;
+    }
 
     const isImg = isImageFile(f);
     const isVid = isVideoFile(f);
 
     if (!isImg && !isVid) {
       toast("Archivo inválido", "Seleccioná una imagen o un video (MP4/WebM).");
-      try { r.fileInp.value = ""; } catch (_) {}
+      try {
+        r.fileInp.value = "";
+      } catch (_) {}
       resetPreview();
       return;
     }
@@ -977,7 +1050,9 @@
 
     if (Number(f.size || 0) > maxBytes) {
       toast("Muy pesado", `El archivo pesa ${humanKB(f.size)}. Usá uno menor a ~${maxMb}MB.`);
-      try { r.fileInp.value = ""; } catch (_) {}
+      try {
+        r.fileInp.value = "";
+      } catch (_) {}
       resetPreview();
       return;
     }
@@ -1073,7 +1148,7 @@
         bucket: up.bucket,
         path: up.path,
         url: url || "",
-        name: (fileToUpload && fileToUpload.name) ? fileToUpload.name : "",
+        name: fileToUpload && fileToUpload.name ? fileToUpload.name : "",
         mime: fileToUpload?.type || "",
         size: fileToUpload?.size || 0,
         updated_at: new Date().toISOString(),
@@ -1086,7 +1161,9 @@
 
       await refreshList({ silent: true, force: true });
 
-      try { r.fileInp.value = ""; } catch (_) {}
+      try {
+        r.fileInp.value = "";
+      } catch (_) {}
       resetPreview();
     } catch (err) {
       console.error(err);
@@ -1106,13 +1183,15 @@
 
   function onReset() {
     const r = R();
-    try { r.formEl?.reset(); } catch (_) {}
+    try {
+      r.formEl?.reset();
+    } catch (_) {}
     if (r.urlInp) r.urlInp.value = "";
     setNote("", "");
     resetPreview();
 
     // reset bridge selection
-    S.selected = { bucket:"", path:"", url:"", name:"", mime:"", size:0, updated_at:"" };
+    S.selected = { bucket: "", path: "", url: "", name: "", mime: "", size: 0, updated_at: "" };
 
     const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
     applyAcceptForBucket(b);
@@ -1203,7 +1282,7 @@
 
         // si borramos el seleccionado, limpiamos bridge selection
         if (cleanSpaces(S.selected.path) === cleanSpaces(path)) {
-          S.selected = { bucket:"", path:"", url:"", name:"", mime:"", size:0, updated_at:"" };
+          S.selected = { bucket: "", path: "", url: "", name: "", mime: "", size: 0, updated_at: "" };
         }
 
         if (cleanSpaces(r.urlInp?.value || "") === cleanSpaces(url)) {
@@ -1280,7 +1359,7 @@
     // folder options
     const folderSel = $("#bridgeFolderSelect", box);
     if (folderSel) {
-      folderSel.innerHTML = EVENT_FOLDERS.map(f => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join("");
+      folderSel.innerHTML = EVENT_FOLDERS.map((f) => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join("");
     }
 
     $("#bridgeAssignBtn", box)?.addEventListener("click", () => assignSelectedToEvent());
@@ -1323,10 +1402,14 @@
       const arr = Array.isArray(data) ? data : [];
       S.events = arr;
 
-      sel.innerHTML = `<option value="">Seleccionar evento…</option>` + arr.map(ev => {
-        const t = `${ev.title || "Evento"} • ${(ev.month_key || "—").toUpperCase()} • ${ev.type || "—"}`;
-        return `<option value="${escapeHtml(ev.id)}">${escapeHtml(t)}</option>`;
-      }).join("");
+      sel.innerHTML =
+        `<option value="">Seleccionar evento…</option>` +
+        arr
+          .map((ev) => {
+            const t = `${ev.title || "Evento"} • ${(ev.month_key || "—").toUpperCase()} • ${ev.type || "—"}`;
+            return `<option value="${escapeHtml(ev.id)}">${escapeHtml(t)}</option>`;
+          })
+          .join("");
     } catch (err) {
       console.error(err);
       if (looksLikeRLSError(err)) {
@@ -1350,11 +1433,18 @@
     // fallback: usar campo mediaUrl si existe
     const inputUrl = cleanSpaces(r.urlInp?.value || "");
 
-    // Si no hay path, igual podemos guardar public_url, pero lo ideal es path.
+    // 1) url
     const url = selUrl || inputUrl;
-    const path = selPath || ""; // si vacío, guardamos solo url (pero mejor elegir desde la lista)
 
-    const bucket = selBucket || normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
+    // 2) path (si falta, inferimos desde URL pública de Supabase)
+    let path = selPath || "";
+    let bucket = selBucket || normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
+
+    if (!path && url) {
+      const inf = inferFromSupabasePublicUrl(url);
+      if (inf.path) path = inf.path;
+      if (inf.bucket) bucket = inf.bucket;
+    }
 
     return { url, path, bucket };
   }
@@ -1378,7 +1468,16 @@
       return;
     }
 
-    // Validación: si hay path, debe corresponder al bucket actual/seleccionado, pero no es obligatorio.
+    // ✅ FIX CRÍTICO: tu DB requiere path NOT NULL
+    if (!picked.path) {
+      toast(
+        "Falta path",
+        "Para asignar a evento, usá “Usar” desde la lista (así captura el path) o pegá una URL pública de Supabase Storage válida.",
+        5200
+      );
+      return;
+    }
+
     setBridgeNote("Asignando en media_items…");
 
     try {
@@ -1386,16 +1485,12 @@
         target: EVENT_TARGET,
         event_id: eventId,
         folder,
-        name: folder,            // como definiste
-        path: picked.path || "", // recomendado
-        public_url: picked.url,  // requerido para render en public
+        name: folder, // mantenemos tu decisión
+        path: picked.path, // ✅ ya garantizado
+        public_url: picked.url, // ✅ render público
       };
 
-      const { data, error } = await sb
-        .from(MEDIA_TABLE)
-        .upsert(payload, { onConflict: "event_id,folder" })
-        .select("id,event_id,folder,public_url,path,updated_at")
-        .single();
+      const { error } = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "event_id,folder" });
 
       if (error) throw error;
 
@@ -1442,8 +1537,8 @@
         return;
       }
 
-      const rows = EVENT_FOLDERS.map(f => {
-        const it = arr.find(x => cleanSpaces(x.folder) === f.value);
+      const rows = EVENT_FOLDERS.map((f) => {
+        const it = arr.find((x) => cleanSpaces(x.folder) === f.value);
         const url = cleanSpaces(it?.public_url || "");
         const path = cleanSpaces(it?.path || "");
         return `
@@ -1487,7 +1582,18 @@
     S.didBind = true;
 
     const r = R();
-    if (!r.formEl || !r.fileInp || !r.bucketSel || !r.folderSel || !r.urlInp || !r.uploadBtn || !r.copyBtn || !r.resetBtn || !r.refreshBtn || !r.listEl) {
+    if (
+      !r.formEl ||
+      !r.fileInp ||
+      !r.bucketSel ||
+      !r.folderSel ||
+      !r.urlInp ||
+      !r.uploadBtn ||
+      !r.copyBtn ||
+      !r.resetBtn ||
+      !r.refreshBtn ||
+      !r.listEl
+    ) {
       console.warn("[admin-media] Faltan elementos en el HTML del tab-media.");
       return;
     }
@@ -1540,7 +1646,9 @@
     console.log("[admin-media] boot", { VERSION, BUCKET_IMG, BUCKET_VID, MAX_IMG_MB, MAX_VID_MB });
 
     // cargar eventos para el bridge (cuando exista UI)
-    try { await loadEventsForBridge(); } catch (_) {}
+    try {
+      await loadEventsForBridge();
+    } catch (_) {}
   }
 
   // ------------------------------------------------------------
@@ -1550,7 +1658,9 @@
     const t = e?.detail?.tab || "";
     if (t !== "media") return;
 
-    try { if (panel.hidden) return; } catch (_) {}
+    try {
+      if (panel.hidden) return;
+    } catch (_) {}
 
     const now = Date.now();
     if (now - S.lastTabLoadAt < 300) return;
@@ -1565,7 +1675,9 @@
     applyAcceptForBucket(b);
 
     await refreshList({ silent: true, force: false });
-    try { await loadEventsForBridge(); } catch (_) {}
+    try {
+      await loadEventsForBridge();
+    } catch (_) {}
   }
 
   if (window.APP && APP.__adminReady) boot();
