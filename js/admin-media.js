@@ -1,15 +1,17 @@
 /* ============================================================
-   admin-media.js ✅ PRO + EVENTS BRIDGE (media_items) — 2026-02-18
-   - Mantiene tu flujo actual: Storage PUBLIC (media/video) + lista + preview
-   - ✅ NUEVO: “Asignar a evento” guardando en DB: media_items (target='event')
-     - folders: event_img_desktop | event_img_mobile | event_more_img
-     - usa URL pública generada (mediaUrl) + path detectado desde la lista/subida
-   - NO requiere modificar admin.html: inyecta UI dentro de #tab-media
+   admin-media.js ✅ PRO + EVENTS/HOME BRIDGE (media_items) — 2026-02-18
+   ✅ Storage PUBLIC (media/video) + lista + preview + upload
+   ✅ DB bridge:
+      - HOME SLIDER (asociado a evento): target='home'
+        folders: slide_img | slide_video   (event_id requerido)
+      - EVENT PAGE: target='event'
+        folders: desktop_event | mobile_event | event_more (event_id requerido)
+   ✅ NO requiere modificar admin.html: inyecta UI dentro de #tab-media
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-18.3"; // ✅ bump (fix path NOT NULL)
+  const VERSION = "2026-02-18.media.pro.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -29,7 +31,6 @@
   // ✅ límites (25MB)
   const MAX_IMG_MB = 25;
   const MAX_VID_MB = 25;
-
   const MAX_IMG_BYTES = MAX_IMG_MB * 1024 * 1024;
   const MAX_VID_BYTES = MAX_VID_MB * 1024 * 1024;
 
@@ -52,12 +53,23 @@
   // ✅ DB bridge
   const MEDIA_TABLE = "media_items";
   const EVENTS_TABLE = "events";
-  const EVENT_TARGET = "event";
 
+  // Targets
+  const TARGET_HOME = "home";
+  const TARGET_EVENT = "event";
+
+  // ✅ OFFICIAL FOLDERS (TU LISTA)
+  // HOME SLIDER (se asocia a un evento)
+  const HOME_FOLDERS = [
+    { value: "slide_img", label: "Home Slider · Imagen (slide_img)" },
+    { value: "slide_video", label: "Home Slider · Video (slide_video)" },
+  ];
+
+  // EVENT PAGE (3 imágenes)
   const EVENT_FOLDERS = [
-    { value: "event_img_desktop", label: "Evento · Imagen Desktop (hero)" },
-    { value: "event_img_mobile", label: "Evento · Imagen Mobile (opcional)" },
-    { value: "event_more_img", label: "Evento · “Ver más info” (modal)" },
+    { value: "desktop_event", label: "Evento · Imagen Desktop (desktop_event)" },
+    { value: "mobile_event", label: "Evento · Imagen Mobile (mobile_event)" },
+    { value: "event_more", label: "Evento · Imagen “Ver más” (event_more)" },
   ];
 
   // ------------------------------------------------------------
@@ -106,12 +118,8 @@
   // ------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------
-  function safeStr(x) {
-    return String(x ?? "");
-  }
-  function cleanSpaces(s) {
-    return safeStr(s).replace(/\s+/g, " ").trim();
-  }
+  const safeStr = (x) => String(x ?? "");
+  const cleanSpaces = (s) => safeStr(s).replace(/\s+/g, " ").trim();
 
   function clampNum(n, min, max) {
     const x = Number(n);
@@ -121,10 +129,7 @@
 
   function sanitizeFolder(folder) {
     let f = cleanSpaces(folder || "events").toLowerCase();
-    f = f.replace(/\\/g, "/");
-    f = f.replace(/\.\./g, "");
-    f = f.replace(/\/+/g, "/");
-    f = f.replace(/^\/|\/$/g, "");
+    f = f.replace(/\\/g, "/").replace(/\.\./g, "").replace(/\/+/g, "/").replace(/^\/|\/$/g, "");
     if (!f) f = "events";
     return f;
   }
@@ -150,12 +155,10 @@
     const m = safeStr(file?.type || "").toLowerCase();
     const fromName = (name.split(".").pop() || "").toLowerCase();
 
-    // videos
     if (["mp4", "webm"].includes(fromName)) return fromName;
     if (m.includes("mp4")) return "mp4";
     if (m.includes("webm")) return "webm";
 
-    // images
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
     if (m.includes("webp")) return "webp";
     if (m.includes("png")) return "png";
@@ -194,7 +197,8 @@
       m.includes("row level security") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
-      m.includes("violates row-level security")
+      m.includes("violates row-level security") ||
+      m.includes("new row violates row-level security")
     );
   }
 
@@ -204,13 +208,12 @@
   }
 
   function getSB() {
-    return window.APP && (APP.supabase || APP.sb) ? (APP.supabase || APP.sb) : null;
+    return window.APP && (APP.supabase || APP.sb) ? APP.supabase || APP.sb : null;
   }
 
   async function ensureSession() {
     const sb = getSB();
     if (!sb) return null;
-
     try {
       const res = await sb.auth.getSession();
       const s = res?.data?.session || null;
@@ -240,31 +243,22 @@
 
   function normalizeBucket(b) {
     const v = cleanSpaces(b || "").toLowerCase();
-    if (v === BUCKET_VID) return BUCKET_VID;
-    return BUCKET_IMG;
+    return v === BUCKET_VID ? BUCKET_VID : BUCKET_IMG;
   }
 
-  // ✅ NUEVO: inferir bucket/path desde una URL pública de Supabase Storage
-  // Formato típico:
-  // https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
+  // ✅ infer bucket/path desde URL pública supabase storage
   function inferFromSupabasePublicUrl(url) {
     const u = cleanSpaces(url || "");
     if (!u) return { bucket: "", path: "" };
-
     try {
       const parsed = new URL(u);
       const parts = parsed.pathname.split("/").filter(Boolean);
-
-      // buscar ".../storage/v1/object/public/<bucket>/<path...>"
       const idx = parts.findIndex((p) => p === "public");
       if (idx >= 0 && parts[idx + 1]) {
         const bucket = parts[idx + 1];
         const path = parts.slice(idx + 2).join("/");
         if (bucket && path) return { bucket, path };
       }
-
-      // fallback: a veces vienen sin "public" en algunos proxys
-      // ".../object/public/<bucket>/<path...>"
       const idx2 = parts.findIndex((p) => p === "object");
       if (idx2 >= 0) {
         const pubIdx = parts.findIndex((p, i) => i > idx2 && p === "public");
@@ -275,7 +269,6 @@
         }
       }
     } catch (_) {}
-
     return { bucket: "", path: "" };
   }
 
@@ -370,8 +363,8 @@
   }
 
   function computeTargetSize(w, h, maxDim) {
-    const W = Number(w || 0),
-      H = Number(h || 0);
+    const W = Number(w || 0);
+    const H = Number(h || 0);
     if (!W || !H) return { tw: W, th: H, scale: 1 };
     const maxSide = Math.max(W, H);
     if (maxSide <= maxDim) return { tw: W, th: H, scale: 1 };
@@ -381,7 +374,6 @@
 
   async function compressImageSmart(originalFile, opts) {
     const file = originalFile;
-
     const enabled = !!opts?.optimize;
     if (!enabled) return { file, changed: false, note: "" };
 
@@ -444,9 +436,7 @@
     let blob = await withTimeout(canvasToBlob(canvas, mime, quality), COMPRESS_TIMEOUT_MS).catch(() => null);
     if (!blob) return { file, changed: false, note: "" };
 
-    if (Number(blob.size || 0) >= size && scale === 1) {
-      return { file, changed: false, note: "" };
-    }
+    if (Number(blob.size || 0) >= size && scale === 1) return { file, changed: false, note: "" };
 
     const baseName = (file.name || "img").replace(/\.[a-z0-9]+$/i, "");
     const ext = useWebP ? "webp" : "jpg";
@@ -459,7 +449,12 @@
       file: out,
       changed: true,
       note,
-      meta: { from: { w, h, size }, to: { w: canvas.width, h: canvas.height, size: out.size }, quality, maxDim },
+      meta: {
+        from: { w, h, size },
+        to: { w: canvas.width, h: canvas.height, size: out.size },
+        quality,
+        maxDim,
+      },
     };
   }
 
@@ -508,19 +503,8 @@
 
     previewUrl: "",
 
-    // Para el bridge: último objeto seleccionado
-    selected: {
-      bucket: "",
-      path: "",
-      url: "",
-      name: "",
-      mime: "",
-      size: 0,
-      updated_at: "",
-    },
-
-    lastUploadedPath: "",
-    lastUploadedBucket: "",
+    // último objeto seleccionado (lista o subida)
+    selected: { bucket: "", path: "", url: "", name: "", mime: "", size: 0, updated_at: "" },
 
     list: [],
     currentFolder: "events",
@@ -539,7 +523,6 @@
   function setBusy(on) {
     S.busy = !!on;
     const r = R();
-
     try {
       const els = panel.querySelectorAll("input, select, button, textarea");
       els.forEach((el) => {
@@ -548,7 +531,6 @@
         el.disabled = S.busy ? !keepEnabled : false;
       });
     } catch (_) {}
-
     try {
       if (r.uploadBtn) r.uploadBtn.textContent = S.busy ? "Subiendo…" : "Subir";
     } catch (_) {}
@@ -562,6 +544,8 @@
     const b = normalizeBucket(bucket);
 
     if (r.fileInp) {
+      // ✅ permitimos video también en media (por si querés guardar videos pequeños ahí),
+      // pero por coherencia: bucket video solo video
       if (b === BUCKET_IMG) r.fileInp.accept = "image/*,video/*";
       if (b === BUCKET_VID) r.fileInp.accept = "video/*";
     }
@@ -634,7 +618,9 @@
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span style="opacity:.85; font-size:12px;">Calidad</span>
           <input type="range" id="mediaQuality" min="55" max="95" step="1" value="${Math.round(S.settings.quality * 100)}" style="width:160px;">
-          <span id="mediaQualityVal" style="min-width:36px; text-align:right; font-variant-numeric:tabular-nums;">${Math.round(S.settings.quality * 100)}</span>
+          <span id="mediaQualityVal" style="min-width:36px; text-align:right; font-variant-numeric:tabular-nums;">${Math.round(
+            S.settings.quality * 100
+          )}</span>
         </div>
       </div>
 
@@ -735,7 +721,6 @@
       } catch (_) {}
       S.previewUrl = "";
     }
-
     if (r.previewWrap) r.previewWrap.innerHTML = "";
     if (r.previewMeta) r.previewMeta.textContent = "";
     if (r.previewWrap) r.previewWrap.hidden = true;
@@ -744,10 +729,7 @@
 
   function renderPreview(file) {
     const r = R();
-    if (!file) {
-      resetPreview();
-      return;
-    }
+    if (!file) return resetPreview();
 
     try {
       if (S.previewUrl) URL.revokeObjectURL(S.previewUrl);
@@ -756,7 +738,6 @@
 
     if (r.previewWrap) {
       r.previewWrap.innerHTML = "";
-
       if (isVideoFile(file)) {
         const v = document.createElement("video");
         v.src = S.previewUrl;
@@ -781,9 +762,7 @@
     }
 
     const meta = [file.name || "archivo", humanKB(file.size), file.type || "*/*", fmtShortDate(Date.now())].join(" · ");
-
     if (r.previewMeta) r.previewMeta.textContent = meta;
-
     if (r.previewEmpty) r.previewEmpty.hidden = true;
     if (r.previewWrap) r.previewWrap.hidden = false;
   }
@@ -876,8 +855,8 @@
   function renderList() {
     const r = R();
     const arr = Array.isArray(S.list) ? S.list : [];
-
     if (!r.listEl) return;
+
     r.listEl.innerHTML = "";
 
     if (!arr.length) {
@@ -917,7 +896,9 @@
           ${thumb}
           <div style="flex:1 1 auto;">
             <p class="itemTitle">${esc(it.name)}</p>
-            <p class="itemMeta">${esc(fmtShortDate(it.updated_at))} · ${esc(humanKB(it.size))} · ${esc(it.mime || (isVid ? "video/*" : "image/*"))}</p>
+            <p class="itemMeta">${esc(fmtShortDate(it.updated_at))} · ${esc(humanKB(it.size))} · ${esc(
+        it.mime || (isVid ? "video/*" : "image/*")
+      )}</p>
             <p class="itemMeta" style="opacity:.75;">${esc(it.bucket)} · ${esc(it.path)}</p>
           </div>
           <div class="pills" style="justify-content:flex-end; flex:0 0 auto;">
@@ -1021,10 +1002,7 @@
   function onFileChange() {
     const r = R();
     const f = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
-    if (!f) {
-      resetPreview();
-      return;
-    }
+    if (!f) return resetPreview();
 
     const isImg = isImageFile(f);
     const isVid = isVideoFile(f);
@@ -1066,18 +1044,11 @@
     const r = R();
     const originalFile = r.fileInp?.files && r.fileInp.files[0] ? r.fileInp.files[0] : null;
 
-    if (!originalFile) {
-      toast("Falta archivo", "Seleccioná un archivo antes de subir.");
-      return;
-    }
+    if (!originalFile) return toast("Falta archivo", "Seleccioná un archivo antes de subir.");
 
     const isVid = isVideoFile(originalFile);
     const isImg = isImageFile(originalFile);
-
-    if (!isVid && !isImg) {
-      toast("Formato no soportado", "Solo imágenes o videos (MP4/WebM).");
-      return;
-    }
+    if (!isVid && !isImg) return toast("Formato no soportado", "Solo imágenes o videos (MP4/WebM).");
 
     const folder = sanitizeFolder(r.folderSel?.value || "events");
     const customName = cleanSpaces(r.nameInp?.value || "");
@@ -1140,15 +1111,12 @@
       const up = await uploadFile(bucket, fileToUpload, folder, customName);
       const url = publicUrlFromPath(up.bucket, up.path);
 
-      S.lastUploadedBucket = up.bucket;
-      S.lastUploadedPath = up.path;
-
-      // ✅ para bridge: guardamos selección actual “subida”
+      // ✅ selección actual “subida”
       S.selected = {
         bucket: up.bucket,
         path: up.path,
         url: url || "",
-        name: fileToUpload && fileToUpload.name ? fileToUpload.name : "",
+        name: fileToUpload?.name || "",
         mime: fileToUpload?.type || "",
         size: fileToUpload?.size || 0,
         updated_at: new Date().toISOString(),
@@ -1189,8 +1157,6 @@
     if (r.urlInp) r.urlInp.value = "";
     setNote("", "");
     resetPreview();
-
-    // reset bridge selection
     S.selected = { bucket: "", path: "", url: "", name: "", mime: "", size: 0, updated_at: "" };
 
     const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
@@ -1215,9 +1181,8 @@
 
     if (act === "use") {
       if (r.urlInp) r.urlInp.value = url || "";
-      setNote("URL lista. Pegala en Eventos/Promos/Galería.", "ok");
+      setNote("URL lista. Podés asignarla a un evento abajo.", "ok");
 
-      // ✅ bridge: selección actual
       S.selected = {
         bucket,
         path,
@@ -1228,12 +1193,13 @@
         updated_at: row.dataset.updated || "",
       };
 
+      // preview desde URL (no file)
       if (r.previewWrap && url) {
         if (r.previewEmpty) r.previewEmpty.hidden = true;
         r.previewWrap.hidden = false;
         r.previewWrap.innerHTML = "";
 
-        const isVid = /\.(mp4|webm)(\?|#|$)/i.test(url);
+        const isVid = /\.(mp4|webm)(\?|#|$)/i.test(url) || /^video\//i.test(row.dataset.mime || "");
 
         if (isVid) {
           const v = document.createElement("video");
@@ -1280,7 +1246,6 @@
 
         await deleteObject(bucket, path);
 
-        // si borramos el seleccionado, limpiamos bridge selection
         if (cleanSpaces(S.selected.path) === cleanSpaces(path)) {
           S.selected = { bucket: "", path: "", url: "", name: "", mime: "", size: 0, updated_at: "" };
         }
@@ -1303,7 +1268,7 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ EVENTS BRIDGE UI (inject)
+  // ✅ EVENTS/HOME BRIDGE UI (inject)
   // ------------------------------------------------------------
   function ensureBridgeUI() {
     if (S.bridgeMounted) return;
@@ -1327,7 +1292,7 @@
             Asignar a EVENTO (media_items)
           </div>
           <div style="font-size:12px; opacity:.75; margin-top:4px;">
-            Seleccioná un evento y un folder. Luego “Asignar” usa la URL actual (o la seleccionada en la lista) y la guarda en DB.
+            1) Elegí el EVENTO · 2) Elegí DESTINO (Home slider o Event page) · 3) Elegí FOLDER · 4) “Asignar”
           </div>
         </div>
         <div style="font-size:12px; opacity:.7;">v${VERSION}</div>
@@ -1339,8 +1304,16 @@
           <select class="select" id="bridgeEventSelect"></select>
         </div>
 
+        <div style="flex:1 1 200px;">
+          <label style="display:block; font-size:12px; opacity:.8; margin-bottom:6px;">Destino</label>
+          <select class="select" id="bridgeTargetSelect">
+            <option value="home">Home Slider (target=home)</option>
+            <option value="event">Event Page (target=event)</option>
+          </select>
+        </div>
+
         <div style="flex:1 1 260px;">
-          <label style="display:block; font-size:12px; opacity:.8; margin-bottom:6px;">Folder (target=event)</label>
+          <label style="display:block; font-size:12px; opacity:.8; margin-bottom:6px;">Folder</label>
           <select class="select" id="bridgeFolderSelect"></select>
         </div>
 
@@ -1356,11 +1329,24 @@
 
     form.insertAdjacentElement("afterend", box);
 
-    // folder options
+    // init folder options según destino
+    const targetSel = $("#bridgeTargetSelect", box);
     const folderSel = $("#bridgeFolderSelect", box);
-    if (folderSel) {
-      folderSel.innerHTML = EVENT_FOLDERS.map((f) => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join("");
+
+    function fillFoldersForTarget(t) {
+      const tNorm = cleanSpaces(t || TARGET_HOME);
+      const list = tNorm === TARGET_EVENT ? EVENT_FOLDERS : HOME_FOLDERS;
+      if (!folderSel) return;
+      folderSel.innerHTML = list.map((f) => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join("");
     }
+
+    fillFoldersForTarget(TARGET_HOME);
+
+    targetSel?.addEventListener("change", () => {
+      fillFoldersForTarget(targetSel.value);
+      $("#bridgeList", box).innerHTML = "";
+      $("#bridgeNote", box).textContent = "";
+    });
 
     $("#bridgeAssignBtn", box)?.addEventListener("click", () => assignSelectedToEvent());
     $("#bridgeViewBtn", box)?.addEventListener("click", () => viewAssignedForEvent());
@@ -1425,18 +1411,14 @@
   function pickUrlAndPathForBridge() {
     const r = R();
 
-    // Preferimos la selección de lista/subida porque trae path real
     const selUrl = cleanSpaces(S.selected.url);
     const selPath = cleanSpaces(S.selected.path);
     const selBucket = cleanSpaces(S.selected.bucket);
 
-    // fallback: usar campo mediaUrl si existe
     const inputUrl = cleanSpaces(r.urlInp?.value || "");
 
-    // 1) url
     const url = selUrl || inputUrl;
 
-    // 2) path (si falta, inferimos desde URL pública de Supabase)
     let path = selPath || "";
     let bucket = selBucket || normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
 
@@ -1449,6 +1431,28 @@
     return { url, path, bucket };
   }
 
+  async function upsertMediaItem({ target, eventId, folder, url, path }) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    // ✅ DB requiere path NOT NULL
+    if (!cleanSpaces(path)) throw new Error("path_required");
+
+    const payload = {
+      target,
+      event_id: eventId,
+      folder,
+      name: folder,
+      path,
+      public_url: url || null,
+    };
+
+    // ✅ en tu proyecto ya validaste que esto funciona
+    const { error } = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "event_id,folder" });
+    if (error) throw error;
+    return true;
+  }
+
   async function assignSelectedToEvent() {
     const sb = getSB();
     if (!sb) return toast("Supabase", "APP.supabase no existe.");
@@ -1457,50 +1461,68 @@
     if (!s) return;
 
     const eventId = cleanSpaces(panel.querySelector("#bridgeEventSelect")?.value || "");
+    const target = cleanSpaces(panel.querySelector("#bridgeTargetSelect")?.value || TARGET_HOME);
     const folder = cleanSpaces(panel.querySelector("#bridgeFolderSelect")?.value || "");
 
     if (!eventId) return toast("Falta evento", "Seleccioná un evento.");
     if (!folder) return toast("Falta folder", "Seleccioná un folder.");
 
     const picked = pickUrlAndPathForBridge();
-    if (!picked.url) {
-      toast("Falta URL", "Primero subí un archivo o presioná “Usar” en uno de la lista.");
-      return;
-    }
+    if (!picked.url) return toast("Falta URL", "Primero subí un archivo o presioná “Usar” en uno de la lista.");
 
-    // ✅ FIX CRÍTICO: tu DB requiere path NOT NULL
+    // ✅ FIX CRÍTICO: path not null
     if (!picked.path) {
       toast(
         "Falta path",
-        "Para asignar a evento, usá “Usar” desde la lista (así captura el path) o pegá una URL pública de Supabase Storage válida.",
+        "Usá “Usar” desde la lista (captura path real) o pegá una URL pública válida de Supabase Storage.",
         5200
       );
       return;
     }
 
+    // ✅ Validación simple: slide_video solo debería ser video
+    if (target === TARGET_HOME && folder === "slide_video") {
+      const isProbablyVideo =
+        cleanSpaces(S.selected.mime).startsWith("video/") || /\.(mp4|webm)(\?|#|$)/i.test(picked.url);
+      if (!isProbablyVideo) {
+        toast("Tipo incorrecto", "slide_video debe ser un video (MP4/WebM).", 5200);
+        return;
+      }
+    }
+
+    // ✅ Validación simple: slide_img/desktop_event/mobile_event/event_more deberían ser imagen
+    if (folder !== "slide_video") {
+      const isProbablyImage =
+        cleanSpaces(S.selected.mime).startsWith("image/") || /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(picked.url);
+      if (!isProbablyImage) {
+        // permitimos si no hay mime (a veces list() no trae), pero avisamos
+        setBridgeNote("⚠️ Ojo: este archivo no parece imagen. Si es correcto, igual se guardará.");
+      }
+    }
+
     setBridgeNote("Asignando en media_items…");
 
     try {
-      const payload = {
-        target: EVENT_TARGET,
-        event_id: eventId,
+      await upsertMediaItem({
+        target,
+        eventId,
         folder,
-        name: folder, // mantenemos tu decisión
-        path: picked.path, // ✅ ya garantizado
-        public_url: picked.url, // ✅ render público
-      };
+        url: picked.url,
+        path: picked.path,
+      });
 
-      const { error } = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "event_id,folder" });
-
-      if (error) throw error;
-
-      toast("Listo", "Asignado a evento (media_items).", 1600);
-      setBridgeNote(`✅ Guardado: ${folder} → ${picked.url}`);
+      toast("Listo", "Asignado en media_items.", 1600);
+      setBridgeNote(`✅ Guardado: target=${target} · folder=${folder} → ${picked.url}`);
       await viewAssignedForEvent(true);
     } catch (err) {
       console.error(err);
-      if (looksLikeRLSError(err)) toast("RLS", "Bloqueado: faltan policies en media_items (INSERT/UPDATE).", 5200);
-      else toast("Error", "No se pudo asignar en media_items.", 5200);
+      if (safeStr(err?.message || "").includes("path_required")) {
+        toast("DB", "La tabla requiere path NOT NULL. Seleccioná desde la lista para capturar path.", 5200);
+      } else if (looksLikeRLSError(err)) {
+        toast("RLS", "Bloqueado: faltan policies en media_items (INSERT/UPDATE).", 5200);
+      } else {
+        toast("Error", "No se pudo asignar en media_items.", 5200);
+      }
       setBridgeNote("❌ Error asignando.");
     }
   }
@@ -1513,38 +1535,29 @@
     if (!s) return;
 
     const eventId = cleanSpaces(panel.querySelector("#bridgeEventSelect")?.value || "");
-    if (!eventId) {
-      toast("Falta evento", "Seleccioná un evento para ver asignados.");
-      return;
-    }
+    if (!eventId) return toast("Falta evento", "Seleccioná un evento para ver asignados.");
 
     if (!silent) setBridgeNote("Cargando asignados…");
 
     try {
       const { data, error } = await sb
         .from(MEDIA_TABLE)
-        .select("id,folder,public_url,path,updated_at")
-        .eq("target", EVENT_TARGET)
+        .select("id,target,folder,public_url,path,updated_at")
         .eq("event_id", eventId)
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
 
       const arr = Array.isArray(data) ? data : [];
-      if (!arr.length) {
-        setBridgeList(`<div class="emptyMonth">Sin media asignada a este evento.</div>`);
-        setBridgeNote("");
-        return;
-      }
 
-      const rows = EVENT_FOLDERS.map((f) => {
-        const it = arr.find((x) => cleanSpaces(x.folder) === f.value);
+      const homeRows = HOME_FOLDERS.map((f) => {
+        const it = arr.find((x) => cleanSpaces(x.target) === TARGET_HOME && cleanSpaces(x.folder) === f.value);
         const url = cleanSpaces(it?.public_url || "");
         const path = cleanSpaces(it?.path || "");
         return `
           <div class="item" style="cursor:default; gap:12px;">
             <div style="flex:1 1 auto;">
-              <p class="itemTitle">${escapeHtml(f.label)}</p>
+              <p class="itemTitle">Home Slider · ${escapeHtml(f.value)}</p>
               <p class="itemMeta" style="word-break:break-all;">${url ? escapeHtml(url) : `<span style="opacity:.7">(vacío)</span>`}</p>
               ${path ? `<p class="itemMeta" style="opacity:.75; word-break:break-all;">Path: ${escapeHtml(path)}</p>` : ``}
             </div>
@@ -1555,7 +1568,38 @@
         `;
       }).join("");
 
-      setBridgeList(rows);
+      const eventRows = EVENT_FOLDERS.map((f) => {
+        const it = arr.find((x) => cleanSpaces(x.target) === TARGET_EVENT && cleanSpaces(x.folder) === f.value);
+        const url = cleanSpaces(it?.public_url || "");
+        const path = cleanSpaces(it?.path || "");
+        return `
+          <div class="item" style="cursor:default; gap:12px;">
+            <div style="flex:1 1 auto;">
+              <p class="itemTitle">Event Page · ${escapeHtml(f.value)}</p>
+              <p class="itemMeta" style="word-break:break-all;">${url ? escapeHtml(url) : `<span style="opacity:.7">(vacío)</span>`}</p>
+              ${path ? `<p class="itemMeta" style="opacity:.75; word-break:break-all;">Path: ${escapeHtml(path)}</p>` : ``}
+            </div>
+            <div class="pills" style="justify-content:flex-end;">
+              <button class="btn" type="button" data-bridge-act="copy" data-url="${escapeHtml(url)}" ${url ? "" : "disabled"}>Copiar</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      if (!arr.length) {
+        setBridgeList(`<div class="emptyMonth">Sin media asignada a este evento.</div>`);
+        setBridgeNote("");
+        return;
+      }
+
+      setBridgeList(`
+        <div style="display:grid; gap:10px;">
+          <div style="opacity:.85; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;">Home Slider (target=home)</div>
+          ${homeRows}
+          <div style="opacity:.85; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; margin-top:8px;">Event Page (target=event)</div>
+          ${eventRows}
+        </div>
+      `);
       setBridgeNote("");
 
       panel.querySelectorAll('[data-bridge-act="copy"]').forEach((b) => {
@@ -1645,7 +1689,6 @@
     bindOnce();
     console.log("[admin-media] boot", { VERSION, BUCKET_IMG, BUCKET_VID, MAX_IMG_MB, MAX_VID_MB });
 
-    // cargar eventos para el bridge (cuando exista UI)
     try {
       await loadEventsForBridge();
     } catch (_) {}
@@ -1675,16 +1718,21 @@
     applyAcceptForBucket(b);
 
     await refreshList({ silent: true, force: false });
+
     try {
       await loadEventsForBridge();
     } catch (_) {}
   }
 
+  // ------------------------------------------------------------
+  // Start
+  // ------------------------------------------------------------
   if (window.APP && APP.__adminReady) boot();
   else window.addEventListener("admin:ready", boot, { once: true });
 
   window.addEventListener("admin:tab", onTab);
 
+  // auto si ya estaba seleccionado
   try {
     const btn = document.querySelector('.tab[data-tab="media"]');
     const selected = btn ? btn.getAttribute("aria-selected") === "true" : false;
