@@ -2,21 +2,16 @@
 
 /**
  * admin.js ✅ PRO (SUPABASE CRUD EVENTS) — 2026-02 PATCH (precio) + FIX description + VIDEO (mínimo)
- * + ✅ PATCH 2026-02-17: soporte opcional (NO rompe) para:
- *   - events.img_desktop (text)
- *   - events.img_mobile  (text)
- *   - events.more_img    (text)
- *   - events.more_img_alt(text)
- *
- * Objetivo:
- * - Mantener TODO lo demás igual.
- * - Si la DB aún NO tiene esas columnas -> NO falla (fallback automático a SELECT legacy).
- * - Si el HTML aún NO tiene inputs nuevos -> NO falla (ignora).
- * - No pisa valores existentes si input no existe / viene vacío.
+ * - Soporta: events.price_amount (numeric) y events.price_currency (text)
+ * - ✅ FIX: reemplaza "desc" por "description" (DB ya no tiene desc)
+ * - ✅ VIDEO: agrega soporte opcional a events.video_url (text)
+ * - ✅ FIX 2026-02-15.3: NO PISAR video_url cuando el input no existe o viene vacío
+ *   (evita borrar el video guardado en DB).
+ * - No rompe si inputs no existen todavía (fallbacks).
  */
 
 (function () {
-  const VERSION = "2026-02-17.2"; // ✅ bump por fix missing-column detection
+  const VERSION = "2026-02-15.3";
 
   // ============================================================
   // Selectores
@@ -178,42 +173,6 @@
     );
   }
 
-  // ✅ Column missing (schema legacy) — FIX PRO para PostgREST/Supabase
-  function isMissingColumnError(err) {
-    const code = String(err?.code || "").toUpperCase();
-    const message = String(err?.message || "").toLowerCase();
-    const details = String(err?.details || "").toLowerCase();
-    const hint = String(err?.hint || "").toLowerCase();
-    const status = Number(err?.status || err?.statusCode || 0);
-
-    // Postgres undefined_column
-    if (code === "42703") return true;
-
-    // PostgREST suele usar códigos PGRST*** para errores de query/select
-    const isPgrst = code.startsWith("PGRST");
-
-    // Textos típicos
-    const textHasMissing =
-      (message.includes("column") && message.includes("does not exist")) ||
-      (details.includes("column") && details.includes("does not exist")) ||
-      (hint.includes("column") && hint.includes("does not exist")) ||
-      (message.includes("unknown field")) ||
-      (details.includes("unknown field")) ||
-      (message.includes("failed to parse") && message.includes("select")) ||
-      (details.includes("failed to parse") && details.includes("select"));
-
-    // Muchos 400 de select inválido vienen sin 42703
-    if (isPgrst && textHasMissing) return true;
-
-    // Si es 400 y menciona column/field, lo tratamos como schema mismatch
-    if (status === 400 && (message.includes("column") || details.includes("column") || message.includes("field") || details.includes("field"))) {
-      // OJO: no queremos confundir con otros 400, pero acá el patrón es claro.
-      return true;
-    }
-
-    return false;
-  }
-
   function prettyError(err) {
     const msg = String(err?.message || err || "");
     return msg || "Ocurrió un error.";
@@ -223,37 +182,13 @@
   // DB mapping
   // ============================================================
   const EVENTS_TABLE = "events";
-
-  // Legacy (solo lo que ya existía)
-  const SELECT_EVENTS_V1 = `
+  const SELECT_EVENTS = `
     id,
     title,
     type,
     month_key,
     description,
     img,
-    video_url,
-    location,
-    time_range,
-    duration_hours,
-    price_amount,
-    price_currency,
-    created_at,
-    updated_at
-  `;
-
-  // V2 (opcional: imágenes separadas + ver más)
-  const SELECT_EVENTS_V2 = `
-    id,
-    title,
-    type,
-    month_key,
-    description,
-    img,
-    img_desktop,
-    img_mobile,
-    more_img,
-    more_img_alt,
     video_url,
     location,
     time_range,
@@ -277,11 +212,6 @@
     didBind: false,
     didBoot: false,
     didLoadOnce: false,
-
-    // ✅ Schema capability (auto-detect)
-    schema: {
-      selectV2: null, // null = unknown, true/false decided at runtime
-    },
   };
 
   function withLock(fn) {
@@ -345,31 +275,10 @@
 
     setBusy(true, "Cargando eventos desde Supabase…");
 
-    // ✅ Intento V2 primero (si no sabemos / si sabemos que existe)
-    const tryV2First = state.schema.selectV2 !== false;
-
-    const runSelect = async (selectStr) => {
-      return await sb
-        .from(EVENTS_TABLE)
-        .select(selectStr)
-        .order("created_at", { ascending: false });
-    };
-
-    let data, error;
-
-    if (tryV2First) {
-      ({ data, error } = await runSelect(SELECT_EVENTS_V2));
-
-      // ✅ FIX: fallback más robusto
-      if (error && isMissingColumnError(error)) {
-        state.schema.selectV2 = false;
-        ({ data, error } = await runSelect(SELECT_EVENTS_V1));
-      } else if (!error) {
-        state.schema.selectV2 = true;
-      }
-    } else {
-      ({ data, error } = await runSelect(SELECT_EVENTS_V1));
-    }
+    const { data, error } = await sb
+      .from(EVENTS_TABLE)
+      .select(SELECT_EVENTS)
+      .order("created_at", { ascending: false });
 
     if (error) {
       state.events = [];
@@ -393,12 +302,10 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
-    const selectStr = state.schema.selectV2 ? SELECT_EVENTS_V2 : SELECT_EVENTS_V1;
-
     const { data, error } = await sb
       .from(EVENTS_TABLE)
       .insert(payload)
-      .select(selectStr)
+      .select(SELECT_EVENTS)
       .single();
 
     if (error) throw error;
@@ -409,13 +316,11 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
-    const selectStr = state.schema.selectV2 ? SELECT_EVENTS_V2 : SELECT_EVENTS_V1;
-
     const { data, error } = await sb
       .from(EVENTS_TABLE)
       .update(payload)
       .eq("id", id)
-      .select(selectStr)
+      .select(SELECT_EVENTS)
       .single();
 
     if (error) throw error;
@@ -443,9 +348,6 @@
       "eventId","evTitle","evType","evMonth","evImg","evDesc","evVideoUrl",
       "evLocation","evTimeRange","evDurationHours","evDuration",
       "evPriceAmount","evPriceCurrency",
-
-      // ✅ opcionales (pueden no existir en el HTML todavía)
-      "evImgDesktop","evImgMobile","evMoreImg","evMoreImgAlt",
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -556,20 +458,7 @@
     }
 
     $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
-
-    // ✅ Mantener evImg como "fallback/general"
     $("#evImg") && ($("#evImg").value = ev.img || "");
-
-    // ✅ Nuevos campos (si existen en el HTML)
-    const imgDeskEl = $("#evImgDesktop");
-    const imgMobEl = $("#evImgMobile");
-    const moreImgEl = $("#evMoreImg");
-    const moreAltEl = $("#evMoreImgAlt");
-
-    if (imgDeskEl) imgDeskEl.value = ev.img_desktop || "";
-    if (imgMobEl) imgMobEl.value = ev.img_mobile || "";
-    if (moreImgEl) moreImgEl.value = ev.more_img || "";
-    if (moreAltEl) moreAltEl.value = ev.more_img_alt || "";
 
     // ✅ Video URL (opcional)
     const vEl = $("#evVideoUrl");
@@ -634,15 +523,6 @@
   }
 
   // ============================================================
-  // Helpers: payload safe (no pisa si no hay input / vacío)
-  // ============================================================
-  function readOptionalInputValue(id) {
-    const el = document.getElementById(id);
-    if (!el) return { exists: false, value: "" };
-    return { exists: true, value: cleanSpaces(el.value || "") };
-  }
-
-  // ============================================================
   // Actions
   // ============================================================
   const createNewEvent = withLock(async function () {
@@ -655,7 +535,6 @@
       setBusy(true, "Creando evento…");
       const typeFallback = $("#evType")?.value || "Cata de vino";
 
-      // ✅ payload base (legacy seguro)
       const payload = {
         title: "Nuevo evento",
         type: typeFallback,
@@ -669,14 +548,6 @@
         price_amount: null,
         price_currency: "USD",
       };
-
-      // ✅ si el schema V2 existe, agregamos campos nuevos sin romper
-      if (state.schema.selectV2 === true) {
-        payload.img_desktop = "";
-        payload.img_mobile = "";
-        payload.more_img = "";
-        payload.more_img_alt = "";
-      }
 
       const created = await insertEvent(payload);
 
@@ -725,13 +596,6 @@
         price_amount: ev.price_amount == null ? null : ev.price_amount,
         price_currency: normalizeCurrency(ev.price_currency, "USD"),
       };
-
-      if (state.schema.selectV2 === true) {
-        payload.img_desktop = ev.img_desktop || "";
-        payload.img_mobile = ev.img_mobile || "";
-        payload.more_img = ev.more_img || "";
-        payload.more_img_alt = ev.more_img_alt || "";
-      }
 
       const created = await insertEvent(payload);
 
@@ -798,9 +662,11 @@
     const title = cleanSpaces($("#evTitle")?.value || "");
     const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
-
     const img = cleanSpaces($("#evImg")?.value || "");
+
+    // ✅ Importante: si el input no existe o está vacío, NO queremos borrar el valor en DB.
     const video_url_input = cleanSpaces($("#evVideoUrl")?.value || "");
+
     const description = cleanSpaces($("#evDesc")?.value || "");
 
     const location = cleanSpaces($("#evLocation")?.value || "");
@@ -826,12 +692,8 @@
       return false;
     }
 
+    // ✅ FIX: mantener el video previo si no hay valor nuevo
     const final_video_url = video_url_input || (ev.video_url || "");
-
-    const imgDesk = readOptionalInputValue("evImgDesktop");
-    const imgMob = readOptionalInputValue("evImgMobile");
-    const moreImg = readOptionalInputValue("evMoreImg");
-    const moreAlt = readOptionalInputValue("evMoreImgAlt");
 
     const payload = {
       title,
@@ -846,16 +708,6 @@
       price_amount,
       price_currency,
     };
-
-    if (state.schema.selectV2 === true) {
-      payload.img_desktop = imgDesk.exists ? (imgDesk.value || (ev.img_desktop || "")) : (ev.img_desktop || "");
-      payload.img_mobile  = imgMob.exists  ? (imgMob.value  || (ev.img_mobile  || "")) : (ev.img_mobile  || "");
-      payload.more_img    = moreImg.exists ? (moreImg.value || (ev.more_img    || "")) : (ev.more_img    || "");
-      payload.more_img_alt= moreAlt.exists ? (moreAlt.value || (ev.more_img_alt|| "")) : (ev.more_img_alt|| "");
-
-      const fallbackImg = payload.img_mobile || payload.img_desktop || payload.img || (ev.img || "");
-      payload.img = fallbackImg || "./assets/img/hero-1.jpg";
-    }
 
     try {
       if (state.mode !== "supabase") {
@@ -878,44 +730,6 @@
       return true;
     } catch (err) {
       console.error(err);
-
-      if (isMissingColumnError(err) && state.schema.selectV2 !== false) {
-        try {
-          state.schema.selectV2 = false;
-
-          const payloadLegacy = { ...payload };
-          delete payloadLegacy.img_desktop;
-          delete payloadLegacy.img_mobile;
-          delete payloadLegacy.more_img;
-          delete payloadLegacy.more_img_alt;
-
-          setBusy(true, "Guardando cambios…");
-          const updated2 = await updateEvent(ev.id, payloadLegacy);
-
-          state.events = (state.events || []).map((x) =>
-            String(x.id) === String(updated2.id) ? updated2 : x
-          );
-
-          toast("Guardado", "Evento actualizado en Supabase.", 1400);
-          setNote("");
-          renderAll();
-
-          try { await ensureEventsLoaded(true); } catch (_) {}
-          return true;
-        } catch (err2) {
-          console.error(err2);
-          if (isRLSError(err2)) {
-            state.mode = "blocked";
-            toast("RLS", "Falta policy UPDATE para events (admins).", 5200);
-          } else {
-            toast("Error", prettyError(err2), 5200);
-          }
-          return false;
-        } finally {
-          setBusy(false, "");
-        }
-      }
-
       if (isRLSError(err)) {
         state.mode = "blocked";
         toast("RLS", "Falta policy UPDATE para events (admins).", 5200);
