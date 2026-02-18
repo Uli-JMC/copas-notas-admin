@@ -1,5 +1,5 @@
 /* ============================================================
-   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 EVENT HERO/MORE PATCH
+   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 VIDEO PRO PATCH
    - Buckets:
        - "media" (PUBLIC)   -> imágenes
        - "video" (PUBLIC)   -> videos (MP4/WebM)
@@ -15,18 +15,11 @@
        - Forzar WebP (si soporta)
        - Slider calidad
        - Guarda en localStorage
-
-   ✅ PATCH NUEVO:
-   - Modo Evento: si existe #eventId (admin.js) permite subir:
-       - events/{eventId}/hero.<ext>
-       - events/{eventId}/more.<ext>
-     usando upsert:true (sobrescribe el archivo del evento).
-   - Esto NO rompe el flujo normal (timestamped uploads).
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-17.1";
+  const VERSION = "2026-02-15.5";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -43,7 +36,7 @@
   const BUCKET_IMG = "media";
   const BUCKET_VID = "video";
 
-  // ✅ Límites separados (25MB)
+  // ✅ Límites separados (ACTUALIZADO a 25MB)
   const MAX_IMG_MB = 25;
   const MAX_VID_MB = 25;
 
@@ -127,15 +120,6 @@
     return f;
   }
 
-  function sanitizePath(path) {
-    let p = cleanSpaces(path || "");
-    p = p.replace(/\\/g, "/");
-    p = p.replace(/\.\./g, "");
-    p = p.replace(/\/+/g, "/");
-    p = p.replace(/^\/+/g, "");
-    return p;
-  }
-
   function slugify(s) {
     return cleanSpaces(s)
       .toLowerCase()
@@ -145,26 +129,31 @@
       .replace(/^\-|\-$/g, "");
   }
 
-  function isVideoFile(file) { return !!file && /^video\//i.test(file.type || ""); }
-  function isImageFile(file) { return !!file && /^image\//i.test(file.type || ""); }
+  function isVideoFile(file) {
+    return !!file && /^video\//i.test(file.type || "");
+  }
+  function isImageFile(file) {
+    return !!file && /^image\//i.test(file.type || "");
+  }
 
   function extFromNameOrMime(file) {
     const name = safeStr(file?.name || "");
     const m = safeStr(file?.type || "").toLowerCase();
     const fromName = (name.split(".").pop() || "").toLowerCase();
 
-    // videos
+    // ✅ videos
     if (["mp4", "webm"].includes(fromName)) return fromName;
     if (m.includes("mp4")) return "mp4";
     if (m.includes("webm")) return "webm";
 
-    // images
+    // ✅ images
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
     if (m.includes("webp")) return "webp";
     if (m.includes("png")) return "png";
     if (m.includes("gif")) return "gif";
     if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
 
+    // fallback
     return isVideoFile(file) ? "mp4" : "jpg";
   }
 
@@ -343,6 +332,7 @@
     const maxDim = Math.round(clampNum(Number(opts?.maxDim ?? COMPRESS_MAX_DIM_DEFAULT), 800, 4096));
     const forceWebp = !!opts?.forceWebp;
 
+    // ✅ Solo imágenes
     if (!file || !/^image\//.test(file.type)) return { file, changed: false, note: "" };
 
     const size = Number(file.size || 0);
@@ -430,6 +420,7 @@
       noteEl: $("#mediaNote", panel),
 
       previewEmpty: $("#mediaPreviewEmpty", panel),
+      previewWrap: $("#mediaPreview", panel),
       previewMeta: $("#mediaPreviewMeta", panel),
 
       refreshBtn: $("#mediaRefreshBtn", panel),
@@ -465,15 +456,11 @@
     lastTabLoadAt: 0,
 
     settings: loadSettings(),
-
-    // ✅ Modo evento (inyectado)
-    mode: "normal",        // normal | event-hero | event-more
-    eventId: "",
-    fixedPath: "",
   };
 
   function setBusy(on) {
     S.busy = !!on;
+    const r = R();
 
     try {
       const els = panel.querySelectorAll("input, select, button, textarea");
@@ -485,7 +472,6 @@
     } catch (_) {}
 
     try {
-      const r = R();
       if (r.uploadBtn) r.uploadBtn.textContent = S.busy ? "Subiendo…" : "Subir";
     } catch (_) {}
   }
@@ -498,8 +484,9 @@
     const b = normalizeBucket(bucket);
 
     if (r.fileInp) {
+      r.fileInp.accept = (b === BUCKET_VID) ? "video/*" : "image/*,video/*";
+      if (b === BUCKET_IMG) r.fileInp.accept = "image/*,video/*";
       if (b === BUCKET_VID) r.fileInp.accept = "video/*";
-      else r.fileInp.accept = "image/*,video/*";
     }
 
     setBucketHint(b);
@@ -661,139 +648,6 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ EVENT MODE UI (inyectado, no toca HTML)
-  // ------------------------------------------------------------
-  function readCurrentEventId() {
-    // El admin.js usa input hidden #eventId en el panel de Events
-    const el = document.getElementById("eventId");
-    const v = cleanSpaces(el?.value || "");
-    // basic sanity: uuid-like
-    if (!v || v.length < 10) return "";
-    return v;
-  }
-
-  function ensureEventModeUI() {
-    if (panel.querySelector('[data-media-eventmode="1"]')) return;
-
-    const wrap = document.createElement("div");
-    wrap.setAttribute("data-media-eventmode", "1");
-    wrap.style.margin = "12px 0";
-    wrap.style.padding = "10px 12px";
-    wrap.style.border = "1px solid rgba(255,255,255,.10)";
-    wrap.style.background = "rgba(255,255,255,.03)";
-    wrap.style.borderRadius = "10px";
-
-    wrap.innerHTML = `
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:800; letter-spacing:.04em;">Modo Evento (hero / more)</div>
-          <div style="opacity:.78; font-size:12px; margin-top:2px;">
-            Usa el evento seleccionado en la pestaña <b>Eventos</b>. Subida con ruta fija:
-            <br><span style="opacity:.85;">events/{eventId}/hero.ext</span> · <span style="opacity:.85;">events/{eventId}/more.ext</span>
-          </div>
-          <div style="opacity:.78; font-size:12px; margin-top:6px;">
-            Evento actual: <code id="mediaEventIdLabel" style="opacity:.92;">—</code>
-          </div>
-        </div>
-
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <button type="button" class="btn" id="mediaUseNormalBtn">Normal</button>
-          <button type="button" class="btn" id="mediaUseHeroBtn">Usar como HERO</button>
-          <button type="button" class="btn" id="mediaUseMoreBtn">Usar como MORE</button>
-        </div>
-      </div>
-
-      <div style="margin-top:8px; opacity:.78; font-size:12px;">
-        • HERO = imagen principal del evento (events.img).<br>
-        • MORE = imagen para “Ver más info” en mobile (se oculta si no existe).<br>
-        <span style="opacity:.9;">Tip:</span> Si estás en HERO/MORE, el bucket se fuerza a <b>media</b> y carpeta a <b>events</b>.
-      </div>
-    `;
-
-    try {
-      // lo ponemos antes del form (después de settings)
-      const r = R();
-      if (r.formEl && r.formEl.parentNode) r.formEl.parentNode.insertBefore(wrap, r.formEl);
-      else panel.insertBefore(wrap, panel.firstChild);
-    } catch (_) {
-      panel.insertBefore(wrap, panel.firstChild);
-    }
-
-    const normalBtn = wrap.querySelector("#mediaUseNormalBtn");
-    const heroBtn = wrap.querySelector("#mediaUseHeroBtn");
-    const moreBtn = wrap.querySelector("#mediaUseMoreBtn");
-    const label = wrap.querySelector("#mediaEventIdLabel");
-
-    function syncLabel() {
-      const eid = readCurrentEventId();
-      label.textContent = eid ? eid : "— (seleccioná un evento en Eventos)";
-      S.eventId = eid;
-    }
-
-    function setMode(mode) {
-      S.mode = mode || "normal";
-      S.eventId = readCurrentEventId();
-
-      // visual state
-      const activeStyle = (btn, on) => {
-        if (!btn) return;
-        btn.style.opacity = on ? "1" : ".72";
-        btn.style.borderColor = on ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.10)";
-      };
-
-      activeStyle(normalBtn, S.mode === "normal");
-      activeStyle(heroBtn, S.mode === "event-hero");
-      activeStyle(moreBtn, S.mode === "event-more");
-
-      // enforce bucket/folder on event modes
-      const r = R();
-      if (S.mode === "event-hero" || S.mode === "event-more") {
-        if (r.bucketSel) r.bucketSel.value = BUCKET_IMG;
-        if (r.folderSel) r.folderSel.value = "events";
-        S.currentBucket = BUCKET_IMG;
-        S.currentFolder = "events";
-        applyAcceptForBucket(BUCKET_IMG);
-
-        // auto-fill name input (solo UX)
-        if (r.nameInp) r.nameInp.value = (S.mode === "event-hero") ? "hero" : "more";
-      } else {
-        // no forzamos nada
-        const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
-        applyAcceptForBucket(b);
-      }
-
-      // resolve fixed path preview (solo nota)
-      const eid = S.eventId;
-      if ((S.mode === "event-hero" || S.mode === "event-more") && !eid) {
-        setNote("⚠️ Modo Evento activo, pero no hay eventId seleccionado. Volvé a Eventos y seleccioná uno.", "warn");
-      } else {
-        setNote("", "");
-      }
-    }
-
-    normalBtn?.addEventListener("click", () => { syncLabel(); setMode("normal"); toast("Media", "Modo normal.", 900); });
-    heroBtn?.addEventListener("click", () => { syncLabel(); setMode("event-hero"); toast("Media", "Modo Evento: HERO.", 1100); });
-    moreBtn?.addEventListener("click", () => { syncLabel(); setMode("event-more"); toast("Media", "Modo Evento: MORE.", 1100); });
-
-    // auto-refresh label periodically when user cambia de evento
-    setInterval(() => {
-      try {
-        const prev = S.eventId;
-        syncLabel();
-        if (S.eventId !== prev) {
-          // si está en modo evento, avisamos
-          if (S.mode === "event-hero" || S.mode === "event-more") {
-            setNote(`Evento actualizado. Listo para subir ${(S.mode === "event-hero") ? "HERO" : "MORE"} del evento seleccionado.`, "ok");
-          }
-        }
-      } catch (_) {}
-    }, 900);
-
-    syncLabel();
-    setMode("normal");
-  }
-
-  // ------------------------------------------------------------
   // Preview (img/video)
   // ------------------------------------------------------------
   function resetPreview() {
@@ -803,15 +657,10 @@
       S.previewUrl = "";
     }
 
-    // OJO: en tu HTML original hay #mediaPreview que contiene img; aquí tu JS viejo lo rehace.
-    // Para no romper tu estructura, mantenemos el comportamiento “wrapper vacío”
-    const previewWrap = $("#mediaPreview", panel);
-    if (previewWrap) previewWrap.innerHTML = "";
+    if (r.previewWrap) r.previewWrap.innerHTML = "";
     if (r.previewMeta) r.previewMeta.textContent = "";
-
-    const previewEmpty = $("#mediaPreviewEmpty", panel);
-    if (previewWrap) previewWrap.hidden = true;
-    if (previewEmpty) previewEmpty.hidden = false;
+    if (r.previewWrap) r.previewWrap.hidden = true;
+    if (r.previewEmpty) r.previewEmpty.hidden = false;
   }
 
   function renderPreview(file) {
@@ -821,11 +670,8 @@
     try { if (S.previewUrl) URL.revokeObjectURL(S.previewUrl); } catch (_) {}
     S.previewUrl = URL.createObjectURL(file);
 
-    const previewWrap = $("#mediaPreview", panel);
-    const previewEmpty = $("#mediaPreviewEmpty", panel);
-
-    if (previewWrap) {
-      previewWrap.innerHTML = "";
+    if (r.previewWrap) {
+      r.previewWrap.innerHTML = "";
 
       if (isVideoFile(file)) {
         const v = document.createElement("video");
@@ -838,7 +684,7 @@
         v.style.width = "100%";
         v.style.height = "auto";
         v.style.border = "1px solid rgba(255,255,255,.10)";
-        previewWrap.appendChild(v);
+        r.previewWrap.appendChild(v);
       } else {
         const img = document.createElement("img");
         img.src = S.previewUrl;
@@ -846,7 +692,7 @@
         img.style.width = "100%";
         img.style.height = "auto";
         img.style.border = "1px solid rgba(255,255,255,.10)";
-        previewWrap.appendChild(img);
+        r.previewWrap.appendChild(img);
       }
     }
 
@@ -859,8 +705,8 @@
 
     if (r.previewMeta) r.previewMeta.textContent = meta;
 
-    if (previewEmpty) previewEmpty.hidden = true;
-    if (previewWrap) previewWrap.hidden = false;
+    if (r.previewEmpty) r.previewEmpty.hidden = true;
+    if (r.previewWrap) r.previewWrap.hidden = false;
   }
 
   // ------------------------------------------------------------
@@ -898,12 +744,7 @@
       .sort((a, b) => safeStr(b.updated_at).localeCompare(safeStr(a.updated_at)));
   }
 
-  /**
-   * uploadFile
-   * - normal: crea path con timestamp y upsert:false
-   * - fixedPath: sube EXACTO a esa ruta y permite upsert:true (sobrescribe)
-   */
-  async function uploadFile(bucket, file, folder, customName, opt) {
+  async function uploadFile(bucket, file, folder, customName) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
@@ -911,25 +752,16 @@
     const f = sanitizeFolder(folder);
     const ext = extFromNameOrMime(file);
 
-    const fixedPath = cleanSpaces(opt?.fixedPath || "");
-    const upsert = !!opt?.upsert;
+    const base =
+      slugify(customName) ||
+      slugify(String(file.name || "").replace(/\.[a-z0-9]+$/i, "")) ||
+      "media";
 
-    let path;
-    if (fixedPath) {
-      // ✅ fixedPath manda
-      path = sanitizePath(fixedPath);
-    } else {
-      const base =
-        slugify(customName) ||
-        slugify(String(file.name || "").replace(/\.[a-z0-9]+$/i, "")) ||
-        "media";
-
-      path = `${f}/${base}_${Date.now()}.${ext}`;
-    }
+    const path = `${f}/${base}_${Date.now()}.${ext}`;
 
     const { error } = await sb.storage.from(b).upload(path, file, {
       cacheControl: "3600",
-      upsert: upsert, // ✅
+      upsert: false,
     });
     if (error) throw error;
 
@@ -1116,24 +948,11 @@
       return;
     }
 
-    // ✅ Auto-switch bucket + accept (solo si NO está en modo evento)
-    if (r.bucketSel && S.mode === "normal") {
+    // ✅ Auto-switch bucket + accept
+    if (r.bucketSel) {
       r.bucketSel.value = isVid ? BUCKET_VID : BUCKET_IMG;
       S.currentBucket = normalizeBucket(r.bucketSel.value);
       applyAcceptForBucket(S.currentBucket);
-    }
-
-    // Si está en modo evento, forzamos media/img
-    if (S.mode === "event-hero" || S.mode === "event-more") {
-      if (isVid) {
-        toast("Modo Evento", "HERO/MORE solo acepta imágenes. Cambiá a modo Normal para videos.");
-        try { r.fileInp.value = ""; } catch (_) {}
-        resetPreview();
-        return;
-      }
-      if (r.bucketSel) r.bucketSel.value = BUCKET_IMG;
-      if (r.folderSel) r.folderSel.value = "events";
-      applyAcceptForBucket(BUCKET_IMG);
     }
 
     const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
@@ -1147,17 +966,6 @@
     }
 
     renderPreview(f);
-  }
-
-  function buildFixedEventPath(kind, file) {
-    const eid = cleanSpaces(S.eventId || readCurrentEventId());
-    if (!eid) return "";
-
-    const ext = extFromNameOrMime(file);
-    const safeKind = (kind === "hero" || kind === "more") ? kind : "hero";
-
-    // ✅ ruta fija dentro de /events (bucket media)
-    return `events/${eid}/${safeKind}.${ext}`;
   }
 
   async function onUpload(e) {
@@ -1179,57 +987,24 @@
       return;
     }
 
-    // ✅ Modo evento: solo imágenes y bucket media
-    const inEventMode = (S.mode === "event-hero" || S.mode === "event-more");
-    if (inEventMode && isVid) {
-      toast("Modo Evento", "HERO/MORE solo acepta imágenes. Cambiá a modo Normal para videos.");
-      return;
-    }
+    const folder = sanitizeFolder(r.folderSel?.value || "events");
+    const customName = cleanSpaces(r.nameInp?.value || "");
 
-    let folder = sanitizeFolder(r.folderSel?.value || "events");
-    let customName = cleanSpaces(r.nameInp?.value || "");
-
+    // ✅ bucket elegido (PRO)
     let bucket = normalizeBucket(r.bucketSel?.value || (isVid ? BUCKET_VID : BUCKET_IMG));
 
     // ✅ coherencia automática
     if (isVid && bucket !== BUCKET_VID) bucket = BUCKET_VID;
     if (isImg && bucket !== BUCKET_IMG) bucket = BUCKET_IMG;
 
-    // ✅ Si está en modo evento, forzar
-    let fixedPath = "";
-    let upsert = false;
-
-    if (inEventMode) {
-      bucket = BUCKET_IMG;
-      folder = "events";
-      if (r.bucketSel) r.bucketSel.value = BUCKET_IMG;
-      if (r.folderSel) r.folderSel.value = "events";
-
-      S.eventId = readCurrentEventId();
-      if (!S.eventId) {
-        toast("Falta evento", "Seleccioná un evento en la pestaña Eventos antes de subir HERO/MORE.", 5200);
-        setNote("⚠️ No hay eventId. Volvé a Eventos y seleccioná uno.", "warn");
-        return;
-      }
-
-      const kind = (S.mode === "event-more") ? "more" : "hero";
-      fixedPath = buildFixedEventPath(kind, originalFile);
-      if (!fixedPath) {
-        toast("Error", "No pude construir la ruta del archivo del evento.", 4200);
-        return;
-      }
-
-      upsert = true; // ✅ sobreescribe
-      customName = kind; // solo UX
-    }
-
+    if (r.bucketSel) r.bucketSel.value = bucket;
     applyAcceptForBucket(bucket);
 
     setBusy(true);
     try {
       let fileToUpload = originalFile;
 
-      // ✅ solo imágenes se optimizan (y solo si NO es video)
+      // ✅ solo imágenes se optimizan
       if (isImg) {
         setNote("Optimizando imagen…", "info");
         try {
@@ -1271,11 +1046,7 @@
       const s = await ensureSession();
       if (!s) return;
 
-      const up = await uploadFile(bucket, fileToUpload, folder, customName, {
-        fixedPath: fixedPath || "",
-        upsert: upsert,
-      });
-
+      const up = await uploadFile(bucket, fileToUpload, folder, customName);
       const url = publicUrlFromPath(up.bucket, up.path);
 
       S.lastUploadedBucket = up.bucket;
@@ -1283,13 +1054,8 @@
 
       if (r.urlInp) r.urlInp.value = url || "";
 
-      if (inEventMode) {
-        setNote(`Listo. ${(S.mode === "event-more") ? "MORE" : "HERO"} subido para el evento.`, "ok");
-        toast("Subido", `Imagen ${(S.mode === "event-more") ? "MORE" : "HERO"} lista (sobrescrita).`, 2400);
-      } else {
-        setNote(`Listo. URL pública generada (${up.bucket}).`, "ok");
-        toast("Subido", isVid ? "Video subido y URL lista." : "Imagen subida y URL lista.", 2200);
-      }
+      setNote(`Listo. URL pública generada (${up.bucket}).`, "ok");
+      toast("Subido", isVid ? "Video subido y URL lista." : "Imagen subida y URL lista.", 2200);
 
       await refreshList({ silent: true, force: true });
 
@@ -1300,7 +1066,7 @@
       setNote("", "");
 
       if (looksLikeRLSError(err)) {
-        toast("RLS", `Bloqueado. Falta policy INSERT/UPDATE en bucket (${bucket}) para authenticated.`, 5200);
+        toast("RLS", `Bloqueado. Falta policy INSERT en bucket (${bucket}) para authenticated.`, 5200);
       } else if (looksLikeStorageError(err)) {
         toast("Storage", `Error en bucket (${bucket}) (policies / nombre / ruta).`, 5200);
       } else {
@@ -1318,16 +1084,8 @@
     setNote("", "");
     resetPreview();
 
-    // En reset, mantenemos el modo (si está en hero/more, re-aplicamos)
     const b = normalizeBucket(r.bucketSel?.value || BUCKET_IMG);
     applyAcceptForBucket(b);
-
-    if (S.mode === "event-hero" || S.mode === "event-more") {
-      if (r.bucketSel) r.bucketSel.value = BUCKET_IMG;
-      if (r.folderSel) r.folderSel.value = "events";
-      if (r.nameInp) r.nameInp.value = (S.mode === "event-hero") ? "hero" : "more";
-      applyAcceptForBucket(BUCKET_IMG);
-    }
 
     toast("Limpiado", "Formulario reiniciado.");
   }
@@ -1350,13 +1108,10 @@
       if (r.urlInp) r.urlInp.value = url || "";
       setNote("URL lista. Pegala en Eventos/Promos/Galería.", "ok");
 
-      const previewWrap = $("#mediaPreview", panel);
-      const previewEmpty = $("#mediaPreviewEmpty", panel);
-
-      if (previewWrap && url) {
-        if (previewEmpty) previewEmpty.hidden = true;
-        previewWrap.hidden = false;
-        previewWrap.innerHTML = "";
+      if (r.previewWrap && url) {
+        if (r.previewEmpty) r.previewEmpty.hidden = true;
+        r.previewWrap.hidden = false;
+        r.previewWrap.innerHTML = "";
 
         const isVid = /\.(mp4|webm)(\?|#|$)/i.test(url);
 
@@ -1371,7 +1126,7 @@
           v.style.width = "100%";
           v.style.height = "auto";
           v.style.border = "1px solid rgba(255,255,255,.10)";
-          previewWrap.appendChild(v);
+          r.previewWrap.appendChild(v);
         } else {
           const img = document.createElement("img");
           img.src = url;
@@ -1379,7 +1134,7 @@
           img.style.width = "100%";
           img.style.height = "auto";
           img.style.border = "1px solid rgba(255,255,255,.10)";
-          previewWrap.appendChild(img);
+          r.previewWrap.appendChild(img);
         }
 
         if (r.previewMeta) r.previewMeta.textContent = `${bucket} · ${path} · ${fmtShortDate(Date.now())}`;
@@ -1436,36 +1191,22 @@
     }
 
     ensureSettingsUI();
-    ensureEventModeUI(); // ✅ nuevo
 
     S.currentBucket = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
     S.currentFolder = sanitizeFolder(r.folderSel.value || "events");
+
     applyAcceptForBucket(S.currentBucket);
 
     r.fileInp.addEventListener("change", onFileChange);
 
     r.bucketSel.addEventListener("change", () => {
-      // si está en modo evento, no dejamos cambiar bucket
-      if (S.mode === "event-hero" || S.mode === "event-more") {
-        r.bucketSel.value = BUCKET_IMG;
-        toast("Modo Evento", "En HERO/MORE el bucket se fuerza a media.", 1600);
-        return;
-      }
       const b = normalizeBucket(r.bucketSel.value || BUCKET_IMG);
       S.currentBucket = b;
       applyAcceptForBucket(b);
       refreshList({ silent: true, force: true });
     });
 
-    r.folderSel.addEventListener("change", () => {
-      // en modo evento, forzamos folder events
-      if (S.mode === "event-hero" || S.mode === "event-more") {
-        r.folderSel.value = "events";
-        toast("Modo Evento", "En HERO/MORE la carpeta se fuerza a events.", 1600);
-      }
-      refreshList({ silent: true, force: true });
-    });
-
+    r.folderSel.addEventListener("change", () => refreshList({ silent: true, force: true }));
     r.refreshBtn.addEventListener("click", () => refreshList({ silent: false, force: true }));
 
     r.formEl.addEventListener("submit", onUpload);
@@ -1511,7 +1252,6 @@
 
     S.settings = loadSettings();
     ensureSettingsUI();
-    ensureEventModeUI();
 
     const r = R();
     const b = normalizeBucket(r.bucketSel?.value || S.currentBucket || BUCKET_IMG);
