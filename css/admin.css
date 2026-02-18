@@ -1,10 +1,9 @@
 /* ============================================================
-   admin.css ✅ PRO UI (2026-01) — FULL (DEPURADO + FIX MODAL)
+   admin.css ✅ PRO UI (2026-02) — FULL (SPACING FIX + PRO POLISH)
    - Mantiene tus clases/IDs (NO rompe JS)
-   - Mejora jerarquía visual: cards, grids, tabs, tablas, forms
-   - ✅ Fondo full pantalla (sin cortes)
-   - ✅ Media tab FIX (sin duplicados)
-   - ✅ FIX: Gallery Modal (sin choques, sin “romper”, preview estable)
+   - ✅ FIX “todo pegado”: inputs SIN margin, spacing por .field
+   - ✅ Sidebar layout + cards + tabs + tables + forms
+   - ✅ Media tab fix + Gallery/Promo modal fixes
 ============================================================ */
 
 :root{
@@ -287,13 +286,13 @@ a{color:inherit}
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.42);
   box-shadow: var(--shadow2);
-  padding: 18px;
+  padding: 20px; /* ✅ más aire */
 }
 
 .grid2{
   display:grid;
   grid-template-columns: 1fr 1.12fr;
-  gap: 14px;
+  gap: 16px; /* ✅ más aire */
 }
 
 .card{
@@ -301,7 +300,7 @@ a{color:inherit}
   border: 1px solid rgba(255,255,255,.10);
   background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
   box-shadow: var(--shadow2);
-  padding: 16px;
+  padding: 18px; /* ✅ más aire */
   min-width: 0;
 }
 
@@ -312,6 +311,7 @@ a{color:inherit}
   gap: 12px;
   margin-bottom: 12px;
 }
+
 .mini{
   color: rgba(255,255,255,.62);
   font-size: 13px;
@@ -420,27 +420,34 @@ a{color:inherit}
 }
 
 /* ============================================================
-   FORMS (tu HTML usa: .form .row .field .label .input .select .textarea)
+   FORMS (SPACING FIX PRO)
 ============================================================ */
 .form{ display:block; }
+
+/* ✅ Espaciado PRO por campo (aquí va el “aire”) */
+.field{
+  display:flex;
+  flex-direction:column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 
 .row{
   display:grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 16px; /* ✅ más aire */
 }
-
-.field{ padding: 0; margin: 0; }
 
 .label{
   display:block;
-  margin:0 0 8px;
+  margin:0;
   color: rgba(255,255,255,.58);
   font-size: 12px;
   letter-spacing:.14em;
   text-transform: uppercase;
 }
 
+/* ✅ Inputs SIN margin (era el problema) */
 .input, .select, .textarea,
 input, select, textarea{
   width:100%;
@@ -449,11 +456,12 @@ input, select, textarea{
   background: rgba(0,0,0,.28);
   color: var(--text);
   padding: 12px 12px;
-  margin: 12px 0;
+  margin: 0; /* ✅ clave */
   outline:none;
   font-size: 14px;
   transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
 }
+
 .textarea{ resize: vertical; }
 
 .input:focus, .select:focus, .textarea:focus,
@@ -469,6 +477,12 @@ input:focus, select:focus, textarea:focus{
   gap:10px;
   flex-wrap:wrap;
   align-items:center;
+}
+
+/* Pills dentro del listHead */
+.listHead .pill{
+  background: rgba(124,92,255,.10);
+  border-color: rgba(124,92,255,.20);
 }
 
 /* ============================================================
@@ -935,12 +949,7 @@ body.adminLoginPage .page{
 
 /* ============================================================
    ✅ GALLERY MODAL (ecn) — FINAL DEPURADO (sin choques)
-   - Overlay NO scrollea; el scroll vive en #ecnGalleryForm
-   - Card recorta (overflow:hidden) y respeta border-radius
-   - ✅ FIX: sin hueco abajo / footer estable / scrollbar dark
 ============================================================ */
-
-/* Overlay del modal */
 #ecnGalleryModal{
   position: fixed;
   inset: 0;
@@ -948,21 +957,19 @@ body.adminLoginPage .page{
   align-items: flex-start;
   justify-content: center;
   padding: 24px 0;
-  overflow: hidden !important; /* ⛔ el overlay NO scrollea */
+  overflow: hidden !important; /* overlay NO scrollea */
   -webkit-overflow-scrolling: touch;
 }
 
-/* Card interno del modal */
 #ecnGalleryModal > *{
   width: min(980px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  overflow: hidden;            /* ✅ CLIP REAL */
+  overflow: hidden;
   border-radius: 22px;
 }
 
-/* Reset márgenes globales dentro del modal */
 #ecnGalleryModal input,
 #ecnGalleryModal select,
 #ecnGalleryModal textarea,
@@ -972,21 +979,14 @@ body.adminLoginPage .page{
   margin: 0 !important;
 }
 
-/* El form es el área scroll */
 #ecnGalleryModal #ecnGalleryForm{
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-
-  /* ✅ Clave: NO padding-bottom aquí (ese era el hueco al final) */
   padding-bottom: 0 !important;
-
-  /* Mejor feeling de scroll */
   overscroll-behavior: contain;
 }
 
-/* ✅ Espacio de seguridad ANTES del footer (no después)
-   Ajuste: igualá este valor al alto aproximado del footer */
 #ecnGalleryModal #ecnGalPreview{
   width: 100%;
   height: clamp(260px, 48vh, 400px);
@@ -994,12 +994,9 @@ body.adminLoginPage .page{
   overflow: hidden;
   background: rgba(0,0,0,.25);
   border: 1px solid rgba(255,255,255,.10);
-
-  /* ✅ este reemplaza al padding-bottom del form */
   margin-bottom: 0px;
 }
 
-/* Imagen */
 #ecnGalleryModal #ecnGalPreviewImg{
   width: 100%;
   height: 100%;
@@ -1008,83 +1005,57 @@ body.adminLoginPage .page{
   background: rgba(0,0,0,.18);
 }
 
-/* Footer sticky (tus botones) */
 #ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
   z-index: 10;
   background: rgba(20,20,20,.96);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-
-  /* Evita deformaciones raras por herencias/colapsos */
   margin: 0 !important;
 }
 
-/* ============================================================
-   ✅ Scrollbar dark SOLO dentro del modal
-============================================================ */
+/* Scrollbar dark SOLO dentro del modal */
 #ecnGalleryModal #ecnGalleryForm{
-  scrollbar-width: thin;                /* Firefox */
+  scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
 }
-
-#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar{
-  width: 10px;
-}
-
+#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar{ width: 10px; }
 #ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-track{
   background: rgba(0,0,0,.18);
   border-left: 1px solid rgba(255,255,255,.08);
 }
-
 #ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb{
   background: rgba(255,255,255,.20);
   border-radius: 999px;
   border: 2px solid rgba(0,0,0,.18);
 }
-
 #ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb:hover{
   background: rgba(255,255,255,.28);
 }
 
-/* nuevo adicional para modal */
-
 /* ============================================================
    ✅ PROMO MODAL (ecn) — FIX SIZE (NO GIGANTE)
-   - Mantiene IDs/clases
-   - Restringe ancho/alto del modal
-   - Scroll vive dentro del form
-   - Override del margin global de inputs SOLO aquí
 ============================================================ */
-
-/* Overlay */
 #ecnPromoModal{
   position: fixed;
   inset: 0;
   padding: 24px 0;
-  display: flex;              /* asumimos que tu JS lo muestra/oculta */
+  display: flex;
   align-items: flex-start;
   justify-content: center;
-  overflow: hidden !important; /* el overlay NO scrollea */
-}
-
-#ecnPromoModal{
-  pointer-events: auto;
-}
-#ecnPromoModal > *{
+  overflow: hidden !important;
   pointer-events: auto;
 }
 
-/* Card contenedor (lo que sea que esté adentro) */
 #ecnPromoModal > *{
+  pointer-events: auto;
   width: min(920px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  overflow: hidden;           /* clip real */
+  overflow: hidden;
   border-radius: 22px;
 }
 
-/* El área scroll */
 #ecnPromoModal #ecnPromoForm{
   flex: 1 1 auto;
   overflow-y: auto;
@@ -1092,7 +1063,6 @@ body.adminLoginPage .page{
   overscroll-behavior: contain;
 }
 
-/* 🔥 CLAVE: cancelar el margin global de inputs SOLO en el modal */
 #ecnPromoModal input,
 #ecnPromoModal select,
 #ecnPromoModal textarea,
@@ -1102,14 +1072,12 @@ body.adminLoginPage .page{
   margin: 0 !important;
 }
 
-/* Espaciado “pro” sin inflar: el espacio lo da el contenedor, no el input */
 #ecnPromoModal #ecnPromoForm .field{
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* Grillas del formulario dentro del modal */
 #ecnPromoModal #ecnPromoForm .row{
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1122,7 +1090,6 @@ body.adminLoginPage .page{
   }
 }
 
-/* Footer sticky (si usás sticky inline en el último div) */
 #ecnPromoModal #ecnPromoForm > div[style*="position: sticky"]{
   z-index: 10;
   background: rgba(20,20,20,.96);
@@ -1131,7 +1098,6 @@ body.adminLoginPage .page{
   margin: 0 !important;
 }
 
-/* Scrollbar dark dentro del modal */
 #ecnPromoModal #ecnPromoForm{
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
@@ -1149,6 +1115,10 @@ body.adminLoginPage .page{
 #ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb:hover{
   background: rgba(255,255,255,.28);
 }
+
+/* ============================================================
+   HOME SLIDES (si se reutiliza en front)
+============================================================ */
 .heroBgVideo{
   position:absolute; inset:0;
   width:100%; height:100%;
