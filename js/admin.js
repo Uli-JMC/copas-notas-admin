@@ -6,26 +6,17 @@
  * - ✅ FIX: reemplaza "desc" por "description" (DB ya no tiene desc)
  * - ✅ VIDEO: agrega soporte opcional a events.video_url (text)
  * - ✅ FIX 2026-02-15.3: NO PISAR video_url cuando el input no existe o viene vacío
- *   (evita borrar el video guardado en DB).
- * - No rompe si inputs no existen todavía (fallbacks).
  */
 
 (function () {
-  const VERSION = "2026-02-15.3";
+  const VERSION = "2026-02-17.1";
 
-  // ============================================================
-  // Selectores
-  // ============================================================
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-  // Guard: solo corre en admin.html real
   const appPanel = $("#appPanel");
   if (!appPanel) return;
 
-  // ============================================================
-  // UI helpers
-  // ============================================================
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -36,12 +27,8 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
-    try {
-      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
-    } catch (_) {}
-    try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
-    } catch (_) {}
+    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs); } catch (_) {}
+    try { if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs); } catch (_) {}
 
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
@@ -79,12 +66,7 @@
     note.textContent = on ? (msg || "Procesando…") : (msg || "");
   }
 
-  // ============================================================
-  // Utils
-  // ============================================================
-  function cleanSpaces(s) {
-    return String(s ?? "").replace(/\s+/g, " ").trim();
-  }
+  function cleanSpaces(s) { return String(s ?? "").replace(/\s+/g, " ").trim(); }
 
   const MONTHS = [
     "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
@@ -96,7 +78,6 @@
     return MONTHS.includes(up) ? up : "ENERO";
   }
 
-  // DB guarda duration_hours como TEXT: aceptamos "2", "2.5", "".
   function parseHoursNumber(input) {
     const raw = cleanSpaces(input);
     if (!raw) return "";
@@ -107,22 +88,18 @@
     return String(n);
   }
 
-  function normalizeTimeRange(s) {
-    return cleanSpaces(s);
-  }
+  function normalizeTimeRange(s) { return cleanSpaces(s); }
 
   function buildDurationLabel(timeRange, durationHours) {
     const t = normalizeTimeRange(timeRange);
     const h = parseHoursNumber(durationHours);
     const hasH = h !== "" && Number(h) > 0;
-
     if (t && hasH) return `${t} · ${h} hrs`;
     if (t) return t;
     if (hasH) return `${h} hrs`;
     return "Por confirmar";
   }
 
-  // ✅ Precio
   function normalizeCurrency(input, fallback = "USD") {
     const v = cleanSpaces(input).toUpperCase();
     if (!v) return fallback;
@@ -136,10 +113,7 @@
     const raw = cleanSpaces(input);
     if (!raw) return null;
 
-    const cleaned = raw
-      .replace(/[^\d.,-]/g, "")
-      .replace(",", ".");
-
+    const cleaned = raw.replace(/[^\d.,-]/g, "").replace(",", ".");
     const m = cleaned.match(/-?\d+(\.\d+)?/);
     if (!m) return null;
 
@@ -149,9 +123,6 @@
     return Math.round(n * 100) / 100;
   }
 
-  // ============================================================
-  // Supabase helpers
-  // ============================================================
   function getSB() {
     return window.APP && (window.APP.supabase || window.APP.sb)
       ? window.APP.supabase || window.APP.sb
@@ -178,9 +149,6 @@
     return msg || "Ocurrió un error.";
   }
 
-  // ============================================================
-  // DB mapping
-  // ============================================================
   const EVENTS_TABLE = "events";
   const SELECT_EVENTS = `
     id,
@@ -199,15 +167,12 @@
     updated_at
   `;
 
-  // ============================================================
-  // State
-  // ============================================================
   const state = {
     activeTab: "events",
     query: "",
     activeEventId: null,
     events: [],
-    mode: "supabase", // supabase | blocked | missing
+    mode: "supabase",
     busy: false,
     didBind: false,
     didBoot: false,
@@ -218,25 +183,26 @@
     return async function (...args) {
       if (state.busy) return;
       state.busy = true;
-      try {
-        return await fn(...args);
-      } finally {
-        state.busy = false;
-      }
+      try { return await fn(...args); }
+      finally { state.busy = false; }
     };
   }
 
-  // ============================================================
-  // Tabs
-  // ============================================================
+  // ✅ HOOK: expone evento activo para otros tabs (media)
+  function publishActiveEventId() {
+    try {
+      window.APP = window.APP || {};
+      window.APP.__activeEventId = state.activeEventId ? String(state.activeEventId) : "";
+      window.dispatchEvent(new CustomEvent("admin:eventSelected", { detail: { eventId: window.APP.__activeEventId } }));
+    } catch (_) {}
+  }
+
   function hideAllTabs() {
     $$('[role="tabpanel"]', appPanel).forEach((p) => { p.hidden = true; });
   }
 
   function emitTab(tabName) {
-    try {
-      window.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab: tabName } }));
-    } catch (_) {}
+    try { window.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab: tabName } })); } catch (_) {}
   }
 
   function setTab(tabName) {
@@ -262,9 +228,6 @@
     }
   }
 
-  // ============================================================
-  // Supabase CRUD
-  // ============================================================
   async function fetchEvents() {
     const sb = getSB();
     if (!sb) {
@@ -283,12 +246,7 @@
     if (error) {
       state.events = [];
       state.mode = isRLSError(error) ? "blocked" : "supabase";
-      setBusy(
-        false,
-        isRLSError(error)
-          ? "RLS bloquea. Faltan policies para events."
-          : "No se pudieron cargar eventos."
-      );
+      setBusy(false, isRLSError(error) ? "RLS bloquea. Faltan policies para events." : "No se pudieron cargar eventos.");
       throw error;
     }
 
@@ -335,9 +293,6 @@
     if (error) throw error;
   }
 
-  // ============================================================
-  // Render: events list + editor
-  // ============================================================
   function setEditorVisible(show) {
     $("#editorEmpty") && ($("#editorEmpty").hidden = show);
     $("#eventForm") && ($("#eventForm").hidden = !show);
@@ -426,6 +381,7 @@
 
       item.addEventListener("click", () => {
         state.activeEventId = ev.id;
+        publishActiveEventId(); // ✅ nuevo
         renderAll();
       });
 
@@ -460,7 +416,6 @@
     $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
     $("#evImg") && ($("#evImg").value = ev.img || "");
 
-    // ✅ Video URL (opcional)
     const vEl = $("#evVideoUrl");
     if (vEl) vEl.value = ev.video_url || "";
 
@@ -478,7 +433,6 @@
       dur.value = label === "Por confirmar" ? "" : label;
     }
 
-    // ✅ Precio (si los inputs existen)
     const priceAmountEl = $("#evPriceAmount");
     const priceCurrencyEl = $("#evPriceCurrency");
 
@@ -497,9 +451,6 @@
     renderEventEditor();
   }
 
-  // ============================================================
-  // On-demand loader
-  // ============================================================
   async function ensureEventsLoaded(force) {
     if (state.mode === "missing") return;
     if (state.didLoadOnce && !force) return;
@@ -508,6 +459,7 @@
       await fetchEvents();
       if (!state.activeEventId && state.events.length) {
         state.activeEventId = state.events[0].id;
+        publishActiveEventId(); // ✅ nuevo
       }
     } catch (err) {
       console.error(err);
@@ -522,9 +474,6 @@
     }
   }
 
-  // ============================================================
-  // Actions
-  // ============================================================
   const createNewEvent = withLock(async function () {
     try {
       if (state.mode !== "supabase") {
@@ -553,6 +502,7 @@
 
       state.events.unshift(created);
       state.activeEventId = created.id;
+      publishActiveEventId(); // ✅ nuevo
 
       toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
       renderAll();
@@ -601,6 +551,7 @@
 
       state.events.unshift(created);
       state.activeEventId = created.id;
+      publishActiveEventId(); // ✅ nuevo
 
       toast("Duplicado", "Copia creada.", 1500);
       renderAll();
@@ -637,6 +588,7 @@
 
       state.events = (state.events || []).filter((x) => String(x.id) !== String(ev.id));
       state.activeEventId = null;
+      publishActiveEventId(); // ✅ nuevo
 
       toast("Evento eliminado", "Se eliminó correctamente.", 1600);
       renderAll();
@@ -663,12 +615,8 @@
     const type = cleanSpaces($("#evType")?.value || "Cata de vino");
     const month_key = normalizeMonth($("#evMonth")?.value || "ENERO");
     const img = cleanSpaces($("#evImg")?.value || "");
-
-    // ✅ Importante: si el input no existe o está vacío, NO queremos borrar el valor en DB.
     const video_url_input = cleanSpaces($("#evVideoUrl")?.value || "");
-
     const description = cleanSpaces($("#evDesc")?.value || "");
-
     const location = cleanSpaces($("#evLocation")?.value || "");
     const time_range = normalizeTimeRange($("#evTimeRange")?.value || "");
     const duration_hours = parseHoursNumber($("#evDurationHours")?.value || "");
@@ -679,20 +627,14 @@
     let price_amount = ev.price_amount == null ? null : ev.price_amount;
     let price_currency = normalizeCurrency(ev.price_currency, "USD");
 
-    if (priceAmountEl) {
-      const parsed = parseMoneyAmount(priceAmountEl.value);
-      price_amount = parsed;
-    }
-    if (priceCurrencyEl) {
-      price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
-    }
+    if (priceAmountEl) price_amount = parseMoneyAmount(priceAmountEl.value);
+    if (priceCurrencyEl) price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
 
     if (!title) {
       toast("Falta el nombre", "Ingresá el nombre del evento.");
       return false;
     }
 
-    // ✅ FIX: mantener el video previo si no hay valor nuevo
     const final_video_url = video_url_input || (ev.video_url || "");
 
     const payload = {
@@ -718,9 +660,7 @@
       setBusy(true, "Guardando cambios…");
       const updated = await updateEvent(ev.id, payload);
 
-      state.events = (state.events || []).map((x) =>
-        String(x.id) === String(updated.id) ? updated : x
-      );
+      state.events = (state.events || []).map((x) => (String(x.id) === String(updated.id) ? updated : x));
 
       toast("Guardado", "Evento actualizado en Supabase.", 1400);
       setNote("");
@@ -742,16 +682,11 @@
     }
   });
 
-  // ============================================================
-  // Wiring
-  // ============================================================
   function bindOnce() {
     if (state.didBind) return;
     state.didBind = true;
 
-    $$(".tab", appPanel).forEach((t) => {
-      t.addEventListener("click", () => setTab(t.dataset.tab));
-    });
+    $$(".tab", appPanel).forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
     $("#search")?.addEventListener("input", (e) => {
       state.query = e.target.value || "";
@@ -762,14 +697,8 @@
     $("#dupEventBtn")?.addEventListener("click", duplicateActiveEvent);
     $("#deleteEventBtn")?.addEventListener("click", deleteActiveEvent);
 
-    $("#eventForm")?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      saveActiveEvent();
-    });
-    $("#saveEventBtn")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      saveActiveEvent();
-    });
+    $("#eventForm")?.addEventListener("submit", (e) => { e.preventDefault(); saveActiveEvent(); });
+    $("#saveEventBtn")?.addEventListener("click", (e) => { e.preventDefault(); saveActiveEvent(); });
 
     $("#evDesc")?.addEventListener("input", () => {
       const v = $("#evDesc")?.value || "";
@@ -797,9 +726,6 @@
     });
   }
 
-  // ============================================================
-  // Boot (espera admin:ready)
-  // ============================================================
   function boot() {
     if (state.didBoot) return;
     state.didBoot = true;
@@ -812,9 +738,6 @@
     setTab("events");
   }
 
-  if (window.APP && APP.__adminReady) {
-    boot();
-  } else {
-    window.addEventListener("admin:ready", boot, { once: true });
-  }
+  if (window.APP && APP.__adminReady) boot();
+  else window.addEventListener("admin:ready", boot, { once: true });
 })();
