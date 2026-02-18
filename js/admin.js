@@ -1,17 +1,18 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02 DB CLEAN PATCH
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02 MEDIA PATCH
  * - events: SOLO datos + more_img_alt
  * - media_items: fuente de verdad de media por evento:
  *    - event_img_desktop
  *    - event_img_mobile (opcional)
- *    - event_more_img (modal)
- * - NO usa events.img / events.video_url (ya no existen)
+ *    - event_video (hero video home)
+ *    - event_more_img (modal / ver más)
+ * - NO usa events.img / events.video_url
  */
 
 (function () {
-  const VERSION = "2026-02-18.1";
+  const VERSION = "2026-02-18.2";
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -212,7 +213,7 @@
   // ============================================================
   // Media helpers (event)
   // ============================================================
-  const EVENT_FOLDERS = ["event_img_desktop", "event_img_mobile", "event_more_img"];
+  const EVENT_FOLDERS = ["event_img_desktop", "event_img_mobile", "event_video", "event_more_img"];
 
   async function fetchEventMedia(eventId) {
     const sb = getSB();
@@ -221,12 +222,14 @@
     const eid = String(eventId || "").trim();
     if (!eid) return {};
 
+    // 🔥 ordena por updated_at desc para quedarnos con el más reciente por folder
     const { data, error } = await sb
       .from(MEDIA_TABLE)
-      .select("folder, public_url, path")
+      .select("id, folder, public_url, path, updated_at")
       .eq("target", "event")
       .eq("event_id", eid)
-      .in("folder", EVENT_FOLDERS);
+      .in("folder", EVENT_FOLDERS)
+      .order("updated_at", { ascending: false });
 
     if (error) throw error;
 
@@ -234,7 +237,9 @@
     (Array.isArray(data) ? data : []).forEach((row) => {
       const f = String(row?.folder || "").trim();
       const url = String(row?.public_url || row?.path || "").trim();
-      if (f) map[f] = url;
+      if (!f || !url) return;
+      // como viene desc, el primero por folder es el más nuevo
+      if (!map[f]) map[f] = url;
     });
 
     return map;
@@ -252,12 +257,14 @@
 
     // si vacío => borramos
     if (!u) {
-      await sb
+      const del = await sb
         .from(MEDIA_TABLE)
         .delete()
         .eq("target", "event")
         .eq("event_id", eid)
         .eq("folder", f);
+
+      if (del.error) throw del.error;
       return;
     }
 
@@ -270,12 +277,13 @@
       event_id: eid,
     };
 
-    // onConflict: event_id,folder (tu índice único parcial aplica para target='event')
-    const { error } = await sb
-      .from(MEDIA_TABLE)
-      .upsert(payload, { onConflict: "event_id,folder" });
-
-    if (error) throw error;
+    // ✅ conflicto robusto: intenta (target,event_id,folder) y si tu índice es (event_id,folder) también lo soporta
+    let res = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "target,event_id,folder" });
+    if (res.error) {
+      // fallback por si tu unique está definido solo en (event_id,folder) con índice parcial
+      res = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "event_id,folder" });
+    }
+    if (res.error) throw res.error;
   }
 
   // ============================================================
@@ -406,7 +414,9 @@
       "evDesc","evLocation","evTimeRange","evDurationHours","evDuration",
       "evPriceAmount","evPriceCurrency",
       // media fields (tolerantes)
-      "evImg", "evImgDesktop", "evImgMobile", "evMoreImg",
+      "evImg","evImgDesktop","evImgMobile",
+      "evVideo","evVideoDesktop",
+      "evMoreImg",
       "evMoreImgAlt",
     ];
     ids.forEach((id) => {
@@ -452,7 +462,7 @@
         <div class="item" style="cursor:default;">
           <div>
             <p class="itemTitle">Acceso bloqueado por RLS</p>
-            <p class="itemMeta">Faltan policies SELECT/INSERT/UPDATE/DELETE para <code>events</code>.</p>
+            <p class="itemMeta">Faltan policies SELECT/INSERT/UPDATE/DELETE para <code>events</code> y <code>media_items</code>.</p>
           </div>
         </div>`;
       return;
@@ -486,7 +496,7 @@
 
       item.addEventListener("click", async () => {
         state.activeEventId = ev.id;
-        await renderAll(); // ahora renderAll es async para traer media
+        await renderAll();
       });
 
       box.appendChild(item);
@@ -554,14 +564,18 @@
 
       const imgDesktopEl = $("#evImgDesktop") || $("#evImg"); // compat legacy
       const imgMobileEl = $("#evImgMobile");
+      const videoEl = $("#evVideo") || $("#evVideoDesktop");
       const moreImgEl = $("#evMoreImg");
 
       if (imgDesktopEl) imgDesktopEl.value = media.event_img_desktop || "";
       if (imgMobileEl) imgMobileEl.value = media.event_img_mobile || "";
+      if (videoEl) videoEl.value = media.event_video || "";
       if (moreImgEl) moreImgEl.value = media.event_more_img || "";
     } catch (err) {
       console.error(err);
-      toast("Media", "No se pudo cargar media_items del evento (revisá RLS de media_items).", 4200);
+      toast("Media", isRLSError(err)
+        ? "RLS bloquea media_items (falta policy SELECT/UPDATE/INSERT/DELETE)."
+        : "No se pudo cargar media_items del evento (revisá consola).", 5200);
     }
   }
 
@@ -673,6 +687,7 @@
         const m = await fetchEventMedia(ev.id);
         await upsertEventMedia(created.id, "event_img_desktop", m.event_img_desktop || "");
         await upsertEventMedia(created.id, "event_img_mobile", m.event_img_mobile || "");
+        await upsertEventMedia(created.id, "event_video", m.event_video || "");
         await upsertEventMedia(created.id, "event_more_img", m.event_more_img || "");
       } catch (_) {}
 
@@ -723,7 +738,7 @@
       console.error(err);
       if (isRLSError(err)) {
         state.mode = "blocked";
-        toast("RLS", "Falta policy DELETE para events (admins).", 5200);
+        toast("RLS", "Falta policy DELETE para events/media_items (admins).", 5200);
       } else {
         toast("Error", prettyError(err), 5200);
       }
@@ -778,10 +793,12 @@
     // Media inputs (compat)
     const imgDesktopEl = $("#evImgDesktop") || $("#evImg"); // legacy
     const imgMobileEl = $("#evImgMobile");
+    const videoEl = $("#evVideo") || $("#evVideoDesktop");
     const moreImgEl = $("#evMoreImg");
 
     const imgDesktopUrl = cleanSpaces(imgDesktopEl?.value || "");
     const imgMobileUrl = cleanSpaces(imgMobileEl?.value || "");
+    const videoUrl = cleanSpaces(videoEl?.value || "");
     const moreImgUrl = cleanSpaces(moreImgEl?.value || "");
 
     try {
@@ -792,18 +809,20 @@
 
       setBusy(true, "Guardando cambios…");
 
+      // 1) guarda datos del evento
       const updated = await updateEvent(ev.id, payload);
 
-      // upsert/delete media_items
+      // 2) guarda media_items (si esto falla, te lo decimos)
       await upsertEventMedia(ev.id, "event_img_desktop", imgDesktopUrl);
       await upsertEventMedia(ev.id, "event_img_mobile", imgMobileUrl);
+      await upsertEventMedia(ev.id, "event_video", videoUrl);
       await upsertEventMedia(ev.id, "event_more_img", moreImgUrl);
 
       state.events = (state.events || []).map((x) =>
         String(x.id) === String(updated.id) ? updated : x
       );
 
-      toast("Guardado", "Evento actualizado en Supabase.", 1400);
+      toast("Guardado", "Evento y media guardados en Supabase.", 1400);
       setNote("");
       await renderAll();
 
@@ -813,7 +832,7 @@
       console.error(err);
       if (isRLSError(err)) {
         state.mode = "blocked";
-        toast("RLS", "Falta policy UPDATE (events/media_items) para admins.", 5200);
+        toast("RLS", "RLS bloquea UPDATE/INSERT en events o media_items. Hay que ajustar policies.", 5200);
       } else {
         toast("Error", prettyError(err), 5200);
       }
