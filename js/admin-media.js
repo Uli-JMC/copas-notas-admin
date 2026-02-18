@@ -1,5 +1,5 @@
 /* ============================================================
-   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 VIDEO PRO PATCH
+   admin-media.js ✅ PRO (Supabase Storage PUBLIC) — 2026-02 VIDEO PRO PATCH + DB PATCH
    - Buckets:
        - "media" (PUBLIC)   -> imágenes
        - "video" (PUBLIC)   -> videos (MP4/WebM)
@@ -15,11 +15,17 @@
        - Forzar WebP (si soporta)
        - Slider calidad
        - Guarda en localStorage
+   - ✅ PATCH DB (2026-02-17):
+       - Inserta registro en tabla `media_items` cuando exista event_id
+       - Obtiene event_id desde:
+           1) #mediaEventId (input hidden)
+           2) query param ?event=
+           3) document.body[data-event-id]
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-15.5";
+  const VERSION = "2026-02-17.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -72,8 +78,12 @@
   }
 
   function toast(title, msg, timeoutMs = 3200) {
-    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs); } catch (_) {}
-    try { if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs); } catch (_) {}
+    try {
+      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
+    } catch (_) {}
+    try {
+      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
+    } catch (_) {}
 
     const toastsEl = document.getElementById("toasts");
     if (!toastsEl) return;
@@ -234,6 +244,65 @@
     const v = cleanSpaces(b || "").toLowerCase();
     if (v === BUCKET_VID) return BUCKET_VID;
     return BUCKET_IMG;
+  }
+
+  // ------------------------------------------------------------
+  // ✅ PATCH DB helpers
+  // ------------------------------------------------------------
+  function getEventIdFromContext() {
+    // 1) hidden input
+    const hid = document.getElementById("mediaEventId");
+    const v1 = cleanSpaces(hid?.value || "");
+    if (v1) return v1;
+
+    // 2) query param ?event=
+    try {
+      const u = new URL(window.location.href);
+      const v2 = cleanSpaces(u.searchParams.get("event") || "");
+      if (v2) return v2;
+    } catch (_) {}
+
+    // 3) body data-event-id
+    const v3 = cleanSpaces(document.body?.getAttribute("data-event-id") || "");
+    if (v3) return v3;
+
+    return "";
+  }
+
+  async function insertMediaItemIfEvent({ bucket, path, url, folder, customName, originalFile }) {
+    const eventId = getEventIdFromContext();
+    if (!eventId) return { ok: false, skipped: true, reason: "no_event_id" };
+
+    const sb = getSB();
+    if (!sb) return { ok: false, skipped: true, reason: "no_supabase" };
+
+    const payload = {
+      event_id: eventId,
+      target: "event",
+      folder: folder,
+      name: customName || (originalFile?.name || "media"),
+      path: path,
+      public_url: url,
+      mime: originalFile?.type || "",
+      bytes: Number(originalFile?.size || 0),
+      bucket: bucket, // por si tu tabla lo tiene; si no existe, Supabase ignora? NO: da error
+    };
+
+    // ⚠️ Si tu tabla NO tiene columna "bucket", la quitamos antes de insertar:
+    // Para evitar error por columna inexistente, hacemos un insert "seguro" sin bucket si falla.
+    let { error } = await sb.from("media_items").insert(payload);
+    if (!error) return { ok: true };
+
+    // retry sin bucket si la columna no existe
+    const msg = safeStr(error?.message || "").toLowerCase();
+    if (msg.includes("bucket") && (msg.includes("column") || msg.includes("does not exist"))) {
+      const { bucket: _drop, ...payload2 } = payload;
+      const r2 = await sb.from("media_items").insert(payload2);
+      if (!r2.error) return { ok: true, downgraded: true };
+      return { ok: false, error: r2.error };
+    }
+
+    return { ok: false, error };
   }
 
   // ------------------------------------------------------------
@@ -1048,6 +1117,30 @@
 
       const up = await uploadFile(bucket, fileToUpload, folder, customName);
       const url = publicUrlFromPath(up.bucket, up.path);
+
+      // ✅ PATCH DB: guardar en media_items si hay event_id
+      try {
+        const rdb = await insertMediaItemIfEvent({
+          bucket: up.bucket,
+          path: up.path,
+          url,
+          folder,
+          customName,
+          originalFile
+        });
+
+        if (rdb?.ok) {
+          console.log("[admin-media] media_items insert OK", rdb);
+        } else if (rdb?.skipped) {
+          // sin eventId: no molestamos
+          console.log("[admin-media] media_items skipped", rdb);
+        } else {
+          console.warn("[admin-media] media_items insert FAIL", rdb);
+          toast("Media DB", "No se pudo guardar en media_items.", 2400);
+        }
+      } catch (e2) {
+        console.error("[admin-media] media_items patch error", e2);
+      }
 
       S.lastUploadedBucket = up.bucket;
       S.lastUploadedPath = up.path;
