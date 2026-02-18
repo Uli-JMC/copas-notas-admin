@@ -1,14 +1,12 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02 MEDIA PATCH
- * - events: SOLO datos + more_img_alt
- * - media_items: fuente de verdad de media por evento:
- *    - event_img_desktop
- *    - event_img_mobile (opcional)
- *    - event_video (hero video home)
- *    - event_more_img (modal / ver más)
- * - NO usa events.img / events.video_url
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA_ITEMS) — 2026-02 PATCH
+ * FIXES:
+ * - ✅ Guarda y carga #evVideoUrl usando media_items folder = event_video
+ * - ✅ EVENT_FOLDERS incluye event_video
+ * - ✅ upsert onConflict robusto: target,event_id,folder
+ * - ✅ delete en media_items revisa error (si RLS bloquea, lo vas a ver)
  */
 
 (function () {
@@ -213,6 +211,7 @@
   // ============================================================
   // Media helpers (event)
   // ============================================================
+  // ✅ incluye VIDEO
   const EVENT_FOLDERS = ["event_img_desktop", "event_img_mobile", "event_video", "event_more_img"];
 
   async function fetchEventMedia(eventId) {
@@ -222,14 +221,12 @@
     const eid = String(eventId || "").trim();
     if (!eid) return {};
 
-    // 🔥 ordena por updated_at desc para quedarnos con el más reciente por folder
     const { data, error } = await sb
       .from(MEDIA_TABLE)
-      .select("id, folder, public_url, path, updated_at")
+      .select("folder, public_url, path")
       .eq("target", "event")
       .eq("event_id", eid)
-      .in("folder", EVENT_FOLDERS)
-      .order("updated_at", { ascending: false });
+      .in("folder", EVENT_FOLDERS);
 
     if (error) throw error;
 
@@ -237,12 +234,28 @@
     (Array.isArray(data) ? data : []).forEach((row) => {
       const f = String(row?.folder || "").trim();
       const url = String(row?.public_url || row?.path || "").trim();
-      if (!f || !url) return;
-      // como viene desc, el primero por folder es el más nuevo
-      if (!map[f]) map[f] = url;
+      if (f) map[f] = url;
     });
 
     return map;
+  }
+
+  async function deleteEventMedia(eventId, folder) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    const f = String(folder || "").trim();
+    if (!eid || !f) return;
+
+    const { error } = await sb
+      .from(MEDIA_TABLE)
+      .delete()
+      .eq("target", "event")
+      .eq("event_id", eid)
+      .eq("folder", f);
+
+    if (error) throw error;
   }
 
   async function upsertEventMedia(eventId, folder, url) {
@@ -255,16 +268,9 @@
 
     if (!eid || !f) return;
 
-    // si vacío => borramos
+    // vacío => borrar (y si RLS bloquea, lo vemos)
     if (!u) {
-      const del = await sb
-        .from(MEDIA_TABLE)
-        .delete()
-        .eq("target", "event")
-        .eq("event_id", eid)
-        .eq("folder", f);
-
-      if (del.error) throw del.error;
+      await deleteEventMedia(eid, f);
       return;
     }
 
@@ -277,13 +283,12 @@
       event_id: eid,
     };
 
-    // ✅ conflicto robusto: intenta (target,event_id,folder) y si tu índice es (event_id,folder) también lo soporta
-    let res = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "target,event_id,folder" });
-    if (res.error) {
-      // fallback por si tu unique está definido solo en (event_id,folder) con índice parcial
-      res = await sb.from(MEDIA_TABLE).upsert(payload, { onConflict: "event_id,folder" });
-    }
-    if (res.error) throw res.error;
+    // ✅ robusto si tu unique es (target,event_id,folder)
+    const { error } = await sb
+      .from(MEDIA_TABLE)
+      .upsert(payload, { onConflict: "target,event_id,folder" });
+
+    if (error) throw error;
   }
 
   // ============================================================
@@ -291,12 +296,6 @@
   // ============================================================
   function hideAllTabs() {
     $$('[role="tabpanel"]', appPanel).forEach((p) => { p.hidden = true; });
-  }
-
-  function emitTab(tabName) {
-    try {
-      window.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab: tabName } }));
-    } catch (_) {}
   }
 
   function setTab(tabName) {
@@ -313,8 +312,6 @@
 
     const panel = $("#tab-" + state.activeTab);
     if (panel) panel.hidden = false;
-
-    emitTab(state.activeTab);
 
     if (state.activeTab === "events") {
       ensureEventsLoaded(false);
@@ -343,11 +340,9 @@
     if (error) {
       state.events = [];
       state.mode = isRLSError(error) ? "blocked" : "supabase";
-      setBusy(
-        false,
-        isRLSError(error)
-          ? "RLS bloquea. Faltan policies para events."
-          : "No se pudieron cargar eventos."
+      setBusy(false, isRLSError(error)
+        ? "RLS bloquea. Faltan policies para events."
+        : "No se pudieron cargar eventos."
       );
       throw error;
     }
@@ -394,10 +389,12 @@
     const { error } = await sb.from(EVENTS_TABLE).delete().eq("id", id);
     if (error) throw error;
 
-    // Limpieza media asociada (best effort)
     try {
-      await sb.from(MEDIA_TABLE).delete().eq("target", "event").eq("event_id", id);
-    } catch (_) {}
+      const del = await sb.from(MEDIA_TABLE).delete().eq("target", "event").eq("event_id", id);
+      if (del.error) throw del.error;
+    } catch (e) {
+      console.warn("[admin] cleanup media_items failed:", e);
+    }
   }
 
   // ============================================================
@@ -413,10 +410,7 @@
       "eventId","evTitle","evType","evMonth",
       "evDesc","evLocation","evTimeRange","evDurationHours","evDuration",
       "evPriceAmount","evPriceCurrency",
-      // media fields (tolerantes)
-      "evImg","evImgDesktop","evImgMobile",
-      "evVideo","evVideoDesktop",
-      "evMoreImg",
+      "evImg", "evImgDesktop", "evImgMobile", "evVideoUrl", "evMoreImg",
       "evMoreImgAlt",
     ];
     ids.forEach((id) => {
@@ -462,7 +456,7 @@
         <div class="item" style="cursor:default;">
           <div>
             <p class="itemTitle">Acceso bloqueado por RLS</p>
-            <p class="itemMeta">Faltan policies SELECT/INSERT/UPDATE/DELETE para <code>events</code> y <code>media_items</code>.</p>
+            <p class="itemMeta">Faltan policies SELECT/INSERT/UPDATE/DELETE para <code>events</code>.</p>
           </div>
         </div>`;
       return;
@@ -523,9 +517,7 @@
       const dbType = String(ev.type || "Cata de vino");
       const hasOption = Array.from(typeEl.options || []).some((o) => String(o.value) === dbType);
       typeEl.value = hasOption ? dbType : "Cata de vino";
-      if (!hasOption && dbType) {
-        setNote(`Nota: el tipo guardado en DB es "${dbType}". Ajustá el selector si querés incluirlo.`);
-      }
+      if (!hasOption && dbType) setNote(`Nota: el tipo guardado en DB es "${dbType}".`);
     }
 
     $("#evMonth") && ($("#evMonth").value = normalizeMonth(ev.month_key));
@@ -546,36 +538,30 @@
     const priceAmountEl = $("#evPriceAmount");
     const priceCurrencyEl = $("#evPriceCurrency");
 
-    if (priceAmountEl) {
-      const pa = ev.price_amount;
-      priceAmountEl.value = pa == null ? "" : String(pa);
-    }
-    if (priceCurrencyEl) {
-      priceCurrencyEl.value = normalizeCurrency(ev.price_currency, "USD");
-    }
+    if (priceAmountEl) priceAmountEl.value = ev.price_amount == null ? "" : String(ev.price_amount);
+    if (priceCurrencyEl) priceCurrencyEl.value = normalizeCurrency(ev.price_currency, "USD");
 
     // ✅ more_img_alt vive en events
     const altEl = $("#evMoreImgAlt");
     if (altEl) altEl.value = ev.more_img_alt || "";
 
-    // ✅ Media desde media_items
+    // ✅ Media desde media_items (incluye video)
     try {
       const media = await fetchEventMedia(ev.id);
 
-      const imgDesktopEl = $("#evImgDesktop") || $("#evImg"); // compat legacy
+      const imgDesktopEl = $("#evImgDesktop") || $("#evImg");
       const imgMobileEl = $("#evImgMobile");
-      const videoEl = $("#evVideo") || $("#evVideoDesktop");
+      const videoEl = $("#evVideoUrl");
       const moreImgEl = $("#evMoreImg");
 
       if (imgDesktopEl) imgDesktopEl.value = media.event_img_desktop || "";
+      if ($("#evImg")) $("#evImg").value = media.event_img_mobile || $("#evImg")?.value || ""; // fallback legacy
       if (imgMobileEl) imgMobileEl.value = media.event_img_mobile || "";
       if (videoEl) videoEl.value = media.event_video || "";
       if (moreImgEl) moreImgEl.value = media.event_more_img || "";
     } catch (err) {
       console.error(err);
-      toast("Media", isRLSError(err)
-        ? "RLS bloquea media_items (falta policy SELECT/UPDATE/INSERT/DELETE)."
-        : "No se pudo cargar media_items del evento (revisá consola).", 5200);
+      toast("Media", "No se pudo cargar media_items (revisá RLS de media_items).", 4200);
     }
   }
 
@@ -591,17 +577,13 @@
 
     try {
       await fetchEvents();
-      if (!state.activeEventId && state.events.length) {
-        state.activeEventId = state.events[0].id;
-      }
+      if (!state.activeEventId && state.events.length) state.activeEventId = state.events[0].id;
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        state.mode = "blocked";
-        toast("RLS", "No se pudo leer events. Falta policy SELECT para admins.", 5200);
-      } else {
-        toast("Supabase", "No se pudieron cargar eventos. Revisá consola.", 5200);
-      }
+      toast(isRLSError(err) ? "RLS" : "Supabase",
+        isRLSError(err) ? "No se pudo leer events. Falta policy SELECT." : "No se pudieron cargar eventos.",
+        5200
+      );
     } finally {
       await renderAll();
     }
@@ -612,10 +594,7 @@
   // ============================================================
   const createNewEvent = withLock(async function () {
     try {
-      if (state.mode !== "supabase") {
-        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
-        return;
-      }
+      if (state.mode !== "supabase") return toast("Bloqueado", "Supabase no está listo o RLS bloquea.");
 
       setBusy(true, "Creando evento…");
       const typeFallback = $("#evType")?.value || "Cata de vino";
@@ -640,16 +619,13 @@
 
       toast("Evento creado", "Ya podés editarlo y guardarlo.", 1600);
       await renderAll();
-
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        state.mode = "blocked";
-        toast("RLS", "Falta policy INSERT para events (admins).", 5200);
-      } else {
-        toast("Error", prettyError(err), 5200);
-      }
+      toast(isRLSError(err) ? "RLS" : "Error",
+        isRLSError(err) ? "Falta policy INSERT para events." : prettyError(err),
+        5200
+      );
     } finally {
       setBusy(false, "");
     }
@@ -660,10 +636,7 @@
     if (!ev) return toast("Duplicar", "Seleccioná un evento primero.");
 
     try {
-      if (state.mode !== "supabase") {
-        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
-        return;
-      }
+      if (state.mode !== "supabase") return toast("Bloqueado", "Supabase no está listo o RLS bloquea.");
 
       setBusy(true, "Duplicando evento…");
 
@@ -682,30 +655,29 @@
 
       const created = await insertEvent(payload);
 
-      // Duplicar media_items del evento original (si existe)
+      // Duplicar media_items del evento original
       try {
         const m = await fetchEventMedia(ev.id);
         await upsertEventMedia(created.id, "event_img_desktop", m.event_img_desktop || "");
         await upsertEventMedia(created.id, "event_img_mobile", m.event_img_mobile || "");
         await upsertEventMedia(created.id, "event_video", m.event_video || "");
         await upsertEventMedia(created.id, "event_more_img", m.event_more_img || "");
-      } catch (_) {}
+      } catch (e) {
+        console.warn("[admin] duplicate media failed:", e);
+      }
 
       state.events.unshift(created);
       state.activeEventId = created.id;
 
       toast("Duplicado", "Copia creada.", 1500);
       await renderAll();
-
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        state.mode = "blocked";
-        toast("RLS", "Falta policy INSERT para events (admins).", 5200);
-      } else {
-        toast("Error", prettyError(err), 5200);
-      }
+      toast(isRLSError(err) ? "RLS" : "Error",
+        isRLSError(err) ? "Falta policy INSERT para events." : prettyError(err),
+        5200
+      );
     } finally {
       setBusy(false, "");
     }
@@ -719,10 +691,7 @@
     if (!ok) return;
 
     try {
-      if (state.mode !== "supabase") {
-        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
-        return;
-      }
+      if (state.mode !== "supabase") return toast("Bloqueado", "Supabase no está listo o RLS bloquea.");
 
       setBusy(true, "Eliminando evento…");
       await deleteEvent(ev.id);
@@ -732,16 +701,13 @@
 
       toast("Evento eliminado", "Se eliminó correctamente.", 1600);
       await renderAll();
-
       try { await ensureEventsLoaded(true); } catch (_) {}
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        state.mode = "blocked";
-        toast("RLS", "Falta policy DELETE para events/media_items (admins).", 5200);
-      } else {
-        toast("Error", prettyError(err), 5200);
-      }
+      toast(isRLSError(err) ? "RLS" : "Error",
+        isRLSError(err) ? "Falta policy DELETE." : prettyError(err),
+        5200
+      );
     } finally {
       setBusy(false, "");
     }
@@ -769,7 +735,6 @@
     if (priceAmountEl) price_amount = parseMoneyAmount(priceAmountEl.value);
     if (priceCurrencyEl) price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
 
-    // more_img_alt en events
     const moreAlt = cleanSpaces(($("#evMoreImgAlt")?.value) || ev.more_img_alt || "");
 
     if (!title) {
@@ -790,29 +755,25 @@
       more_img_alt: moreAlt,
     };
 
-    // Media inputs (compat)
-    const imgDesktopEl = $("#evImgDesktop") || $("#evImg"); // legacy
+    // Media inputs
+    const imgDesktopEl = $("#evImgDesktop") || $("#evImg");
     const imgMobileEl = $("#evImgMobile");
-    const videoEl = $("#evVideo") || $("#evVideoDesktop");
+    const videoEl = $("#evVideoUrl");
     const moreImgEl = $("#evMoreImg");
 
     const imgDesktopUrl = cleanSpaces(imgDesktopEl?.value || "");
-    const imgMobileUrl = cleanSpaces(imgMobileEl?.value || "");
+    const imgMobileUrl = cleanSpaces(imgMobileEl?.value || $("#evImg")?.value || "");
     const videoUrl = cleanSpaces(videoEl?.value || "");
     const moreImgUrl = cleanSpaces(moreImgEl?.value || "");
 
     try {
-      if (state.mode !== "supabase") {
-        toast("Bloqueado", "Supabase no está listo o RLS bloquea. Revisá policies.");
-        return false;
-      }
+      if (state.mode !== "supabase") return false;
 
       setBusy(true, "Guardando cambios…");
 
-      // 1) guarda datos del evento
       const updated = await updateEvent(ev.id, payload);
 
-      // 2) guarda media_items (si esto falla, te lo decimos)
+      // ✅ upsert/delete media_items (incluye video)
       await upsertEventMedia(ev.id, "event_img_desktop", imgDesktopUrl);
       await upsertEventMedia(ev.id, "event_img_mobile", imgMobileUrl);
       await upsertEventMedia(ev.id, "event_video", videoUrl);
@@ -822,20 +783,19 @@
         String(x.id) === String(updated.id) ? updated : x
       );
 
-      toast("Guardado", "Evento y media guardados en Supabase.", 1400);
+      toast("Guardado", "Evento actualizado en Supabase.", 1400);
       setNote("");
       await renderAll();
-
       try { await ensureEventsLoaded(true); } catch (_) {}
       return true;
     } catch (err) {
       console.error(err);
-      if (isRLSError(err)) {
-        state.mode = "blocked";
-        toast("RLS", "RLS bloquea UPDATE/INSERT en events o media_items. Hay que ajustar policies.", 5200);
-      } else {
-        toast("Error", prettyError(err), 5200);
-      }
+      toast(isRLSError(err) ? "RLS" : "Error",
+        isRLSError(err)
+          ? "RLS bloqueó el guardado. Revisá policies INSERT/UPDATE/DELETE en media_items."
+          : prettyError(err),
+        5200
+      );
       return false;
     } finally {
       setBusy(false, "");
