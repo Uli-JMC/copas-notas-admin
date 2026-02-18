@@ -10,16 +10,18 @@
        - Warning visible cuando bucket = video (sin optimización)
    - Preview (img/video) + copiar URL + eliminar
    - No usa DB (ideal para "copiar y pegar URL")
-   - ✅ Settings PRO (solo aplica a imágenes):
-       - Toggle Optimizar
-       - Forzar WebP (si soporta)
-       - Slider calidad
-       - Guarda en localStorage
+
+   ✅ PATCH 2026-02-17 (EVENT ASSIGNMENT):
+   - Modo opcional: "Subir y asignar a evento"
+     - HERO -> events.img
+     - MORE -> events.more_img (si existe)
+   - UI se inyecta (no requiere cambiar admin.html)
+   - Si no hay evento seleccionado o columna no existe -> solo avisa y deja URL para copiar
 ============================================================ */
 (function () {
   "use strict";
 
-  const VERSION = "2026-02-15.5";
+  const VERSION = "2026-02-17.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -36,7 +38,6 @@
   const BUCKET_IMG = "media";
   const BUCKET_VID = "video";
 
-  // ✅ Límites separados (ACTUALIZADO a 25MB)
   const MAX_IMG_MB = 25;
   const MAX_VID_MB = 25;
 
@@ -45,18 +46,20 @@
 
   const LIST_LIMIT = 60;
 
-  // ✅ Auto-compress config (solo imágenes)
   const COMPRESS_MAX_DIM_DEFAULT = 1920;
   const COMPRESS_QUALITY_DEFAULT = 0.82;
   const COMPRESS_MIN_BYTES = 900 * 1024;
   const COMPRESS_TIMEOUT_MS = 12000;
 
-  // ✅ Settings localStorage keys
   const LS_KEYS = {
     optimize: "admin_media_optimize",
     forceWebp: "admin_media_force_webp",
     quality: "admin_media_quality",
     maxDim: "admin_media_max_dim",
+
+    // ✅ nuevo
+    assignMode: "admin_media_assign_mode",     // "copy" | "assign"
+    assignTarget: "admin_media_assign_target", // "hero" | "more"
   };
 
   // ------------------------------------------------------------
@@ -141,19 +144,16 @@
     const m = safeStr(file?.type || "").toLowerCase();
     const fromName = (name.split(".").pop() || "").toLowerCase();
 
-    // ✅ videos
     if (["mp4", "webm"].includes(fromName)) return fromName;
     if (m.includes("mp4")) return "mp4";
     if (m.includes("webm")) return "webm";
 
-    // ✅ images
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(fromName)) return fromName === "jpeg" ? "jpg" : fromName;
     if (m.includes("webp")) return "webp";
     if (m.includes("png")) return "png";
     if (m.includes("gif")) return "gif";
     if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
 
-    // fallback
     return isVideoFile(file) ? "mp4" : "jpg";
   }
 
@@ -237,7 +237,7 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ Settings (localStorage) — solo imágenes
+  // ✅ Settings (localStorage)
   // ------------------------------------------------------------
   function readLS(key, fallback) {
     try {
@@ -258,7 +258,11 @@
     const forceWebp = readLS(LS_KEYS.forceWebp, "0") === "1";
     const quality = clampNum(Number(readLS(LS_KEYS.quality, String(COMPRESS_QUALITY_DEFAULT))), 0.55, 0.95);
     const maxDim = Math.round(clampNum(Number(readLS(LS_KEYS.maxDim, String(COMPRESS_MAX_DIM_DEFAULT))), 800, 4096));
-    return { optimize, forceWebp, quality, maxDim };
+
+    const assignMode = readLS(LS_KEYS.assignMode, "copy");     // copy|assign
+    const assignTarget = readLS(LS_KEYS.assignTarget, "hero"); // hero|more
+
+    return { optimize, forceWebp, quality, maxDim, assignMode, assignTarget };
   }
 
   // ------------------------------------------------------------
@@ -332,7 +336,6 @@
     const maxDim = Math.round(clampNum(Number(opts?.maxDim ?? COMPRESS_MAX_DIM_DEFAULT), 800, 4096));
     const forceWebp = !!opts?.forceWebp;
 
-    // ✅ Solo imágenes
     if (!file || !/^image\//.test(file.type)) return { file, changed: false, note: "" };
 
     const size = Number(file.size || 0);
@@ -373,7 +376,10 @@
     }
 
     const webpOK = supportsWebP();
-    const useWebP = forceWebp ? webpOK : webpOK;
+    // ✅ Comportamiento correcto:
+    // - Si forceWebp ON -> webp si soporta
+    // - Si forceWebp OFF -> webp igual si soporta (tu diseño actual), pero esto te permite cambiarlo luego si querés.
+    const useWebP = webpOK; // (mantenemos tu decisión: WebP si el navegador soporta)
     const mime = useWebP ? "image/webp" : "image/jpeg";
 
     let blob = await withTimeout(canvasToBlob(canvas, mime, quality), COMPRESS_TIMEOUT_MS).catch(() => null);
@@ -485,8 +491,6 @@
 
     if (r.fileInp) {
       r.fileInp.accept = (b === BUCKET_VID) ? "video/*" : "image/*,video/*";
-      if (b === BUCKET_IMG) r.fileInp.accept = "image/*,video/*";
-      if (b === BUCKET_VID) r.fileInp.accept = "video/*";
     }
 
     setBucketHint(b);
@@ -524,7 +528,64 @@
   }
 
   // ------------------------------------------------------------
-  // ✅ Settings UI injection (sin tocar HTML) — solo imágenes
+  // ✅ Asignación a evento (DB) — helpers
+  // ------------------------------------------------------------
+  function getActiveEventId() {
+    // 1) si admin.js expone algo (opcional)
+    try {
+      const v = window.APP && APP.__activeEventId ? String(APP.__activeEventId) : "";
+      if (v && v !== "null" && v !== "undefined") return v;
+    } catch (_) {}
+
+    // 2) fallback: input oculto del form (si hay evento seleccionado)
+    const el = document.getElementById("eventId");
+    const v2 = cleanSpaces(el?.value || "");
+    return v2 || "";
+  }
+
+  async function assignUrlToEvent(url) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eventId = getActiveEventId();
+    if (!eventId) {
+      toast("Asignación", "No hay evento seleccionado. Andá a 'Eventos' y seleccioná uno.", 4200);
+      return { ok: false, reason: "no_event" };
+    }
+
+    const mode = cleanSpaces(S.settings.assignMode || "copy");
+    if (mode !== "assign") return { ok: false, reason: "mode_copy" };
+
+    const target = cleanSpaces(S.settings.assignTarget || "hero"); // hero|more
+    const field = (target === "more") ? "more_img" : "img";
+
+    // ✅ Solo permitimos asignación cuando es imagen en bucket media
+    if (normalizeBucket(S.currentBucket) !== BUCKET_IMG) {
+      toast("Asignación", "Solo podés asignar imágenes (bucket media) a eventos.", 4200);
+      return { ok: false, reason: "not_image_bucket" };
+    }
+
+    // Guardar en DB
+    const payload = {};
+    payload[field] = url;
+
+    const { error } = await sb
+      .from("events")
+      .update(payload)
+      .eq("id", eventId);
+
+    if (error) {
+      // Si no existe more_img, esto te lo va a decir aquí
+      toast("DB", `No pude guardar en events.${field}. ${error.message || "Error"}`, 5200);
+      return { ok: false, reason: "db_error", error };
+    }
+
+    toast("Evento actualizado", `Imagen guardada en ${field} (evento ${eventId}).`, 2200);
+    return { ok: true, field, eventId };
+  }
+
+  // ------------------------------------------------------------
+  // ✅ Settings UI injection (sin tocar HTML)
   // ------------------------------------------------------------
   function ensureSettingsUI() {
     if (panel.querySelector('[data-media-settings="1"]')) return;
@@ -561,6 +622,41 @@
         </div>
       </div>
 
+      <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:10px 0;" />
+
+      <!-- ✅ NUEVO: Modo asignación a evento -->
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+        <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+          <div style="font-size:12px; opacity:.8;">Modo</div>
+
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="radio" name="mediaAssignMode" value="copy" ${S.settings.assignMode !== "assign" ? "checked" : ""}>
+            <span>Solo subir (copiar URL)</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="radio" name="mediaAssignMode" value="assign" ${S.settings.assignMode === "assign" ? "checked" : ""}>
+            <span>Subir y asignar al evento activo</span>
+          </label>
+
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-size:12px; opacity:.75;">Campo:</span>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="radio" name="mediaAssignTarget" value="hero" ${S.settings.assignTarget !== "more" ? "checked" : ""}>
+              <span>HERO (events.img)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="radio" name="mediaAssignTarget" value="more" ${S.settings.assignTarget === "more" ? "checked" : ""}>
+              <span>MORE (events.more_img)</span>
+            </label>
+          </div>
+        </div>
+
+        <div style="font-size:12px; opacity:.75;">
+          Evento activo: <b id="mediaActiveEventId">${escapeHtml(getActiveEventId() || "—")}</b>
+        </div>
+      </div>
+
       <div style="margin-top:8px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="opacity:.75; font-size:12px;">
           Resize máx: <b id="mediaMaxDimVal">${S.settings.maxDim}</b>px ·
@@ -586,6 +682,34 @@
     const qualityVal = wrap.querySelector("#mediaQualityVal");
     const resetBtn = wrap.querySelector("#mediaResetSettingsBtn");
 
+    const eventIdLabel = wrap.querySelector("#mediaActiveEventId");
+    const updateEventIdLabel = () => {
+      try { if (eventIdLabel) eventIdLabel.textContent = getActiveEventId() || "—"; } catch (_) {}
+    };
+
+    // Radios
+    const modeRadios = Array.from(wrap.querySelectorAll('input[name="mediaAssignMode"]'));
+    const targetRadios = Array.from(wrap.querySelectorAll('input[name="mediaAssignTarget"]'));
+
+    modeRadios.forEach((r) => {
+      r.addEventListener("change", () => {
+        const v = modeRadios.find(x => x.checked)?.value || "copy";
+        S.settings.assignMode = v;
+        writeLS(LS_KEYS.assignMode, v);
+        updateEventIdLabel();
+        toast("Media", v === "assign" ? "Asignación a evento: ACTIVADA" : "Asignación a evento: desactivada", 1400);
+      });
+    });
+
+    targetRadios.forEach((r) => {
+      r.addEventListener("change", () => {
+        const v = targetRadios.find(x => x.checked)?.value || "hero";
+        S.settings.assignTarget = v;
+        writeLS(LS_KEYS.assignTarget, v);
+        toast("Media", v === "more" ? "Target: MORE (events.more_img)" : "Target: HERO (events.img)", 1400);
+      });
+    });
+
     function syncUI() {
       const webp = supportsWebP();
       if (forceWebp) {
@@ -601,6 +725,7 @@
         const q = clampNum(Number(quality.value) / 100, 0.55, 0.95);
         qualityVal.textContent = String(Math.round(q * 100));
       }
+      updateEventIdLabel();
     }
 
     optToggle?.addEventListener("change", () => {
@@ -628,21 +753,34 @@
         forceWebp: false,
         quality: COMPRESS_QUALITY_DEFAULT,
         maxDim: COMPRESS_MAX_DIM_DEFAULT,
+
+        assignMode: "copy",
+        assignTarget: "hero",
       };
       writeLS(LS_KEYS.optimize, "1");
       writeLS(LS_KEYS.forceWebp, "0");
       writeLS(LS_KEYS.quality, String(COMPRESS_QUALITY_DEFAULT));
       writeLS(LS_KEYS.maxDim, String(COMPRESS_MAX_DIM_DEFAULT));
+      writeLS(LS_KEYS.assignMode, "copy");
+      writeLS(LS_KEYS.assignTarget, "hero");
 
       if (optToggle) optToggle.checked = true;
       if (forceWebp) forceWebp.checked = false;
       if (quality) quality.value = String(Math.round(COMPRESS_QUALITY_DEFAULT * 100));
+
+      // radios reset
+      modeRadios.forEach(x => x.checked = (x.value === "copy"));
+      targetRadios.forEach(x => x.checked = (x.value === "hero"));
+
       const md = wrap.querySelector("#mediaMaxDimVal");
       if (md) md.textContent = String(COMPRESS_MAX_DIM_DEFAULT);
 
       syncUI();
       toast("Media", "Settings reiniciados.", 1200);
     });
+
+    // refresca etiqueta cuando cambias de evento (admin.js puede disparar este evento)
+    window.addEventListener("admin:eventSelected", syncUI);
 
     syncUI();
   }
@@ -896,7 +1034,7 @@
   }
 
   // ------------------------------------------------------------
-  // Clipboard (fallback PRO)
+  // Clipboard
   // ------------------------------------------------------------
   async function copyUrl(text) {
     const t = cleanSpaces(text || "");
@@ -948,7 +1086,6 @@
       return;
     }
 
-    // ✅ Auto-switch bucket + accept
     if (r.bucketSel) {
       r.bucketSel.value = isVid ? BUCKET_VID : BUCKET_IMG;
       S.currentBucket = normalizeBucket(r.bucketSel.value);
@@ -990,10 +1127,8 @@
     const folder = sanitizeFolder(r.folderSel?.value || "events");
     const customName = cleanSpaces(r.nameInp?.value || "");
 
-    // ✅ bucket elegido (PRO)
     let bucket = normalizeBucket(r.bucketSel?.value || (isVid ? BUCKET_VID : BUCKET_IMG));
 
-    // ✅ coherencia automática
     if (isVid && bucket !== BUCKET_VID) bucket = BUCKET_VID;
     if (isImg && bucket !== BUCKET_IMG) bucket = BUCKET_IMG;
 
@@ -1004,7 +1139,6 @@
     try {
       let fileToUpload = originalFile;
 
-      // ✅ solo imágenes se optimizan
       if (isImg) {
         setNote("Optimizando imagen…", "info");
         try {
@@ -1033,7 +1167,6 @@
         setNote(`Video listo para subir (bucket: ${BUCKET_VID}).`, "ok");
       }
 
-      // validación final tamaño
       const maxBytes = isVid ? MAX_VID_BYTES : MAX_IMG_BYTES;
       const maxMb = isVid ? MAX_VID_MB : MAX_IMG_MB;
       if (Number(fileToUpload.size || 0) > maxBytes) {
@@ -1056,6 +1189,14 @@
 
       setNote(`Listo. URL pública generada (${up.bucket}).`, "ok");
       toast("Subido", isVid ? "Video subido y URL lista." : "Imagen subida y URL lista.", 2200);
+
+      // ✅ NUEVO: si está en modo asignación, intenta guardar en DB
+      if (!isVid && url) {
+        const res = await assignUrlToEvent(url);
+        if (res?.ok) {
+          setNote(`Listo: asignado a events.${res.field}.`, "ok");
+        }
+      }
 
       await refreshList({ silent: true, force: true });
 
