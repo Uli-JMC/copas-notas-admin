@@ -1,73 +1,41 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (EVENTS CRUD + MEDIA LIBRARY) — 2026-02-19.1
+ * admin.js ✅ PRO (EVENTS CRUD + MEDIA LIBRARY) — 2026-02-19
  *
- * OBJETIVO (lo que pediste):
- * ✅ No hay “target/destino” en UI.
- * ✅ Antes de subir: elegís "carpeta" (folder).
- * ✅ Sube a Storage (bucket "media"), guarda en media_library (con public_url).
- * ✅ Te da el URL y lo copia.
- * ✅ Permite repetir/reusar imágenes (mismo media_id se puede vincular a muchos eventos/slots).
- * ✅ (Opcional) Si estás editando un evento, crea/actualiza binding (scope=event, scope_id=eventId, slot=folder)
- *    para que el front pueda jalar “la última” desde v_media_bindings_latest.
+ * OBJETIVO (lo que estamos haciendo):
+ * ✅ Sin “Destino/Target” como filtro (el admin trabaja en scope=event para bindings)
+ * ✅ Antes de subir: elegís SOLO la carpeta/slot (slide_img, slide_video, etc.)
+ * ✅ Se sube el archivo al bucket correcto (media / video / gallery)
+ * ✅ Se genera Public URL y:
+ *    - se copia al portapapeles
+ *    - y si hay un input de imagen/video activo (evImg/evVideoUrl/etc) lo rellena
+ * ✅ Permite reutilizar el MISMO media_id en múltiples bindings (repetir imágenes)
  *
- * Requiere en DB:
- * - public.media_library
- * - public.media_bindings
- * - public.v_media_bindings_latest   (para leer el último por scope/scope_id/slot)
+ * IMPORTANTE:
+ * - Este admin soporta 2 modos:
+ *   A) NUEVO sistema (recomendado): media_assets + media_bindings (+ view media_library opcional)
+ *   B) Legacy: media_items (tu sistema viejo con target/event_id/folder)
  *
- * Storage:
- * - bucket público: "media"
- * - subcarpeta: "events/" (default; podés cambiar STORAGE_DIR_DEFAULT)
+ * Si tu BD ya tiene media_library (por el SELECT que mostraste), este archivo
+ * va a intentar usar el NUEVO sistema primero. Si falla (tabla no existe), cae a legacy.
  */
 
 (function () {
   const VERSION = "2026-02-19.1";
 
+  // ---------------------------
+  // DOM helpers
+  // ---------------------------
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const appPanel = $("#appPanel");
   if (!appPanel) return;
 
-  // ------------------------------------------------------------
-  // CONFIG
-  // ------------------------------------------------------------
-  const EVENTS_TABLE = "events";
-
-  const MEDIA_LIB_TABLE = "media_library";
-  const MEDIA_BIND_TABLE = "media_bindings";
-  const MEDIA_VIEW_LATEST = "v_media_bindings_latest";
-
-  const STORAGE_BUCKET = "media";
-  const STORAGE_DIR_DEFAULT = "events"; // subcarpeta en el bucket
-
-  // "Folders oficiales" (slots/carpetas que vas a usar)
-  // Podés agregar más sin romper nada.
-  const EVENT_SLOTS = ["slide_img", "slide_video", "desktop_event", "mobile_event", "event_more"];
-
-  const SELECT_EVENTS = `
-    id,
-    title,
-    type,
-    month_key,
-    description,
-    location,
-    time_range,
-    duration_hours,
-    price_amount,
-    price_currency,
-    more_img_alt,
-    created_at,
-    updated_at
-  `;
-
-  // ------------------------------------------------------------
+  // ---------------------------
   // Utils
-  // ------------------------------------------------------------
-  const cleanSpaces = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
-
+  // ---------------------------
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -121,6 +89,62 @@
     note.textContent = on ? (msg || "Procesando…") : (msg || "");
   }
 
+  function cleanSpaces(s) {
+    return String(s ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  function slugifyName(s) {
+    return cleanSpaces(s)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "file";
+  }
+
+  function inferExt(file) {
+    const n = String(file?.name || "").toLowerCase();
+    const dot = n.lastIndexOf(".");
+    if (dot > -1 && dot < n.length - 1) return n.slice(dot + 1).replace(/[^a-z0-9]/g, "") || "bin";
+    const t = String(file?.type || "").toLowerCase();
+    if (t.includes("png")) return "png";
+    if (t.includes("jpeg")) return "jpg";
+    if (t.includes("webp")) return "webp";
+    if (t.includes("gif")) return "gif";
+    if (t.includes("mp4")) return "mp4";
+    if (t.includes("webm")) return "webm";
+    return "bin";
+  }
+
+  function isVideoExt(ext) {
+    const e = String(ext || "").toLowerCase();
+    return e === "mp4" || e === "webm" || e === "mov" || e === "m4v" || e === "avi";
+  }
+
+  async function copyToClipboard(text) {
+    const t = String(text || "");
+    if (!t) return false;
+
+    try {
+      await navigator.clipboard.writeText(t);
+      return true;
+    } catch (_) {}
+
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      ta.setAttribute("readonly", "readonly");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return !!ok;
+    } catch (_) {}
+
+    return false;
+  }
+
   function getSB() {
     return window.APP && (window.APP.supabase || window.APP.sb)
       ? window.APP.supabase || window.APP.sb
@@ -147,37 +171,12 @@
     return msg || "Ocurrió un error.";
   }
 
-  async function copyToClipboard(text) {
-    const t = String(text || "");
-    if (!t) return false;
-    try {
-      await navigator.clipboard.writeText(t);
-      return true;
-    } catch (_) {
-      // fallback
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = t;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        ta.style.top = "0";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        const ok = document.execCommand("copy");
-        ta.remove();
-        return !!ok;
-      } catch (_) {}
-    }
-    return false;
-  }
-
-  // ------------------------------------------------------------
-  // Months / Formatting (se mantiene igual que tu admin actual)
-  // ------------------------------------------------------------
+  // ---------------------------
+  // Event helpers
+  // ---------------------------
   const MONTHS = [
-    "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
-    "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE",
+    "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+    "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
   ];
 
   function normalizeMonth(m) {
@@ -222,49 +221,87 @@
   function parseMoneyAmount(input) {
     const raw = cleanSpaces(input);
     if (!raw) return null;
-
     const cleaned = raw.replace(/[^\d.,-]/g, "").replace(",", ".");
     const m = cleaned.match(/-?\d+(\.\d+)?/);
     if (!m) return null;
-
     const n = Number(m[0]);
     if (!Number.isFinite(n) || n < 0) return null;
-
     return Math.round(n * 100) / 100;
   }
 
-  function slugifyName(name) {
-    const s = cleanSpaces(name || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    return s || "media";
+  // ---------------------------
+  // DB mapping
+  // ---------------------------
+  const EVENTS_TABLE = "events";
+
+  // NEW media system tables (preferred)
+  const MEDIA_ASSETS_TABLE = "media_assets";
+  const MEDIA_BINDINGS_TABLE = "media_bindings";
+  const MEDIA_LIBRARY_VIEW = "media_library"; // si existe, lo usamos para reads rápidos
+
+  // Legacy table (fallback)
+  const MEDIA_ITEMS_TABLE = "media_items";
+
+  const SELECT_EVENTS = `
+    id,
+    title,
+    type,
+    month_key,
+    description,
+    location,
+    time_range,
+    duration_hours,
+    price_amount,
+    price_currency,
+    more_img_alt,
+    created_at,
+    updated_at
+  `;
+
+  // ---------------------------
+  // Slots / folders oficiales
+  // ---------------------------
+  const EVENT_SLOTS = ["slide_img", "slide_video", "desktop_event", "mobile_event", "event_more"];
+
+  // Si querés meter galería en este mismo admin:
+  // (si tu admin.html no lo muestra todavía, igual lo dejamos listo)
+  const GALLERY_FOLDERS = ["gallery"];
+
+  // Buckets que vos tenés:
+  const STORAGE_BUCKETS = {
+    eventsMedia: "media",
+    eventsVideo: "video",
+    gallery: "gallery",
+  };
+
+  const STORAGE_DIR = {
+    media: "events",
+    video: "events",
+    gallery: "gallery",
+  };
+
+  function pickBucketAndDir(file, folder) {
+    const f = cleanSpaces(folder || "");
+    const ext = inferExt(file);
+    const isVid = isVideoExt(ext);
+
+    // carpeta de galería
+    if (GALLERY_FOLDERS.includes(f)) {
+      return { bucket: STORAGE_BUCKETS.gallery, dir: STORAGE_DIR.gallery };
+    }
+
+    // slot video o archivo video => bucket video
+    if (f === "slide_video" || isVid) {
+      return { bucket: STORAGE_BUCKETS.eventsVideo, dir: STORAGE_DIR.video };
+    }
+
+    // default => imágenes de eventos => bucket media
+    return { bucket: STORAGE_BUCKETS.eventsMedia, dir: STORAGE_DIR.media };
   }
 
-  function inferExt(file) {
-    const n = String(file?.name || "").toLowerCase();
-    const m = n.match(/\.([a-z0-9]+)$/i);
-    if (m && m[1]) return m[1].slice(0, 12);
-    const type = String(file?.type || "").toLowerCase();
-    if (type.includes("png")) return "png";
-    if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
-    if (type.includes("webp")) return "webp";
-    if (type.includes("gif")) return "gif";
-    if (type.includes("mp4")) return "mp4";
-    if (type.includes("quicktime")) return "mov";
-    return "bin";
-  }
-
-  function isVideoExt(ext) {
-    const e = String(ext || "").toLowerCase();
-    return e === "mp4" || e === "mov" || e === "webm";
-  }
-
-  // ------------------------------------------------------------
-  // State + Lock
-  // ------------------------------------------------------------
+  // ---------------------------
+  // State
+  // ---------------------------
   const state = {
     activeTab: "events",
     query: "",
@@ -275,6 +312,9 @@
     didBind: false,
     didBoot: false,
     didLoadOnce: false,
+
+    // media mode: "new" | "legacy"
+    mediaMode: "new",
   };
 
   function withLock(fn) {
@@ -289,101 +329,37 @@
     };
   }
 
-  // ------------------------------------------------------------
-  // MEDIA (New system): library + bindings
-  // ------------------------------------------------------------
+  // ============================================================
+  // MEDIA LAYER (NEW, with fallback)
+  // ============================================================
 
-  /**
-   * Lee “lo último” por slot desde la VIEW.
-   * Retorna map: { slot -> public_url }
-   */
-  async function fetchEventMediaLatest(eventId) {
+  async function probeMediaMode() {
     const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
+    if (!sb) return (state.mediaMode = "legacy");
 
-    const eid = String(eventId || "").trim();
-    if (!eid) return {};
+    // probamos el VIEW primero (si existe)
+    try {
+      const t = await sb.from(MEDIA_LIBRARY_VIEW).select("binding_id").limit(1);
+      if (!t.error) {
+        state.mediaMode = "new";
+        return;
+      }
+    } catch (_) {}
 
-    const { data, error } = await sb
-      .from(MEDIA_VIEW_LATEST)
-      .select("slot, public_url, path, media_id, folder, name, media_updated_at, binding_updated_at")
-      .eq("scope", "event")
-      .eq("scope_id", eid)
-      .in("slot", EVENT_SLOTS);
+    // probamos tablas new
+    try {
+      const t1 = await sb.from(MEDIA_ASSETS_TABLE).select("id").limit(1);
+      if (!t1.error) {
+        state.mediaMode = "new";
+        return;
+      }
+    } catch (_) {}
 
-    if (error) throw error;
-
-    const map = {};
-    (Array.isArray(data) ? data : []).forEach((row) => {
-      const slot = cleanSpaces(row?.slot);
-      const url = cleanSpaces(row?.public_url || row?.path);
-      if (slot && url) map[slot] = url;
-    });
-
-    return map;
+    // fallback legacy
+    state.mediaMode = "legacy";
   }
 
-  /**
-   * Crea/actualiza un binding para el evento (scope=event, scope_id=eid, slot=slot)
-   * Si tu tabla NO tiene unique, igual funciona con insert.
-   * Si tiene unique(scope,scope_id,slot), hace upsert y listo.
-   */
-  async function upsertBinding(scope, scopeId, slot, mediaId) {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const payload = {
-      scope: String(scope || "").trim(),
-      scope_id: String(scopeId || "").trim(),
-      slot: String(slot || "").trim(),
-      media_id: String(mediaId || "").trim(),
-    };
-
-    if (!payload.scope || !payload.scope_id || !payload.slot || !payload.media_id) return;
-
-    // Intento 1: upsert (si existe unique)
-    const up = await sb.from(MEDIA_BIND_TABLE).upsert(payload, { onConflict: "scope,scope_id,slot" });
-    if (!up.error) return;
-
-    // Intento 2: insert simple (si no existe unique o si tu onConflict no aplica)
-    const ins = await sb.from(MEDIA_BIND_TABLE).insert(payload);
-    if (ins.error) throw ins.error;
-  }
-
-  /**
-   * Inserta en media_library y devuelve { media_id, public_url, path }
-   */
-  async function insertMediaLibraryRow({ folder, name, path, public_url, mime, bytes }) {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const payload = {
-      folder: String(folder || "").trim(),
-      name: String(name || "").trim(),
-      path: String(path || "").trim(),
-      public_url: String(public_url || "").trim(),
-      mime: mime ? String(mime) : null,
-      bytes: bytes != null ? Number(bytes) : null,
-    };
-
-    const { data, error } = await sb
-      .from(MEDIA_LIB_TABLE)
-      .insert(payload)
-      .select("id, folder, name, path, public_url, mime, bytes, updated_at")
-      .single();
-
-    if (error) throw error;
-
-    return {
-      media_id: data?.id ? String(data.id) : "",
-      public_url: data?.public_url ? String(data.public_url) : "",
-      path: data?.path ? String(data.path) : "",
-    };
-  }
-
-  /**
-   * Sube archivo a Storage y retorna { path, public_url }
-   */
+  // ---------- Upload to Storage (bucket routing) ----------
   async function uploadToStorage(file, folder) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
@@ -394,77 +370,267 @@
     const slotFolder = cleanSpaces(folder || "");
     const ext = inferExt(f);
 
-    // Guardamos todo en /events por default (tu bucket ya lo está usando así)
-    const baseDir = STORAGE_DIR_DEFAULT;
+    const { bucket, dir } = pickBucketAndDir(f, slotFolder);
 
-    // Nombre único
     const baseName = slugifyName(slotFolder || (isVideoExt(ext) ? "video" : "img"));
     const filename = `${baseName}_${Date.now()}.${ext}`;
-    const storagePath = `${baseDir}/${filename}`;
+    const storagePath = `${dir}/${filename}`;
 
-    // upload
-    const up = await sb.storage.from(STORAGE_BUCKET).upload(storagePath, f, {
+    const up = await sb.storage.from(bucket).upload(storagePath, f, {
       cacheControl: "3600",
-      upsert: false, // NO sobreescribe: mejor para histórico
+      upsert: false,
       contentType: f.type || undefined,
     });
-
     if (up.error) throw up.error;
 
-    const pub = sb.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+    const pub = sb.storage.from(bucket).getPublicUrl(storagePath);
     const publicUrl = pub?.data?.publicUrl ? String(pub.data.publicUrl) : "";
 
-    return { path: storagePath, public_url: publicUrl };
+    return { path: storagePath, public_url: publicUrl, bucket, folder: slotFolder, name: filename };
   }
 
-  /**
-   * Flujo completo:
-   * - upload storage
-   * - insert media_library
-   * - (opcional) binding al evento activo si se pide
-   */
-  async function handleUploadFlow({ file, folder, assignToEventId, assignSlot }) {
-    if (!file) throw new Error("Seleccioná un archivo.");
-    const f = cleanSpaces(folder);
-    if (!f) throw new Error("Elegí una carpeta (folder).");
+  // ---------- NEW: insert asset, then bind ----------
+  async function insertMediaAsset(asset) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
 
-    setBusy(true, "Subiendo a Storage…");
+    // asset: { folder, name, path, public_url, mime, bytes }
+    const payload = {
+      folder: cleanSpaces(asset.folder || ""),
+      name: cleanSpaces(asset.name || ""),
+      path: cleanSpaces(asset.path || ""),
+      public_url: cleanSpaces(asset.public_url || ""),
+      mime: asset.mime || null,
+      bytes: asset.bytes || null,
+    };
 
-    const { path, public_url } = await uploadToStorage(file, f);
+    const { data, error } = await sb.from(MEDIA_ASSETS_TABLE).insert(payload).select("*").single();
+    if (error) throw error;
+    return data;
+  }
 
-    setBusy(true, "Guardando en media_library…");
+  async function upsertBinding(scope, scope_id, slot, media_id) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
 
-    const lib = await insertMediaLibraryRow({
-      folder: f,
-      name: f,
-      path,
-      public_url,
-      mime: file.type || null,
-      bytes: file.size || null,
-    });
+    const payload = {
+      scope: cleanSpaces(scope),
+      scope_id: String(scope_id),
+      slot: cleanSpaces(slot),
+      media_id: String(media_id),
+    };
 
-    // asignación opcional al evento (binding)
-    const eid = cleanSpaces(assignToEventId || "");
-    const slot = cleanSpaces(assignSlot || f);
+    // Normalmente tu UNIQUE debería ser (scope, scope_id, slot) para 1 por slot.
+    // Reutilizar el mismo media_id en varios eventos SÍ se permite.
+    const { error } = await sb
+      .from(MEDIA_BINDINGS_TABLE)
+      .upsert(payload, { onConflict: "scope,scope_id,slot" });
 
-    if (eid && slot) {
-      try {
-        setBusy(true, "Creando binding…");
-        await upsertBinding("event", eid, slot, lib.media_id);
-      } catch (e) {
-        console.warn("[media] binding failed:", e);
-        // no abortamos; igual dejamos el URL listo
-      }
+    if (error) throw error;
+  }
+
+  async function deleteBinding(scope, scope_id, slot) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const { error } = await sb
+      .from(MEDIA_BINDINGS_TABLE)
+      .delete()
+      .eq("scope", scope)
+      .eq("scope_id", scope_id)
+      .eq("slot", slot);
+
+    if (error) throw error;
+  }
+
+  // ---------- NEW: fetch event media (map slot->url) ----------
+  async function fetchEventMedia_NEW(eventId) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    if (!eid) return {};
+
+    // Si existe view media_library, es la más cómoda (como tu tabla)
+    // columnas vistas: scope, scope_id, slot, public_url, path, etc.
+    let rows = null;
+
+    try {
+      const { data, error } = await sb
+        .from(MEDIA_LIBRARY_VIEW)
+        .select("slot, public_url, path")
+        .eq("scope", "event")
+        .eq("scope_id", eid)
+        .in("slot", EVENT_SLOTS);
+
+      if (!error) rows = Array.isArray(data) ? data : [];
+    } catch (_) {}
+
+    // fallback: join manual (si no hay view)
+    if (!rows) {
+      const { data: binds, error: bErr } = await sb
+        .from(MEDIA_BINDINGS_TABLE)
+        .select("slot, media_id")
+        .eq("scope", "event")
+        .eq("scope_id", eid)
+        .in("slot", EVENT_SLOTS);
+
+      if (bErr) throw bErr;
+
+      const ids = (Array.isArray(binds) ? binds : []).map((x) => x.media_id).filter(Boolean);
+      if (!ids.length) return {};
+
+      const { data: assets, error: aErr } = await sb
+        .from(MEDIA_ASSETS_TABLE)
+        .select("id, public_url, path")
+        .in("id", ids);
+
+      if (aErr) throw aErr;
+
+      const assetMap = new Map((assets || []).map((a) => [String(a.id), a]));
+      rows = (binds || []).map((b) => {
+        const a = assetMap.get(String(b.media_id));
+        return { slot: b.slot, public_url: a?.public_url || "", path: a?.path || "" };
+      });
     }
 
-    setBusy(false, "");
+    const map = {};
+    rows.forEach((r) => {
+      const slot = cleanSpaces(r?.slot || "");
+      const url = cleanSpaces(r?.public_url || r?.path || "");
+      if (slot) map[slot] = url;
+    });
 
-    return { media_id: lib.media_id, public_url: lib.public_url || public_url, path: lib.path || path };
+    return map;
   }
 
-  // ------------------------------------------------------------
-  // Tabs (se mantiene)
-  // ------------------------------------------------------------
+  // ---------- LEGACY: fetch event media (media_items target=event) ----------
+  async function fetchEventMedia_LEGACY(eventId) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    if (!eid) return {};
+
+    const { data, error } = await sb
+      .from(MEDIA_ITEMS_TABLE)
+      .select("folder, public_url, path")
+      .eq("target", "event")
+      .eq("event_id", eid)
+      .in("folder", EVENT_SLOTS);
+
+    if (error) throw error;
+
+    const map = {};
+    (Array.isArray(data) ? data : []).forEach((row) => {
+      const f = String(row?.folder || "").trim();
+      const url = String(row?.public_url || row?.path || "").trim();
+      if (f) map[f] = url;
+    });
+
+    return map;
+  }
+
+  async function fetchEventMedia(eventId) {
+    if (state.mediaMode === "new") return fetchEventMedia_NEW(eventId);
+    return fetchEventMedia_LEGACY(eventId);
+  }
+
+  // ---------- LEGACY: upsert/delete media_items ----------
+  async function legacyDeleteEventMedia(eventId, folder) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    const f = String(folder || "").trim();
+    if (!eid || !f) return;
+
+    const { error } = await sb
+      .from(MEDIA_ITEMS_TABLE)
+      .delete()
+      .eq("target", "event")
+      .eq("event_id", eid)
+      .eq("folder", f);
+
+    if (error) throw error;
+  }
+
+  async function legacyUpsertEventMedia(eventId, folder, url) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    const f = String(folder || "").trim();
+    const u = String(url || "").trim();
+
+    if (!eid || !f) return;
+
+    if (!u) {
+      await legacyDeleteEventMedia(eid, f);
+      return;
+    }
+
+    const payload = {
+      target: "event",
+      folder: f,
+      name: f,
+      path: u,
+      public_url: u,
+      event_id: eid,
+    };
+
+    const { error } = await sb
+      .from(MEDIA_ITEMS_TABLE)
+      .upsert(payload, { onConflict: "event_id,folder" });
+
+    if (error) throw error;
+  }
+
+  // ---------- Save media bindings based on URL fields ----------
+  async function saveEventMediaFromEditor(eventId, urlsBySlot) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+
+    const eid = String(eventId || "").trim();
+    if (!eid) return;
+
+    if (state.mediaMode === "legacy") {
+      // legacy: direct save url into media_items
+      for (const slot of EVENT_SLOTS) {
+        const u = cleanSpaces(urlsBySlot[slot] || "");
+        await legacyUpsertEventMedia(eid, slot, u);
+      }
+      return;
+    }
+
+    // NEW:
+    // Si el usuario pegó un URL externo (no de supabase), lo guardamos como asset igual (public_url=url, path=url).
+    // Luego bind.
+    for (const slot of EVENT_SLOTS) {
+      const u = cleanSpaces(urlsBySlot[slot] || "");
+      if (!u) {
+        await deleteBinding("event", eid, slot);
+        continue;
+      }
+
+      // 1) Crear asset (si querés dedupe por URL, eso se hace con unique/lookup en SQL; acá no bloqueamos repetidos)
+      const asset = await insertMediaAsset({
+        folder: slot,
+        name: slot,
+        path: u,
+        public_url: u,
+        mime: null,
+        bytes: null,
+      });
+
+      // 2) Bind al slot del evento
+      await upsertBinding("event", eid, slot, asset.id);
+    }
+  }
+
+  // ============================================================
+  // TABS
+  // ============================================================
   function hideAllTabs() {
     $$('[role="tabpanel"]', appPanel).forEach((p) => {
       p.hidden = true;
@@ -492,9 +658,9 @@
     }
   }
 
-  // ------------------------------------------------------------
-  // Supabase CRUD events
-  // ------------------------------------------------------------
+  // ============================================================
+  // SUPABASE CRUD: EVENTS
+  // ============================================================
   async function fetchEvents() {
     const sb = getSB();
     if (!sb) {
@@ -515,7 +681,9 @@
       state.mode = isRLSError(error) ? "blocked" : "supabase";
       setBusy(
         false,
-        isRLSError(error) ? "RLS bloquea. Faltan policies para events." : "No se pudieron cargar eventos."
+        isRLSError(error)
+          ? "RLS bloquea. Faltan policies para events."
+          : "No se pudieron cargar eventos."
       );
       throw error;
     }
@@ -530,7 +698,12 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
-    const { data, error } = await sb.from(EVENTS_TABLE).insert(payload).select(SELECT_EVENTS).single();
+    const { data, error } = await sb
+      .from(EVENTS_TABLE)
+      .insert(payload)
+      .select(SELECT_EVENTS)
+      .single();
+
     if (error) throw error;
     return data;
   }
@@ -539,24 +712,41 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
-    const { data, error } = await sb.from(EVENTS_TABLE).update(payload).eq("id", id).select(SELECT_EVENTS).single();
+    const { data, error } = await sb
+      .from(EVENTS_TABLE)
+      .update(payload)
+      .eq("id", id)
+      .select(SELECT_EVENTS)
+      .single();
+
     if (error) throw error;
     return data;
   }
 
   async function deleteEvent(id) {
     const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
+    if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
     const { error } = await sb.from(EVENTS_TABLE).delete().eq("id", id);
     if (error) throw error;
 
-    // Nota: bindings/lib NO se borran (histórico). Si quisieras, se hace después.
+    // Cleanup bindings/items
+    try {
+      if (state.mediaMode === "new") {
+        const del = await sb.from(MEDIA_BINDINGS_TABLE).delete().eq("scope", "event").eq("scope_id", id);
+        if (del.error) throw del.error;
+      } else {
+        const del = await sb.from(MEDIA_ITEMS_TABLE).delete().eq("target", "event").eq("event_id", id);
+        if (del.error) throw del.error;
+      }
+    } catch (e) {
+      console.warn("[admin] cleanup media failed:", e);
+    }
   }
 
-  // ------------------------------------------------------------
-  // Render: events list + editor
-  // ------------------------------------------------------------
+  // ============================================================
+  // RENDER: list + editor
+  // ============================================================
   function setEditorVisible(show) {
     $("#editorEmpty") && ($("#editorEmpty").hidden = show);
     $("#eventForm") && ($("#eventForm").hidden = !show);
@@ -575,13 +765,17 @@
       "evDuration",
       "evPriceAmount",
       "evPriceCurrency",
+
+      // campos existentes de media (URLs)
       "evImg",
       "evImgDesktop",
       "evImgMobile",
       "evVideoUrl",
       "evMoreImg",
+
       "evMoreImgAlt",
     ];
+
     ids.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = "";
@@ -666,241 +860,6 @@
     });
   }
 
-  // ------------------------------------------------------------
-  // UI Injection: Mini panel de media + botones por input
-  // ------------------------------------------------------------
-  function ensureMediaPanelOnce() {
-    if (document.getElementById("ecnMediaPanel")) return;
-
-    // buscamos un lugar razonable dentro del editor
-    const form = $("#eventForm");
-    if (!form) return;
-
-    const panel = document.createElement("div");
-    panel.id = "ecnMediaPanel";
-    panel.style.marginTop = "14px";
-    panel.style.padding = "12px";
-    panel.style.border = "1px solid rgba(18,18,18,.10)";
-    panel.style.borderRadius = "14px";
-    panel.style.background = "rgba(18,18,18,.02)";
-
-    panel.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:900;letter-spacing:.10em;text-transform:uppercase;font-size:12px;">Media Library</div>
-          <div style="color:rgba(18,18,18,.62);font-size:13px;line-height:1.5;margin-top:4px;">
-            Subí por carpeta (folder). Se genera URL público y lo podés pegar donde querás.
-          </div>
-        </div>
-        <button type="button" id="ecnMediaRefreshBtn" class="btn" style="min-height:44px;border-radius:14px;">
-          Refrescar media del evento
-        </button>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:10px;margin-top:12px;align-items:end;">
-        <div>
-          <label style="display:block;font-size:12px;color:rgba(18,18,18,.62);letter-spacing:.10em;text-transform:uppercase;margin-bottom:6px;">
-            Carpeta (folder / slot)
-          </label>
-          <select id="ecnFolder" style="width:100%;min-height:44px;border-radius:14px;border:1px solid rgba(18,18,18,.14);background:#fff;padding:10px 12px;">
-            ${EVENT_SLOTS.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
-          </select>
-        </div>
-
-        <div>
-          <label style="display:block;font-size:12px;color:rgba(18,18,18,.62);letter-spacing:.10em;text-transform:uppercase;margin-bottom:6px;">
-            Archivo
-          </label>
-          <input id="ecnFile" type="file" accept="image/*,video/*" style="width:100%;min-height:44px;" />
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center;">
-        <button type="button" id="ecnUploadBtn" class="btn primary" style="min-height:44px;border-radius:14px;">
-          Subir y copiar URL
-        </button>
-        <button type="button" id="ecnUploadBindBtn" class="btn" style="min-height:44px;border-radius:14px;">
-          Subir + asignar al evento (binding)
-        </button>
-        <span id="ecnMediaOut" style="font-size:13px;color:rgba(18,18,18,.70);word-break:break-all;"></span>
-      </div>
-    `;
-
-    form.appendChild(panel);
-
-    $("#ecnMediaRefreshBtn")?.addEventListener("click", async () => {
-      try {
-        await refreshEditorMediaFromBindings();
-        toast("Listo", "Media del evento refrescada.", 1600);
-      } catch (e) {
-        console.error(e);
-        toast("Media", isRLSError(e) ? "RLS bloquea lectura de media." : "No se pudo refrescar media.", 4200);
-      }
-    });
-
-    $("#ecnUploadBtn")?.addEventListener("click", async () => {
-      await runUpload({ bind: false });
-    });
-
-    $("#ecnUploadBindBtn")?.addEventListener("click", async () => {
-      await runUpload({ bind: true });
-    });
-  }
-
-  async function runUpload({ bind }) {
-    const fileEl = $("#ecnFile");
-    const folderEl = $("#ecnFolder");
-    const out = $("#ecnMediaOut");
-
-    const file = fileEl?.files?.[0] || null;
-    const folder = cleanSpaces(folderEl?.value || "");
-
-    if (!file) return toast("Falta archivo", "Seleccioná una imagen o video.");
-    if (!folder) return toast("Falta carpeta", "Elegí la carpeta (folder).");
-
-    const eventId = cleanSpaces(state.activeEventId || "");
-    const assign = bind && eventId ? eventId : "";
-    const slot = folder;
-
-    try {
-      setBusy(true, "Subiendo…");
-
-      const res = await handleUploadFlow({
-        file,
-        folder,
-        assignToEventId: assign,
-        assignSlot: slot,
-      });
-
-      const url = res.public_url || "";
-      if (out) out.textContent = url ? `URL: ${url}` : "Subido, pero no se pudo obtener URL.";
-
-      if (url) {
-        const ok = await copyToClipboard(url);
-        toast("Subido", ok ? "URL copiado al portapapeles." : "Subido. Copiá el URL manualmente.", 2200);
-      } else {
-        toast("Subido", "Listo. Revisá el registro en media_library.", 2200);
-      }
-
-      // si coincide con uno de tus inputs del editor, lo pegamos automático (conveniente)
-      // regla simple: si el folder es un slot oficial, lo ponemos en el input correspondiente
-      if (url) {
-        const input = getInputForSlot(folder);
-        if (input) input.value = url;
-      }
-
-      // si hicimos binding, refrescamos por si el editor usa la view
-      if (bind && eventId) {
-        await refreshEditorMediaFromBindings();
-      }
-
-      // limpiar file input
-      if (fileEl) fileEl.value = "";
-      setBusy(false, "");
-    } catch (err) {
-      console.error(err);
-      setBusy(false, "");
-      toast(isRLSError(err) ? "RLS" : "Error", isRLSError(err) ? "RLS bloqueó media_library/bindings." : prettyError(err), 5200);
-    }
-  }
-
-  function getInputForSlot(slot) {
-    const s = String(slot || "").trim();
-    // mapeo a tu UI existente:
-    // evImg -> slide_img
-    // evVideoUrl -> slide_video
-    // evImgDesktop -> desktop_event
-    // evImgMobile -> mobile_event
-    // evMoreImg -> event_more
-    if (s === "slide_img") return $("#evImg");
-    if (s === "slide_video") return $("#evVideoUrl");
-    if (s === "desktop_event") return $("#evImgDesktop") || $("#evImg");
-    if (s === "mobile_event") return $("#evImgMobile");
-    if (s === "event_more") return $("#evMoreImg");
-    return null;
-  }
-
-  function addMiniButtonsToInput(input, slot) {
-    if (!input) return;
-    if (input.dataset.ecnMediaButtons === "1") return;
-    input.dataset.ecnMediaButtons = "1";
-
-    const wrap = document.createElement("div");
-    wrap.style.display = "grid";
-    wrap.style.gridTemplateColumns = "1fr auto auto";
-    wrap.style.gap = "8px";
-    wrap.style.alignItems = "center";
-
-    const parent = input.parentElement;
-    if (!parent) return;
-
-    parent.insertBefore(wrap, input);
-    wrap.appendChild(input);
-
-    const btnUp = document.createElement("button");
-    btnUp.type = "button";
-    btnUp.className = "btn";
-    btnUp.textContent = "Subir";
-    btnUp.style.minHeight = "44px";
-    btnUp.style.borderRadius = "14px";
-
-    const btnCopy = document.createElement("button");
-    btnCopy.type = "button";
-    btnCopy.className = "btn";
-    btnCopy.textContent = "Copiar";
-    btnCopy.style.minHeight = "44px";
-    btnCopy.style.borderRadius = "14px";
-
-    btnUp.addEventListener("click", () => {
-      // setea folder seleccionado y enfoca el panel
-      const folderEl = $("#ecnFolder");
-      if (folderEl) folderEl.value = String(slot || "");
-      $("#ecnFile")?.click?.();
-    });
-
-    btnCopy.addEventListener("click", async () => {
-      const url = cleanSpaces(input.value || "");
-      if (!url) return toast("Vacío", "No hay URL para copiar.");
-      const ok = await copyToClipboard(url);
-      toast("Copiado", ok ? "URL copiado." : "No se pudo copiar.", 1800);
-    });
-
-    wrap.appendChild(btnUp);
-    wrap.appendChild(btnCopy);
-  }
-
-  function enhanceEditorMediaInputsOnce() {
-    // agrega botoncitos a los inputs si existen en el admin.html actual
-    addMiniButtonsToInput($("#evImg"), "slide_img");
-    addMiniButtonsToInput($("#evVideoUrl"), "slide_video");
-    addMiniButtonsToInput($("#evImgDesktop") || null, "desktop_event");
-    addMiniButtonsToInput($("#evImgMobile") || null, "mobile_event");
-    addMiniButtonsToInput($("#evMoreImg") || null, "event_more");
-  }
-
-  async function refreshEditorMediaFromBindings() {
-    const evId = cleanSpaces(state.activeEventId || "");
-    if (!evId) return;
-
-    // lee desde view latest
-    const media = await fetchEventMediaLatest(evId);
-
-    const slideImgEl = $("#evImg");
-    const slideVideoEl = $("#evVideoUrl");
-    const deskEl = $("#evImgDesktop") || $("#evImg");
-    const mobEl = $("#evImgMobile");
-    const moreEl = $("#evMoreImg");
-
-    if (slideImgEl) slideImgEl.value = media.slide_img || "";
-    if (slideVideoEl) slideVideoEl.value = media.slide_video || "";
-    if (deskEl) deskEl.value = media.desktop_event || "";
-    if (mobEl) mobEl.value = media.mobile_event || "";
-    if (moreEl) moreEl.value = media.event_more || "";
-  }
-
-  // ------------------------------------------------------------
-  // Editor render
-  // ------------------------------------------------------------
   async function renderEventEditor() {
     const ev = (state.events || []).find((e) => String(e.id) === String(state.activeEventId)) || null;
 
@@ -943,19 +902,33 @@
     if (priceAmountEl) priceAmountEl.value = ev.price_amount == null ? "" : String(ev.price_amount);
     if (priceCurrencyEl) priceCurrencyEl.value = normalizeCurrency(ev.price_currency, "USD");
 
-    // more_img_alt vive en events
     const altEl = $("#evMoreImgAlt");
     if (altEl) altEl.value = ev.more_img_alt || "";
 
-    // 🔥 NUEVO: panel + botones + carga desde bindings latest
-    ensureMediaPanelOnce();
-    enhanceEditorMediaInputsOnce();
-
+    // media urls (slot map -> inputs)
     try {
-      await refreshEditorMediaFromBindings();
+      const media = await fetchEventMedia(ev.id);
+
+      // UI existente:
+      // evImg -> slide_img
+      // evVideoUrl -> slide_video
+      // evImgDesktop -> desktop_event
+      // evImgMobile -> mobile_event
+      // evMoreImg -> event_more
+      const slideImgEl = $("#evImg");
+      const slideVideoEl = $("#evVideoUrl");
+      const deskEl = $("#evImgDesktop") || $("#evImg");
+      const mobEl = $("#evImgMobile");
+      const moreEl = $("#evMoreImg");
+
+      if (slideImgEl) slideImgEl.value = media.slide_img || "";
+      if (slideVideoEl) slideVideoEl.value = media.slide_video || "";
+      if (deskEl) deskEl.value = media.desktop_event || "";
+      if (mobEl) mobEl.value = media.mobile_event || "";
+      if (moreEl) moreEl.value = media.event_more || "";
     } catch (err) {
       console.error(err);
-      toast("Media", "No se pudo leer v_media_bindings_latest (revisá RLS/policies).", 4200);
+      toast("Media", "No se pudo cargar media (revisá RLS/policies).", 4200);
     }
   }
 
@@ -984,9 +957,9 @@
     }
   }
 
-  // ------------------------------------------------------------
-  // Actions
-  // ------------------------------------------------------------
+  // ============================================================
+  // ACTIONS
+  // ============================================================
   const createNewEvent = withLock(async function () {
     try {
       if (state.mode !== "supabase") return toast("Bloqueado", "Supabase no está listo o RLS bloquea.");
@@ -1008,7 +981,6 @@
       };
 
       const created = await insertEvent(payload);
-
       state.events.unshift(created);
       state.activeEventId = created.id;
 
@@ -1053,8 +1025,23 @@
 
       const created = await insertEvent(payload);
 
-      // 🔥 Nota: NO duplicamos media automáticamente aquí porque ahora es librería reusable.
-      // Si querés copiar bindings también, lo hacemos en el siguiente paso (decime y lo habilito).
+      // Copiar media: acá copiamos URLs (y se rebindea a assets nuevos si estás en NEW mode)
+      try {
+        const m = await fetchEventMedia(ev.id);
+
+        // Llenamos inputs temporalmente y guardamos usando el mismo pipeline
+        const urlsBySlot = {
+          slide_img: m.slide_img || "",
+          slide_video: m.slide_video || "",
+          desktop_event: m.desktop_event || "",
+          mobile_event: m.mobile_event || "",
+          event_more: m.event_more || "",
+        };
+
+        await saveEventMediaFromEditor(created.id, urlsBySlot);
+      } catch (e) {
+        console.warn("[admin] duplicate media failed:", e);
+      }
 
       state.events.unshift(created);
       state.activeEventId = created.id;
@@ -1131,7 +1118,7 @@
     if (priceAmountEl) price_amount = parseMoneyAmount(priceAmountEl.value);
     if (priceCurrencyEl) price_currency = normalizeCurrency(priceCurrencyEl.value, "USD");
 
-    const moreAlt = cleanSpaces(($("#evMoreImgAlt")?.value) || ev.more_img_alt || "");
+    const moreAlt = cleanSpaces($("#evMoreImgAlt")?.value || ev.more_img_alt || "");
 
     if (!title) {
       toast("Falta el nombre", "Ingresá el nombre del evento.");
@@ -1151,16 +1138,33 @@
       more_img_alt: moreAlt,
     };
 
+    // Media inputs (URLs)
+    const slideImgEl = $("#evImg");
+    const deskEl = $("#evImgDesktop") || $("#evImg");
+    const mobEl = $("#evImgMobile");
+    const slideVideoEl = $("#evVideoUrl");
+    const moreEl = $("#evMoreImg");
+
+    const urlsBySlot = {
+      slide_img: cleanSpaces(slideImgEl?.value || ""),
+      desktop_event: cleanSpaces(deskEl?.value || ""),
+      mobile_event: cleanSpaces(mobEl?.value || ""),
+      slide_video: cleanSpaces(slideVideoEl?.value || ""),
+      event_more: cleanSpaces(moreEl?.value || ""),
+    };
+
     try {
       if (state.mode !== "supabase") return false;
 
       setBusy(true, "Guardando cambios…");
-
       const updated = await updateEvent(ev.id, payload);
+
+      // ✅ media save (new bindings or legacy media_items)
+      await saveEventMediaFromEditor(ev.id, urlsBySlot);
 
       state.events = (state.events || []).map((x) => (String(x.id) === String(updated.id) ? updated : x));
 
-      toast("Guardado", "Evento actualizado en Supabase.", 1400);
+      toast("Guardado", `Evento actualizado (${state.mediaMode === "new" ? "Media Library" : "Legacy"}).`, 1400);
       setNote("");
       await renderAll();
       try {
@@ -1171,7 +1175,9 @@
       console.error(err);
       toast(
         isRLSError(err) ? "RLS" : "Error",
-        isRLSError(err) ? "RLS bloqueó el guardado (events)." : prettyError(err),
+        isRLSError(err)
+          ? "RLS bloqueó el guardado. Revisá policies en media_assets/media_bindings (o media_items)."
+          : prettyError(err),
         5200
       );
       return false;
@@ -1180,22 +1186,140 @@
     }
   });
 
-  // ------------------------------------------------------------
-  // Wiring
-  // ------------------------------------------------------------
+  // ============================================================
+  // MINI UPLOADER “SIN DESTINO”: elegir folder, subir, copiar URL, autollenar input
+  // ============================================================
+  function getMediaFolderSelect() {
+    // Si tu admin.html tiene un select para folder (como el screenshot), intentamos tomarlo.
+    // Priorizamos ids comunes: #folderSelect, #mediaFolder, #folder
+    return $("#folderSelect") || $("#mediaFolder") || $("#folder") || null;
+  }
+
+  function getFileInput() {
+    // ids típicos: #mediaFile, #uploadFile, #file
+    return $("#mediaFile") || $("#uploadFile") || $("#file") || null;
+  }
+
+  function getUploadButton() {
+    // ids típicos: #uploadBtn, #btnUpload
+    return $("#uploadBtn") || $("#btnUpload") || null;
+  }
+
+  function getCopyUrlButton() {
+    return $("#copyUrlBtn") || $("#btnCopyUrl") || null;
+  }
+
+  function getUrlOutputInput() {
+    return $("#mediaUrl") || $("#urlOutput") || $("#publicUrl") || null;
+  }
+
+  function getLastFocusedMediaInput() {
+    // si el usuario está editando un campo de URL (evImg, evVideoUrl, etc.)
+    // y tiene foco, lo usamos para pegar.
+    const a = document.activeElement;
+    if (!a) return null;
+    const id = String(a.id || "");
+    const okIds = ["evImg", "evVideoUrl", "evImgDesktop", "evImgMobile", "evMoreImg"];
+    if (okIds.includes(id)) return a;
+    return null;
+  }
+
+  async function handleUploadFlow() {
+    const sb = getSB();
+    if (!sb) return toast("Error", "Supabase no está cargado. Revisá scripts.");
+
+    const folderSel = getMediaFolderSelect();
+    const fileEl = getFileInput();
+
+    const folder = cleanSpaces(folderSel?.value || "");
+    const file = fileEl?.files?.[0] || null;
+
+    if (!folder) return toast("Falta carpeta", "Elegí la carpeta/slot antes de subir.");
+    if (!file) return toast("Falta archivo", "Seleccioná un archivo para subir.");
+
+    try {
+      setBusy(true, "Subiendo a Storage…");
+
+      const up = await uploadToStorage(file, folder);
+
+      // URL final
+      const url = up.public_url || "";
+
+      // mostrar en output si existe
+      const out = getUrlOutputInput();
+      if (out) out.value = url;
+
+      // copiar
+      const copied = await copyToClipboard(url);
+
+      // autollenar en el input activo (si aplica)
+      const targetInput = getLastFocusedMediaInput();
+      if (targetInput) {
+        targetInput.value = url;
+        targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      // si estás en NEW mode y querés que la subida también cree asset inmediatamente:
+      if (state.mediaMode === "new") {
+        try {
+          await insertMediaAsset({
+            folder,
+            name: up.name || folder,
+            path: up.path,
+            public_url: url,
+            mime: file.type || null,
+            bytes: file.size || null,
+          });
+        } catch (e) {
+          // si falla por RLS, igual ya tenés el URL, no rompemos el flow
+          console.warn("[admin] insertMediaAsset failed:", e);
+        }
+      }
+
+      toast(
+        "Listo",
+        copied ? "Subido y URL copiado. Pegalo donde querás." : "Subido. Copiá el URL y pegalo donde querás.",
+        2400
+      );
+    } catch (err) {
+      console.error(err);
+      toast(isRLSError(err) ? "RLS" : "Upload", isRLSError(err) ? "RLS bloqueó Storage/DB." : prettyError(err), 5200);
+    } finally {
+      setBusy(false, "");
+      // opcional: limpiar file input
+      try {
+        if (fileEl) fileEl.value = "";
+      } catch (_) {}
+    }
+  }
+
+  async function handleCopyUrl() {
+    const out = getUrlOutputInput();
+    const url = cleanSpaces(out?.value || "");
+    if (!url) return toast("Nada para copiar", "Primero subí un archivo o pegá un URL.");
+    const ok = await copyToClipboard(url);
+    toast(ok ? "Copiado" : "Copiá manual", ok ? "URL copiado al portapapeles." : "No pude copiar automáticamente.", 1800);
+  }
+
+  // ============================================================
+  // WIRING
+  // ============================================================
   function bindOnce() {
     if (state.didBind) return;
     state.didBind = true;
 
+    // tabs
     $$(".tab", appPanel).forEach((t) => {
       t.addEventListener("click", () => setTab(t.dataset.tab));
     });
 
+    // search
     $("#search")?.addEventListener("input", (e) => {
       state.query = e.target.value || "";
       renderAll();
     });
 
+    // events actions
     $("#newEventBtn")?.addEventListener("click", createNewEvent);
     $("#dupEventBtn")?.addEventListener("click", duplicateActiveEvent);
     $("#deleteEventBtn")?.addEventListener("click", deleteActiveEvent);
@@ -1209,11 +1333,13 @@
       saveActiveEvent();
     });
 
+    // desc counter
     $("#evDesc")?.addEventListener("input", () => {
       const v = $("#evDesc")?.value || "";
       $("#descCount") && ($("#descCount").textContent = String(v.length));
     });
 
+    // duration autofill
     const durInput = $("#evDuration");
     const timeInput = $("#evTimeRange");
     const hoursInput = $("#evDurationHours");
@@ -1229,17 +1355,41 @@
     timeInput?.addEventListener("input", autoFillDurationIfEmpty);
     hoursInput?.addEventListener("input", autoFillDurationIfEmpty);
 
+    // "Fechas" shortcut
     $("#addDateBtn")?.addEventListener("click", () => {
       toast("Fechas", "Abrí la pestaña “Fechas” para administrar cupos por evento.", 1800);
       if (state.activeTab !== "dates") setTab("dates");
     });
+
+    // uploader (si existe en tu admin.html)
+    getUploadButton()?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleUploadFlow();
+    });
+
+    getCopyUrlButton()?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleCopyUrl();
+    });
+
+    // Si existe el select “Destino” en tu HTML, lo ignoramos (y lo podés esconder con CSS).
+    // Pero por si estorba UX, lo deshabilitamos.
+    const destino = $("#targetSelect") || $("#destino") || $("#scopeSelect") || null;
+    if (destino) {
+      destino.disabled = true;
+      destino.title = "Este admin ya no usa Destino. Solo elegí carpeta/slot.";
+    }
   }
 
-  function boot() {
+  async function boot() {
     if (state.didBoot) return;
     state.didBoot = true;
 
     console.log("[admin.js] boot", { VERSION });
+
+    // Decide media mode (new vs legacy)
+    await probeMediaMode();
+    console.log("[admin.js] mediaMode =", state.mediaMode);
 
     bindOnce();
 
