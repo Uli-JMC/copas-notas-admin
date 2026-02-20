@@ -30,7 +30,7 @@
  */
 
 (function () {
-  const VERSION = "2026-02-20.media.pro.schema-safe.1";
+  const VERSION = "2026-02-20.media.pro.schema-safe.2";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!$("#appPanel")) return;
@@ -43,7 +43,7 @@
   function toast(title, msg, ms = 3200) {
     try {
       if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, ms);
-    } catch (_) { }
+    } catch (_) {}
     alert(`${title} — ${msg}`);
   }
 
@@ -91,7 +91,7 @@
   const bucketEl = $("#mediaBucket");
   const folderEl = $("#mediaFolder");
   const nameEl = $("#mediaName");
-  const tagsEl = $("#mediaTags"); // UI only (no se guarda en DB)
+  const tagsEl = $("#mediaTags"); // UI only
 
   const urlEl = $("#mediaUrl");
   const btnCopy = $("#mediaCopyBtn");
@@ -123,13 +123,13 @@
   // Permitir pegar URL
   try {
     urlEl.readOnly = false;
-  } catch (_) { }
+  } catch (_) {}
 
   // -------- Estado --------
   const state = {
     didBind: false,
     assets: [],
-    selected: null, // asset seleccionado
+    selected: null,
   };
 
   function setNote(msg) {
@@ -172,11 +172,8 @@
     const b = getBucket();
     fileEl.setAttribute("accept", ACCEPTS[b] || "image/*,video/*");
 
-    // Hint PRO: si está vacío, sugerimos folder según bucket
     const f = clean(folderEl.value || "");
-    if (!f) {
-      folderEl.value = b === "video" ? "events-video" : "events-img";
-    }
+    if (!f) folderEl.value = b === "video" ? "events-video" : "events-img";
   }
 
   // -------- DB helpers (schema-safe) --------
@@ -199,8 +196,10 @@
   }
 
   async function insertAsset(payload) {
-    // ✅ SOLO columnas existentes en tu tabla
     const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no está listo.");
+
+    // ✅ SOLO columnas existentes en tu tabla
     const safePayload = {
       folder: payload.folder,
       name: payload.name,
@@ -388,7 +387,6 @@
     if (!name) name = raw.split("/").pop()?.slice(0, 80) || "external";
     name = cleanSpaces(name);
 
-    // ✅ Insert schema-safe
     const created = await insertAsset({
       folder,
       name,
@@ -420,7 +418,6 @@
     if (scopeMenuWrap) scopeMenuWrap.hidden = scope !== "menu_item";
     setSlotOptionsForScope(scope);
 
-    // Hint folder pro
     const b = getBucket();
     const f = clean(folderEl.value || "");
     if (!f) folderEl.value = b === "video" ? "events-video" : "events-img";
@@ -452,6 +449,22 @@
     }
   }
 
+  function formatDate(ts) {
+    if (!ts) return "—";
+    try {
+      const d = new Date(ts);
+      return d.toLocaleString("es-CR", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return String(ts);
+    }
+  }
+
   function renderAssigned(rows) {
     if (!assignedList) return;
     assignedList.innerHTML = "";
@@ -468,23 +481,34 @@
       const row = document.createElement("div");
       row.className = "item";
       const u = clean(r.public_url || r.path || "");
+      const updated = formatDate(r.binding_updated_at || r.media_updated_at);
+
       row.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:12px;">
+        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
           <div style="min-width:0;">
-            <div style="font-weight:900; letter-spacing:.12em; text-transform:uppercase;">${clean(r.slot)}</div>
-            <div style="opacity:.75; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u || "—"}</div>
+            <div style="font-weight:900; letter-spacing:.12em; text-transform:uppercase;">
+              ${clean(r.slot)}
+            </div>
+            <div style="opacity:.75; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${u || "—"}
+            </div>
+            <div style="opacity:.55; font-size:12px;">
+              actualizado: ${updated}
+            </div>
           </div>
           <button class="btn sm" type="button" data-copy="${u}">Copiar</button>
         </div>
       `;
+
       row.querySelector("[data-copy]")?.addEventListener("click", () => {
         const text = clean(u);
         if (!text) return;
         navigator.clipboard.writeText(text).then(
-          () => toast("Copiado", "URL copiada.", 1800),
+          () => toast("Copiado", "URL copiada.", 1600),
           () => toast("Copiar", "No se pudo copiar.", 2600)
         );
       });
+
       assignedList.appendChild(row);
     });
   }
@@ -542,15 +566,12 @@
     try {
       const deleted = await deleteAssetRow(asset.id);
 
-      // Si path es URL externa, no tocamos storage
       const p = clean(deleted.path || "");
       const isExternal = /^https?:\/\//i.test(p);
 
       if (!isExternal && p) {
-        // Como NO guardamos bucket en DB, usamos el bucket seleccionado.
-        // Por eso es PRO usar folders distintos (events-img vs events-video) y seleccionar bucket correcto al borrar.
         const bucket = getBucket();
-        await removeFromStorage(bucket, p).catch(() => { });
+        await removeFromStorage(bucket, p).catch(() => {});
       }
 
       state.selected = null;
@@ -590,7 +611,9 @@
 
     btnReset?.addEventListener("click", () => {
       state.selected = null;
-      try { fileEl.value = ""; } catch (_) { }
+      try {
+        fileEl.value = "";
+      } catch (_) {}
       urlEl.value = "";
       if (nameEl) nameEl.value = "";
       if (tagsEl) tagsEl.value = "";
@@ -636,7 +659,6 @@
       try {
         const up = await uploadToStorage(file, bucket, folder, nameBase);
 
-        // ✅ Insert schema-safe (sin tags/bucket)
         const asset = await insertAsset({
           folder,
           name: clean(nameBase) || clean(file.name),
