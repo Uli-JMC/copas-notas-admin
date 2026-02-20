@@ -69,7 +69,7 @@
                 <div class="sideHint">Elegí una vista</div>
               </div>
 
-              <!-- TABS: mantenemos .tabs y .tab para que tu JS siga igual -->
+              <!-- TABS -->
               <div class="tabs sideTabs" role="tablist" aria-label="Secciones">
                 <button class="tab" data-tab="events" aria-selected="true" type="button">Eventos</button>
                 <button class="tab" data-tab="dates" aria-selected="false" type="button">Fechas</button>
@@ -108,7 +108,6 @@
                     </div>
                   </div>
 
-                  <!-- ✅ Compat: algunos scripts antiguos preguntan por #eventsList -->
                   <div id="eventsList" hidden></div>
 
                   <div class="list" id="eventList" aria-label="Lista de eventos">
@@ -132,7 +131,6 @@
                     Seleccioná un evento de la lista para editarlo.
                   </div>
 
-                  <!-- ✅ Compat: scripts antiguos -->
                   <input id="eventTitle" type="hidden" value="" />
                   <input id="eventType" type="hidden" value="" />
                   <input id="eventMonthKey" type="hidden" value="" />
@@ -165,56 +163,44 @@
                         </select>
                       </div>
 
-                      <!-- ✅ Mantener evImg como mobile/fallback (compat + admin.js) -->
                       <div class="field">
-                        <label class="label" for="evImg">Imagen (url) — mobile / fallback</label>
-                        <input class="input" id="evImg" type="text" placeholder="https://…" />
+                        <label class="label" for="evImg">Imagen (url) — fallback</label>
+                        <input class="input" id="evImg" type="text" placeholder="Gestionar en Medios" />
+                        <div class="mini">Estas URLs se administran en <b>Medios</b> (asignación por slot).</div>
                       </div>
                     </div>
 
-                    <!-- ✅ NUEVO: imagen desktop (no rompe si DB no tiene columna / admin.js ya hace fallback) -->
                     <div class="row">
                       <div class="field">
                         <label class="label" for="evImgDesktop">Imagen (url) — desktop</label>
-                        <input class="input" id="evImgDesktop" type="text" placeholder="https://…/hero-desktop.webp" />
-                        <div class="mini">
-                          Opcional. Si lo dejás vacío, se usa la imagen de mobile/fallback.
-                        </div>
+                        <input class="input" id="evImgDesktop" type="text" placeholder="Gestionar en Medios" />
+                        <div class="mini">Solo lectura aquí. Asigná en <b>Medios</b>.</div>
                       </div>
                       <div class="field">
-                        <label class="label" for="evImgMobile">Imagen (url) — mobile (opcional)</label>
-                        <input class="input" id="evImgMobile" type="text" placeholder="https://…/hero-mobile.webp" />
-                        <div class="mini">
-                          Opcional. Si no lo usás, <b>evImg</b> sigue siendo el fallback principal.
-                        </div>
+                        <label class="label" for="evImgMobile">Imagen (url) — mobile</label>
+                        <input class="input" id="evImgMobile" type="text" placeholder="Gestionar en Medios" />
+                        <div class="mini">Solo lectura aquí. Asigná en <b>Medios</b>.</div>
                       </div>
                     </div>
 
-                    <!-- ✅ VIDEO URL DESKTOP + VER MÁS -->
                     <div class="row">
                       <div class="field">
-                        <label class="label" for="evVideoUrl">Video (url) — desktop (MP4/WebM)</label>
-                        <input class="input" id="evVideoUrl" type="text" placeholder="https://…/hero.mp4" />
-                        <div class="mini">
-                          Tip: usá el tab <b>Medios</b>, seleccioná bucket <b>video</b> y pegá aquí la URL pública.
-                        </div>
+                        <label class="label" for="evVideoUrl">Video (url) — desktop</label>
+                        <input class="input" id="evVideoUrl" type="text" placeholder="Gestionar en Medios" />
+                        <div class="mini">Solo lectura aquí. Asigná en <b>Medios</b> usando bucket <b>video</b>.</div>
                       </div>
 
                       <div class="field">
                         <label class="label" for="evMoreImg">Imagen “Ver más” (url)</label>
-                        <input class="input" id="evMoreImg" type="text" placeholder="https://…/detalle.webp" />
-                        <div class="mini">
-                          Opcional. Para una imagen adicional en la sección “Ver más”.
-                        </div>
+                        <input class="input" id="evMoreImg" type="text" placeholder="Gestionar en Medios" />
+                        <div class="mini">Solo lectura aquí. Asigná en <b>Medios</b>.</div>
                       </div>
                     </div>
 
                     <div class="field">
                       <label class="label" for="evMoreImgAlt">Texto alternativo “Ver más”</label>
                       <input class="input" id="evMoreImgAlt" type="text" placeholder="Descripción corta de la imagen" maxlength="120" />
-                      <div class="mini">
-                        Opcional. Ayuda con accesibilidad/SEO.
-                      </div>
+                      <div class="mini">Opcional. Ayuda con accesibilidad/SEO.</div>
                     </div>
 
                     <div class="field">
@@ -230,45 +216,34 @@
                       </div>
                       <div class="field">
                         <label class="label" for="evTimeRange">Horario</label>
-                        <input class="input" id="evTimeRange" type="text" placeholder="7:00pm - 9:00pm" maxlength="40" />
-                      </div>
-                    </div>
-
-                    <!-- ✅ PRECIO -->
-                    <div class="row">
-                      <div class="field">
-                        <label class="label" for="evPriceAmount">Precio</label>
-                        <input class="input" id="evPriceAmount" type="number" min="0" step="0.01" placeholder="49.00" />
-                      </div>
-                      <div class="field">
-                        <label class="label" for="evPriceCurrency">Moneda</label>
-                        <select class="select" id="evPriceCurrency">
-                          <option value="USD">USD</option>
-                          <option value="CRC">CRC</option>
-                        </select>
+                        <input class="input" id="evTimeRange" type="text" maxlength="40" />
                       </div>
                     </div>
 
                     <div class="row">
                       <div class="field">
                         <label class="label" for="evDurationHours">Duración (horas)</label>
-                        <input class="input" id="evDurationHours" type="text" placeholder="2" maxlength="10" />
+                        <input class="input" id="evDurationHours" type="number" min="0" step="0.5" />
                       </div>
                       <div class="field">
-                        <label class="label" for="evDuration">Duración (texto)</label>
-                        <input class="input" id="evDuration" type="text" placeholder="2 hrs" maxlength="30" />
+                        <label class="label" for="evPriceAmount">Precio</label>
+                        <input class="input" id="evPriceAmount" type="number" min="0" step="100" />
                       </div>
                     </div>
 
-                    <div id="datesList"></div>
+                    <div class="row">
+                      <div class="field">
+                        <label class="label" for="evPriceCurrency">Moneda</label>
+                        <input class="input" id="evPriceCurrency" type="text" maxlength="10" placeholder="CRC" />
+                      </div>
+                    </div>
 
                     <div class="formActions">
                       <button class="btn primary" id="saveEventBtn" type="submit">Guardar</button>
-                      <button class="btn" id="deleteEventBtn" type="button">Eliminar</button>
-                      <button class="btn btn--ghost" id="addDateBtn" type="button">Administrar fechas</button>
+                      <button class="btn btn--ghost" id="delEventBtn" type="button">Eliminar</button>
                     </div>
 
-                    <div class="note" id="eventNote" aria-live="polite"></div>
+                    <div class="note" id="eventNote"></div>
                   </form>
                 </div>
               </div>
@@ -278,141 +253,46 @@
                  DATES
             ====================================================== -->
             <section class="panel" id="tab-dates" role="tabpanel" hidden>
-              <div class="grid2">
-                <div class="card">
-                  <div class="cardHead">
-                    <h3 class="h3">Eventos</h3>
-                    <div class="mini">Seleccioná un evento para ver/crear fechas.</div>
-                  </div>
-
-                  <div class="toolbar">
-                    <button class="btn" id="datesRefreshBtn" type="button">Refrescar</button>
-                  </div>
-
-                  <div class="note" id="datesNote" aria-live="polite"></div>
-                  <div class="list" id="datesEventList"></div>
+              <div class="card">
+                <div class="cardHead">
+                  <h3 class="h3">Fechas</h3>
+                  <div class="mini">Administrá fechas y cupos por evento.</div>
                 </div>
-
-                <div class="card">
-                  <div class="cardHead">
-                    <h3 class="h3" id="datesEventTitle">Fechas</h3>
-                    <div class="mini" id="datesEventMeta">—</div>
-                  </div>
-
-                  <div class="toolbar">
-                    <button class="btn primary" id="datesNewBtn" type="button">+ Nueva fecha</button>
-                  </div>
-
-                  <div class="empty" id="datesEmpty">
-                    Seleccioná un evento a la izquierda para administrar sus fechas.
-                  </div>
-
-                  <div id="datesEditor" hidden>
-                    <div class="list" id="datesListByEvent"></div>
-
-                    <form class="form" id="dateForm" autocomplete="off">
-                      <input type="hidden" id="dateId" />
-
-                      <div class="field">
-                        <label class="label" for="dateLabel">Label</label>
-                        <input class="input" id="dateLabel" type="text" placeholder="Sábado 18 • 7pm" maxlength="40" required />
-                      </div>
-
-                      <div class="row">
-                        <div class="field">
-                          <label class="label" for="dateSeatsTotal">Cupos totales</label>
-                          <input class="input" id="dateSeatsTotal" type="number" min="0" step="1" value="0" />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="dateSeatsAvailable">Cupos disponibles</label>
-                          <input class="input" id="dateSeatsAvailable" type="number" min="0" step="1" value="0" />
-                        </div>
-                      </div>
-
-                      <div class="formActions">
-                        <button class="btn primary" id="dateSaveBtn" type="submit">Guardar</button>
-                        <button class="btn" id="dateClearBtn" type="button">Nueva</button>
-                        <button class="btn" id="dateDeleteBtn" type="button" disabled>Eliminar</button>
-                      </div>
-                    </form>
-                  </div>
-
-                </div>
+                <div class="list" id="datesList"><!-- JS --></div>
               </div>
             </section>
 
             <!-- =====================================================
-                 REGISTRATIONS
+                 REGS
             ====================================================== -->
             <section class="panel" id="tab-regs" role="tabpanel" hidden>
               <div class="card">
                 <div class="cardHead">
                   <h3 class="h3">Inscripciones</h3>
-                  <div class="mini">Listado (solo lectura) con exportación CSV.</div>
+                  <div class="mini">Revisá registros y estado.</div>
                 </div>
-
-                <div class="toolbar">
-                  <button class="btn" id="seedRegsBtn" type="button">Refrescar</button>
-                  <button class="btn primary" id="exportCsvBtn" type="button">Exportar CSV</button>
-                </div>
-
-                <div class="tableWrap">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Evento</th>
-                        <th>Fecha</th>
-                        <th>Nombre</th>
-                        <th>Email</th>
-                        <th>Teléfono</th>
-                        <th>Marketing</th>
-                        <th>Creado</th>
-                      </tr>
-                    </thead>
-                    <tbody id="regsTbody"></tbody>
-                  </table>
-                </div>
+                <div class="list" id="regsList"><!-- JS --></div>
               </div>
             </section>
 
             <!-- =====================================================
-                 MEDIA
+                 MEDIA (PRO, único lugar)
             ====================================================== -->
             <section class="panel" id="tab-media" role="tabpanel" hidden>
               <div class="grid2">
-
                 <div class="card">
                   <div class="cardHead">
                     <h3 class="h3">Medios</h3>
                     <div class="mini">
-                      Subí imágenes o videos (según bucket) y copiá la URL para usarla en Eventos/Promos.
-                      <br />
-                      <b>Límite recomendado:</b> 25 MB por archivo.
+                      Subí imágenes o videos (según bucket) y copiá/pegá la URL para usarla en Eventos/Promos/Menú.
+                      <br/>Límite recomendado: 25 MB por archivo.
                     </div>
                   </div>
 
-                  <!-- ✅ Compat -->
-                  <div id="mediaEditorEmpty" class="empty" hidden>Seleccioná un ítem o subí uno nuevo.</div>
-
-                  <!-- ✅ data-max-mb: lo usa la validación de este HTML (y no rompe tu JS) -->
-                  <form class="form" id="mediaForm" autocomplete="off" data-max-mb="25">
-                    <!-- ✅ Compat -->
-                    <input type="hidden" id="mediaId" value="" />
-                    <input type="hidden" id="mediaTitle" value="" />
-                    <input type="hidden" id="mediaKind" value="image" />
-                    <input type="hidden" id="mediaTags" value="" />
-
-                    <div class="field">
-                      <label class="label" for="mediaFile">Archivo (JPG/PNG/WebP/MP4/WebM)</label>
-                      <input class="input" id="mediaFile" type="file" accept="image/*,video/*" required />
-                      <div class="mini">
-                        Tip: Si subís MP4/WebM, seleccioná bucket <b>video</b>.
-                        <span style="opacity:.85;">(Máx: <b>25 MB</b>)</span>
-                      </div>
-                    </div>
+                  <form class="form" id="mediaForm" data-max-mb="25">
+                    <input type="hidden" id="mediaId" />
 
                     <div class="row">
-                      <!-- ✅ BUCKET SELECTOR (PRO) -->
                       <div class="field">
                         <label class="label" for="mediaBucket">Bucket</label>
                         <select class="select" id="mediaBucket">
@@ -423,65 +303,146 @@
                       </div>
 
                       <div class="field">
-                        <label class="label" for="mediaFolder">Carpeta</label>
-                        <select class="select" id="mediaFolder">
-                          <option value="events">events</option>
-                          <option value="promos">promos</option>
-                          <option value="gallery">gallery</option>
-                          <option value="misc">misc</option>
-                        </select>
-                      </div>
-
-                      <div class="field">
-                        <label class="label" for="mediaName">Nombre (opcional)</label>
-                        <input class="input" id="mediaName" type="text" placeholder="hero-enero" maxlength="80" />
+                        <label class="label" for="mediaFolder">Folder</label>
+                        <input class="input" id="mediaFolder" type="text" placeholder="events | promos | menu | misc" />
+                        <div class="mini">Se guarda en DB como <b>folder</b> y en Storage como subcarpeta.</div>
                       </div>
                     </div>
 
                     <div class="row">
                       <div class="field">
-                        <label class="label" for="mediaUrl">URL pública</label>
-                        <input class="input" id="mediaUrl" type="text" readonly placeholder="(se llena al subir)" />
+                        <label class="label" for="mediaName">Nombre</label>
+                        <input class="input" id="mediaName" type="text" placeholder="Ej: hero-febrero" />
                       </div>
 
                       <div class="field">
-                        <label class="label">&nbsp;</label>
-                        <div class="formActions" style="justify-content:flex-start;">
-                          <button class="btn primary" id="mediaUploadBtn" type="submit">Subir</button>
-                          <button class="btn" id="mediaCopyBtn" type="button">Copiar URL</button>
-                          <button class="btn btn--ghost" id="mediaResetBtn" type="button">Limpiar</button>
-                          <button class="btn" id="deleteMediaBtn" type="button" hidden>Eliminar</button>
-                        </div>
+                        <label class="label" for="mediaTags">Tags (opcional)</label>
+                        <input class="input" id="mediaTags" type="text" placeholder="#vino #maridaje" />
                       </div>
+                    </div>
+
+                    <div class="row">
+                      <div class="field">
+                        <label class="label" for="mediaFile">Archivo</label>
+                        <input class="input" id="mediaFile" type="file" />
+                        <div class="mini">Elegí un archivo y presioná “Subir”.</div>
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaUrl">URL pública</label>
+                        <input class="input" id="mediaUrl" type="text" placeholder="Pegá una URL o se llena al subir..." />
+                        <div class="mini">Podés pegar una URL (http/https) y se guarda como asset.</div>
+                      </div>
+                    </div>
+
+                    <div class="formActions" style="justify-content:flex-start;">
+                      <button class="btn primary" id="mediaUploadBtn" type="submit">Subir</button>
+                      <button class="btn" id="mediaCopyBtn" type="button">Copiar URL</button>
+                      <button class="btn btn--ghost" id="mediaResetBtn" type="button">Limpiar</button>
+                      <button class="btn btn--ghost" id="deleteMediaBtn" type="button">Eliminar</button>
                     </div>
 
                     <div class="note" id="mediaNote" aria-live="polite"></div>
                   </form>
+
+                  <div class="empty" id="mediaEditorEmpty" hidden></div>
+
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardHead">
+                      <h3 class="h3" id="mediaTitle">Preview</h3>
+                      <div class="mini">Seleccioná un medio de la lista para ver y asignar.</div>
+                    </div>
+
+                    <div class="empty" id="mediaPreviewEmpty">No hay medio seleccionado.</div>
+
+                    <div id="mediaPreview" hidden>
+                      <div style="border:1px solid rgba(255,255,255,.10); border-radius:18px; overflow:hidden;">
+                        <img id="mediaPreviewImg" alt="" style="width:100%; height:auto; display:block;"/>
+                      </div>
+                      <div class="note" id="mediaPreviewMeta"></div>
+                    </div>
+
+                    <div class="toolbar" style="margin-top:12px;">
+                      <button class="btn" id="mediaRefreshBtn" type="button">Refrescar lista</button>
+                    </div>
+
+                    <div class="list" id="mediaList" aria-label="Lista de medios">
+                      <!-- JS -->
+                    </div>
+                  </div>
+
+                  <!-- ASIGNAR (PRO) -->
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardHead">
+                      <h3 class="h3">Asignar</h3>
+                      <div class="mini">Usá el medio seleccionado para asignarlo a un <b>evento</b> o a un <b>ítem del menú</b>.</div>
+                    </div>
+
+                    <div class="form">
+                      <div class="row">
+                        <div class="field">
+                          <label class="label" for="mediaScopeType">Tipo</label>
+                          <select class="select" id="mediaScopeType">
+                            <option value="event">Evento</option>
+                            <option value="menu_item">Menú</option>
+                          </select>
+                        </div>
+
+                        <div class="field" id="mediaScopeEventWrap">
+                          <label class="label" for="mediaEventSelect">Evento</label>
+                          <select class="select" id="mediaEventSelect">
+                            <option value="">Seleccionar evento…</option>
+                          </select>
+                        </div>
+
+                        <div class="field" id="mediaScopeMenuWrap" hidden>
+                          <label class="label" for="mediaMenuSelect">Ítem de menú</label>
+                          <select class="select" id="mediaMenuSelect">
+                            <option value="">Seleccionar ítem…</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="row">
+                        <div class="field">
+                          <label class="label" for="mediaSlotSelect">Slot</label>
+                          <select class="select" id="mediaSlotSelect"></select>
+                        </div>
+
+                        <div class="field">
+                          <label class="label">&nbsp;</label>
+                          <div class="formActions" style="justify-content:flex-start;">
+                            <button class="btn primary" id="mediaAssignBtn" type="button">Asignar</button>
+                            <button class="btn" id="mediaViewAssignedBtn" type="button">Ver asignados</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="list" id="mediaAssignedList" aria-label="Asignados"></div>
+                    </div>
+                  </div>
+
                 </div>
 
                 <div class="card">
                   <div class="cardHead">
-                    <h3 class="h3">Vista previa</h3>
-                    <div class="mini">Verificá el archivo y luego copiá la URL.</div>
+                    <h3 class="h3">Ayuda rápida</h3>
+                    <div class="mini">
+                      <b>Eventos</b> muestra URLs (solo lectura).<br/>
+                      <b>Medios</b> es el único lugar para subir y asignar.
+                    </div>
                   </div>
 
-                  <div class="empty" id="mediaPreviewEmpty">Seleccioná un archivo para previsualizar.</div>
-
-                  <!-- admin-media.js usa #mediaPreview como contenedor (no requiere mediaPreviewImg) -->
-                  <div id="mediaPreview" hidden>
-                    <img id="mediaPreviewImg" alt="Preview" style="width:100%; height:auto; border:1px solid rgba(255,255,255,.10);" />
-                    <div class="note" id="mediaPreviewMeta"></div>
-                  </div>
-
-                  <div class="toolbar" style="margin-top:12px;">
-                    <button class="btn" id="mediaRefreshBtn" type="button">Refrescar lista</button>
-                  </div>
-
-                  <div class="list" id="mediaList" aria-label="Lista de medios">
-                    <!-- JS -->
+                  <div class="empty">
+                    Flujo recomendado:
+                    <ol style="margin:10px 0 0; padding-left:18px; line-height:1.6;">
+                      <li>Seleccioná bucket <b>media</b> o <b>video</b></li>
+                      <li>Subí o pegá una URL</li>
+                      <li>Seleccioná el medio en la lista</li>
+                      <li>Asigná a evento/menú y slot</li>
+                    </ol>
                   </div>
                 </div>
-
               </div>
             </section>
 
@@ -489,36 +450,13 @@
                  GALLERY
             ====================================================== -->
             <section class="panel" id="tab-gallery" role="tabpanel" hidden>
+              <!-- JS por admin-gallery.js -->
               <div class="card">
                 <div class="cardHead">
                   <h3 class="h3">Galería</h3>
-                  <div class="mini">Subí y organizá imágenes para Maridajes / Cocteles.</div>
+                  <div class="mini">Administración de imágenes para galería.</div>
                 </div>
-
-                <div class="toolbar">
-                  <button class="btn primary" id="newGalleryBtn" type="button">Nuevo ítem</button>
-                  <button class="btn" id="refreshGalleryBtn" type="button">Refrescar</button>
-                </div>
-
-                <!-- ✅ Compat: si un JS viejo usa lista + form -->
-                <div id="galleryList" hidden></div>
-                <form id="galleryForm" hidden></form>
-
-                <div class="tableWrap">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Tipo</th>
-                        <th>Nombre</th>
-                        <th>Tags</th>
-                        <th>Imagen</th>
-                        <th>Creado</th>
-                        <th>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody id="galleryTbody"></tbody>
-                  </table>
-                </div>
+                <div class="list" id="galleryTbody"><!-- JS --></div>
               </div>
             </section>
 
@@ -526,106 +464,46 @@
                  PROMOS
             ====================================================== -->
             <section class="panel" id="tab-promos" role="tabpanel" hidden>
+              <!-- JS por admin-promos.js -->
               <div class="card">
                 <div class="cardHead">
                   <h3 class="h3">Promos</h3>
-                  <div class="mini">Administración de promos.</div>
+                  <div class="mini">Administración de promociones.</div>
                 </div>
-
-                <div class="toolbar">
-                  <button class="btn primary" id="newPromoBtn" type="button">Nueva promo</button>
-                  <button class="btn" id="refreshPromosBtn" type="button">Refrescar</button>
-                </div>
-
-                <!-- ✅ Compat: si un JS viejo usa lista + form -->
-                <div id="promosList" hidden></div>
-                <form id="promoForm" hidden></form>
-
-                <div class="tableWrap">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Tipo</th>
-                        <th>Título</th>
-                        <th>Target</th>
-                        <th>Creado</th>
-                        <th>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody id="promosTbody"></tbody>
-                  </table>
-                </div>
+                <div class="list" id="promosList"><!-- JS --></div>
               </div>
             </section>
 
           </div><!-- /adminContent -->
         </div><!-- /adminLayout -->
-
       </section>
+
     </div>
   </main>
 
-  <!-- SCRIPTS (ORDEN CRÍTICO) -->
+  <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./js/supabaseClient.js"></script>
+  <script src="./js/admin-auth.js"></script>
+  <script src="./js/admin.js"></script>
+  <script src="./js/admin-dates.js"></script>
+  <script src="./js/admin-registrations.js"></script>
+  <script src="./js/admin-media.js"></script>
+  <script src="./js/admin-gallery.js"></script>
+  <script src="./js/admin-promos.js"></script>
 
-  <script src="./js/supabaseClient.js" defer></script>
-  <script src="./js/admin-auth.js" defer></script>
-
-  <script src="./js/admin.js" defer></script>
-  <script src="./js/admin-dates.js" defer></script>
-  <script src="./js/admin-registrations.js" defer></script>
-
-  <script src="./js/admin-media.js" defer></script>
-  <script src="./js/admin-gallery.js" defer></script>
-  <script src="./js/admin-promos.js" defer></script>
-
-  <!-- ✅ PATCH 2026-02-15: Validación tamaño de archivo (25MB) SOLO UI
-       - No rompe tu admin-media.js (no toca tus handlers, solo bloquea submit si excede).
-  -->
+  <!-- Validación liviana de tamaño (no interfiere con admin-media.js) -->
   <script>
     (function () {
       "use strict";
 
       const form = document.getElementById("mediaForm");
       const file = document.getElementById("mediaFile");
-
-      // Si no existe, salimos.
       if (!form || !file) return;
 
-      // Toast helper compatible con tu contenedor #toasts
-      const toastsEl = document.getElementById("toasts");
-      const escapeHtml = (s) =>
-        String(s ?? "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;");
-
-      const toast = (title, msg, timeout = 4200) => {
-        if (!toastsEl) return alert(title + " — " + msg);
-
-        const el = document.createElement("div");
-        el.className = "toast";
-        el.innerHTML = `
-          <div>
-            <p class="tTitle">${escapeHtml(title)}</p>
-            <p class="tMsg">${escapeHtml(msg)}</p>
-          </div>
-          <button class="close" aria-label="Cerrar">✕</button>
-        `;
-        toastsEl.appendChild(el);
-
-        const kill = () => {
-          try {
-            el.style.opacity = "0";
-            el.style.transform = "translateY(-6px)";
-            setTimeout(() => el.remove(), 180);
-          } catch (_) {}
-        };
-
-        el.querySelector(".close")?.addEventListener("click", kill, { once: true });
-        setTimeout(kill, timeout);
+      const toast = (t, m) => {
+        try { if (window.APP && typeof APP.toast === "function") return APP.toast(t, m, 3400); } catch (_) {}
+        alert(t + " — " + m);
       };
 
       const getMaxBytes = () => {
@@ -637,24 +515,18 @@
 
       const fmtMB = (bytes) => (bytes / (1024 * 1024)).toFixed(2) + " MB";
 
-      // Validación al elegir archivo (feedback inmediato)
       file.addEventListener("change", () => {
         const f = file.files && file.files[0];
         if (!f) return;
-
         const max = getMaxBytes();
-        if (f.size > max) {
-          toast("Archivo muy grande", `Máximo permitido: ${fmtMB(max)}. Tu archivo: ${fmtMB(f.size)}.`);
-        }
+        if (f.size > max) toast("Archivo muy grande", `Máximo: ${fmtMB(max)}. Tu archivo: ${fmtMB(f.size)}.`);
       });
 
-      // Validación antes de subir (bloquea submit si excede)
       form.addEventListener(
         "submit",
         (e) => {
           const f = file.files && file.files[0];
           if (!f) return;
-
           const max = getMaxBytes();
           if (f.size > max) {
             e.preventDefault();
