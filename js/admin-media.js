@@ -1,33 +1,36 @@
 "use strict";
 
 /**
- * admin-media.js — Entre Copas & Notas ✅ PRO (2026-02-20)
+ * admin-media.js — Entre Copas & Notas ✅ PRO (alineado a tu BD real)
  *
- * ÚNICO lugar para gestionar medios:
- * - Subir archivo a Storage (bucket: media | video)
- * - Pegar URL (crea asset sin subir)
- * - Listar + preview
- * - Asignar a:
- *    - Eventos: scope='event', slot: slide_img | slide_video | desktop_event | mobile_event | event_more
- *    - Menú:    scope='menu_item', slot: icon | image
+ * BD (public):
+ *  - media_assets: id(uuid), folder(text NOT NULL), name(text NOT NULL), path(text NOT NULL),
+ *                 public_url(text), mime(text), bytes(bigint), created_at, updated_at
+ *  - media_bindings: scope, scope_id, slot, media_id, ... con UNIQUE(scope, scope_id, slot)
+ *  - v_media_bindings_latest: VIEW de lectura para ver el “latest” por slot
+ *  - events: para selector de eventos
+ *  - menu_items: para selector de menú (si ya lo creaste)
  *
- * Requiere BD:
- * - public.media_assets (tabla)
- * - public.media_bindings (tabla) con UNIQUE(scope, scope_id, slot)
- * - public.v_media_bindings_latest (view) para lectura
- * - public.menu_items (tabla) (si usás menú administrable)
+ * Storage:
+ *  - bucket "media" (imágenes)
+ *  - bucket "video" (videos)
  *
- * Alineado a IDs reales en admin.html (tab Medios):
- *  #mediaForm #mediaFile #mediaBucket #mediaFolder #mediaName #mediaTags
+ * Convención PRO (sin tocar BD):
+ *  - Imágenes: events-img / promos-img / menu-img / gallery-img / misc-img
+ *  - Videos:   events-video / promos-video / misc-video
+ *
+ * IDs esperados (admin.html tab Medios):
+ *  #mediaForm #mediaFile #mediaBucket #mediaFolder #mediaName #mediaTags (tags solo UI)
  *  #mediaUrl #mediaCopyBtn #mediaResetBtn #deleteMediaBtn
  *  #mediaPreviewEmpty #mediaPreview #mediaPreviewImg #mediaPreviewMeta
  *  #mediaRefreshBtn #mediaList #mediaNote
- *  Asignación (pro): #mediaScopeType #mediaEventSelect #mediaMenuSelect #mediaSlotSelect
- *                   #mediaAssignBtn #mediaViewAssignedBtn #mediaAssignedList
+ *  Asignación:
+ *   #mediaScopeType #mediaEventSelect #mediaMenuSelect #mediaSlotSelect
+ *   #mediaAssignBtn #mediaViewAssignedBtn #mediaAssignedList
  */
 
 (function () {
-  const VERSION = "2026-02-20.media.pro.2";
+  const VERSION = "2026-02-20.media.pro.schema-safe.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!$("#appPanel")) return;
@@ -41,8 +44,7 @@
     try {
       if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, ms);
     } catch (_) {}
-    try { console.log("[toast]", title, msg); } catch (_) {}
-    alert(title + " — " + msg);
+    alert(`${title} — ${msg}`);
   }
 
   const clean = (s) => String(s ?? "").trim();
@@ -61,7 +63,7 @@
   const EVENTS_TABLE = "events";
   const MENU_TABLE = "menu_items";
 
-  // Buckets reales
+  // Storage buckets reales
   const BUCKETS = ["media", "video"];
 
   const ACCEPTS = {
@@ -69,26 +71,27 @@
     video: "video/mp4,video/webm,.mp4,.webm",
   };
 
+  // Slots
   const EVENT_SLOTS = [
-    { value: "slide_img", label: "Home Slider · Imagen" },
-    { value: "slide_video", label: "Home Slider · Video" },
-    { value: "desktop_event", label: "Evento · Desktop" },
-    { value: "mobile_event", label: "Evento · Mobile" },
-    { value: "event_more", label: "Evento · Ver más" },
+    { value: "slide_img", label: "Home Slider · Imagen (slide_img)" },
+    { value: "slide_video", label: "Home Slider · Video (slide_video)" },
+    { value: "desktop_event", label: "Evento · Desktop (desktop_event)" },
+    { value: "mobile_event", label: "Evento · Mobile (mobile_event)" },
+    { value: "event_more", label: "Evento · Ver más (event_more)" },
   ];
 
   const MENU_SLOTS = [
-    { value: "icon", label: "Menú · Icono" },
-    { value: "image", label: "Menú · Imagen" },
+    { value: "icon", label: "Menú · Icono (icon)" },
+    { value: "image", label: "Menú · Imagen (image)" },
   ];
 
-  // -------- DOM (tab Medios) --------
+  // -------- DOM --------
   const form = $("#mediaForm");
   const fileEl = $("#mediaFile");
   const bucketEl = $("#mediaBucket");
   const folderEl = $("#mediaFolder");
   const nameEl = $("#mediaName");
-  const tagsEl = $("#mediaTags");
+  const tagsEl = $("#mediaTags"); // UI only (no se guarda en DB)
 
   const urlEl = $("#mediaUrl");
   const btnCopy = $("#mediaCopyBtn");
@@ -104,7 +107,7 @@
   const btnRefresh = $("#mediaRefreshBtn");
   const listEl = $("#mediaList");
 
-  // Asignación UI
+  // Asignación
   const scopeTypeEl = $("#mediaScopeType");
   const scopeEventWrap = $("#mediaScopeEventWrap");
   const scopeMenuWrap = $("#mediaScopeMenuWrap");
@@ -117,14 +120,16 @@
 
   if (!form || !fileEl || !bucketEl || !folderEl || !urlEl || !listEl) return;
 
-  // permitir pegar URL aunque el HTML venga con readonly
-  try { urlEl.readOnly = false; } catch (_) {}
+  // Permitir pegar URL
+  try {
+    urlEl.readOnly = false;
+  } catch (_) {}
 
   // -------- Estado --------
   const state = {
     didBind: false,
     assets: [],
-    selected: null,
+    selected: null, // asset seleccionado
   };
 
   function setNote(msg) {
@@ -166,10 +171,16 @@
   function applyAccept() {
     const b = getBucket();
     fileEl.setAttribute("accept", ACCEPTS[b] || "image/*,video/*");
+
+    // Hint PRO: si está vacío, sugerimos folder según bucket
+    const f = clean(folderEl.value || "");
+    if (!f) {
+      folderEl.value = b === "video" ? "events-video" : "events-img";
+    }
   }
 
-  // -------- DB helpers --------
-  async function fetchAssetsLatest({ folder, limit = 40 }) {
+  // -------- DB helpers (schema-safe) --------
+  async function fetchAssetsLatest({ folder, limit = 50 }) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no está listo.");
 
@@ -188,19 +199,29 @@
   }
 
   async function insertAsset(payload) {
+    // ✅ SOLO columnas existentes en tu tabla
     const sb = getSB();
-    const { data, error } = await sb.from(ASSETS_TABLE).insert(payload).select("*").single();
+    const safePayload = {
+      folder: payload.folder,
+      name: payload.name,
+      path: payload.path,
+      public_url: payload.public_url ?? null,
+      mime: payload.mime ?? null,
+      bytes: payload.bytes ?? null,
+    };
+
+    const { data, error } = await sb.from(ASSETS_TABLE).insert(safePayload).select("*").single();
     if (error) throw error;
     return data;
   }
 
-  async function deleteAsset(assetId) {
+  async function deleteAssetRow(assetId) {
     const sb = getSB();
     const { data, error } = await sb
       .from(ASSETS_TABLE)
       .delete()
       .eq("id", assetId)
-      .select("id,path,folder")
+      .select("id, path, folder, public_url")
       .single();
     if (error) throw error;
     return data;
@@ -230,7 +251,7 @@
     const sb = getSB();
     const { data, error } = await sb
       .from(EVENTS_TABLE)
-      .select("id,title,month_key,type,created_at")
+      .select("id, title, month_key, type, created_at")
       .order("created_at", { ascending: false })
       .limit(250);
     if (error) throw error;
@@ -241,7 +262,7 @@
     const sb = getSB();
     const { data, error } = await sb
       .from(MENU_TABLE)
-      .select("id,label,href,menu_key,sort_order,active")
+      .select("id, label, href, menu_key, sort_order, active")
       .order("menu_key", { ascending: true })
       .order("sort_order", { ascending: true })
       .limit(500);
@@ -255,12 +276,17 @@
     return (m?.[1] || "").toLowerCase();
   }
 
+  function safeNameBase(nameBase, filename) {
+    const base = clean(nameBase) || String(filename || "").replace(/\.[^.]+$/, "");
+    return normFolder(base) || "asset";
+  }
+
   async function uploadToStorage(file, bucket, folder, nameBase) {
     const sb = getSB();
     if (!sb) throw new Error("Supabase no listo.");
 
     const ext = extFromFile(file) || (bucket === "video" ? "mp4" : "jpg");
-    const safeName = clean(nameBase) ? normFolder(nameBase) : normFolder(String(file.name || "").replace(/\.[^.]+$/, ""));
+    const safeName = safeNameBase(nameBase, file.name);
     const path = `${normFolder(folder || "misc")}/${safeName}-${Date.now()}.${ext}`;
 
     const { error } = await sb.storage.from(bucket).upload(path, file, { cacheControl: "3600", upsert: false });
@@ -278,20 +304,19 @@
     if (error) throw error;
   }
 
-  // -------- Render list --------
+  // -------- List render --------
   function renderList() {
     listEl.innerHTML = "";
 
     if (!state.assets.length) {
       const div = document.createElement("div");
       div.className = "empty";
-      div.textContent = "No hay medios en esta carpeta todavía. Subí uno o pegá una URL.";
+      div.textContent = "No hay medios en esta carpeta. Subí uno o pegá una URL.";
       listEl.appendChild(div);
       return;
     }
 
     const frag = document.createDocumentFragment();
-
     state.assets.forEach((a) => {
       const item = document.createElement("button");
       item.type = "button";
@@ -310,8 +335,8 @@
             ${url ? `<img src="${url}" alt="" style="width:100%; height:100%; object-fit:cover;">` : ""}
           </div>
           <div style="min-width:0;">
-            <div style="font-weight:700; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
-            <div style="opacity:.7; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${meta}</div>
+            <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+            <div style="opacity:.72; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${meta}</div>
           </div>
         </div>
       `;
@@ -333,7 +358,7 @@
     const folder = clean(folderEl.value || "");
     setNote("Cargando lista…");
     try {
-      state.assets = await fetchAssetsLatest({ folder, limit: 50 });
+      state.assets = await fetchAssetsLatest({ folder, limit: 60 });
       renderList();
       setNote("");
     } catch (e) {
@@ -343,7 +368,7 @@
     }
   }
 
-  // -------- Pegado de URL -> asset --------
+  // -------- URL -> asset --------
   async function ensureAssetSelectedOrFromUrl() {
     if (state.selected) return state.selected;
 
@@ -355,9 +380,15 @@
       return null;
     }
 
-    const folder = clean(folderEl.value || "external") || "external";
-    const name = clean(nameEl?.value || "") || raw.split("/").pop()?.slice(0, 80) || "external";
+    let folder = clean(folderEl.value || "");
+    if (!folder) folder = "misc-img";
+    folder = normFolder(folder);
 
+    let name = clean(nameEl?.value || "");
+    if (!name) name = raw.split("/").pop()?.slice(0, 80) || "external";
+    name = cleanSpaces(name);
+
+    // ✅ Insert schema-safe
     const created = await insertAsset({
       folder,
       name,
@@ -365,7 +396,6 @@
       public_url: raw,
       mime: null,
       bytes: null,
-      tags: null,
     });
 
     state.selected = created;
@@ -389,6 +419,11 @@
     if (scopeEventWrap) scopeEventWrap.hidden = scope !== "event";
     if (scopeMenuWrap) scopeMenuWrap.hidden = scope !== "menu_item";
     setSlotOptionsForScope(scope);
+
+    // Hint folder pro
+    const b = getBucket();
+    const f = clean(folderEl.value || "");
+    if (!f) folderEl.value = b === "video" ? "events-video" : "events-img";
   }
 
   async function loadEventsAndMenu() {
@@ -419,7 +454,6 @@
 
   function renderAssigned(rows) {
     if (!assignedList) return;
-
     assignedList.innerHTML = "";
 
     if (!rows.length) {
@@ -437,7 +471,7 @@
       row.innerHTML = `
         <div style="display:flex; justify-content:space-between; gap:12px;">
           <div style="min-width:0;">
-            <div style="font-weight:800; letter-spacing:.12em; text-transform:uppercase;">${clean(r.slot)}</div>
+            <div style="font-weight:900; letter-spacing:.12em; text-transform:uppercase;">${clean(r.slot)}</div>
             <div style="opacity:.75; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u || "—"}</div>
           </div>
           <button class="btn sm" type="button" data-copy="${u}">Copiar</button>
@@ -458,15 +492,18 @@
   function getScopeAndTarget() {
     const scope = clean(scopeTypeEl?.value || "event") || "event";
     const slot = clean(slotSel?.value || "");
+
     let scope_id = "";
     if (scope === "menu_item") scope_id = clean(menuSel?.value || "");
     else scope_id = clean(eventSel?.value || "");
+
     return { scope, scope_id, slot };
   }
 
   async function viewAssigned() {
     const { scope, scope_id } = getScopeAndTarget();
     if (!scope_id) return toast("Asignación", "Seleccioná un destino.", 2600);
+
     try {
       const rows = await fetchBindingsLatest({ scope, scope_id });
       renderAssigned(rows);
@@ -494,21 +531,24 @@
     }
   }
 
-  // -------- Delete asset --------
+  // -------- Delete --------
   async function deleteSelected() {
     const asset = state.selected;
-    if (!asset || !asset.id) return toast("Eliminar", "Seleccioná un medio primero.", 2400);
+    if (!asset?.id) return toast("Eliminar", "Seleccioná un medio primero.", 2400);
 
-    const ok = confirm("¿Eliminar este medio? Esto borra el asset de la BD y puede afectar lugares donde esté usado.");
+    const ok = confirm("¿Eliminar este medio? Si está asignado en algún lado, va a dejar de verse.");
     if (!ok) return;
 
     try {
-      const p = clean(asset.path || "");
+      const deleted = await deleteAssetRow(asset.id);
+
+      // Si path es URL externa, no tocamos storage
+      const p = clean(deleted.path || "");
       const isExternal = /^https?:\/\//i.test(p);
 
-      await deleteAsset(asset.id);
-
-      if (!isExternal) {
+      if (!isExternal && p) {
+        // Como NO guardamos bucket en DB, usamos el bucket seleccionado.
+        // Por eso es PRO usar folders distintos (events-img vs events-video) y seleccionar bucket correcto al borrar.
         const bucket = getBucket();
         await removeFromStorage(bucket, p).catch(() => {});
       }
@@ -535,8 +575,8 @@
       applyAccept();
       refreshList();
     });
-    folderEl.addEventListener("change", refreshList);
 
+    folderEl.addEventListener("change", refreshList);
     btnRefresh?.addEventListener("click", refreshList);
 
     btnCopy?.addEventListener("click", () => {
@@ -561,7 +601,7 @@
 
     btnDelete?.addEventListener("click", deleteSelected);
 
-    // crear asset al “blur” si es URL
+    // blur URL -> crea asset externo
     urlEl.addEventListener("blur", async () => {
       const raw = clean(urlEl.value || "");
       if (!raw) return;
@@ -575,7 +615,7 @@
       }
     });
 
-    // upload submit
+    // submit upload
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const sb = getSB();
@@ -585,21 +625,25 @@
       if (!file) return toast("Archivo", "Seleccioná un archivo.", 2400);
 
       const bucket = getBucket();
-      const folder = clean(folderEl.value || "misc") || "misc";
+
+      let folder = clean(folderEl.value || "");
+      if (!folder) folder = bucket === "video" ? "events-video" : "events-img";
+      folder = normFolder(folder);
+
       const nameBase = clean(nameEl?.value || "");
 
       setNote("Subiendo…");
       try {
         const up = await uploadToStorage(file, bucket, folder, nameBase);
 
+        // ✅ Insert schema-safe (sin tags/bucket)
         const asset = await insertAsset({
           folder,
-          name: nameBase || clean(file.name),
+          name: clean(nameBase) || clean(file.name),
           path: up.path,
-          public_url: up.public_url,
+          public_url: up.public_url || null,
           mime: clean(file.type || "") || null,
           bytes: file.size || null,
-          tags: null,
         });
 
         state.selected = asset;
@@ -614,7 +658,7 @@
       }
     });
 
-    // Asignación UI
+    // Asignación
     if (scopeTypeEl) scopeTypeEl.addEventListener("change", syncScopeUI);
     btnAssign?.addEventListener("click", assignNow);
     btnViewAssigned?.addEventListener("click", viewAssigned);
