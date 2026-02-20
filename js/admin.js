@@ -1,30 +1,24 @@
 "use strict";
 
 /**
- * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA LIBRARY + BINDINGS) — 2026-02-19 ✅ DEPURADO
+ * admin.js ✅ PRO (SUPABASE CRUD EVENTS + MEDIA LIBRARY + BINDINGS) — 2026-02-19 ✅ ALINEADO A TU BD
  *
- * ✅ Cambios clave (lo que pediste):
- * - NO usa target / NO usa media_items legacy
- * - Subida: elegís BUCKET + folder ANTES de subir (sin “destino” extra)
- * - Cada upload crea un asset NUEVO (permite repetidos)
- * - Copiar URL fácil
+ * ✅ Alineado a tu BD FINAL:
+ * - public.media_assets            (TABLE)  ✅ assets
+ * - public.media_bindings          (TABLE)  ✅ bindings (permite repetidos; NO unique por slot)
+ * - public.media_library           (VIEW)   ✅ join (lectura fácil)
+ * - public.v_media_bindings_latest (VIEW)   ✅ latest por slot (recomendado)
+ *
+ * ✅ Lo que hace:
+ * - Subida: elegís BUCKET + folder antes de subir
+ * - Cada upload crea asset NUEVO (permitidos repetidos)
+ * - Copiar URL
  * - “Usar en evento…” crea binding NUEVO (sin upsert)
- * - En el editor: carga el “latest” por slot (v_media_bindings_latest si existe)
- *
- * ✅ Supabase DB esperado (nombres REALES que ya tenés por tu script anterior):
- * - public.media_library   (TABLA de assets)  ✅ (ojo: NO es view)
- * - public.media_bindings  (TABLA)
- * - public.v_media_bindings_latest (VIEW) ✅ recomendado
- *
- * ⚠️ Nota importante:
- * - En tu BD, "media_library" es tabla (kind=r). Antes te dio error porque intentaste ALTER VIEW.
- * - Este admin usa:
- *    ASSETS_TABLE   = "media_library"
- *    BINDINGS_TABLE = "media_bindings"
+ * - En el editor: carga el “latest” por slot usando v_media_bindings_latest (o fallback)
  */
 
 (function () {
-  const VERSION = "2026-02-19.2";
+  const VERSION = "2026-02-19.3";
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -136,16 +130,22 @@
       .replace(/^[-/]+|[-/]+$/g, "");
   }
 
+  function safeOrQuery(q) {
+    // Evita que comas/quotes rompan el .or()
+    return cleanSpaces(q).replace(/[,]/g, " ").slice(0, 120);
+  }
+
   // ---------------------------
-  // DB mapping (✅ alineado a tu BD real)
+  // DB mapping (✅ alineado a tu BD FINAL)
   // ---------------------------
   const EVENTS_TABLE = "events";
 
-  // ✅ En tu SQL anterior, esto es TABLA (kind=r)
-  const ASSETS_TABLE = "media_library";
+  // ✅ TABLAS reales
+  const ASSETS_TABLE = "media_assets";
   const BINDINGS_TABLE = "media_bindings";
 
-  // ✅ view recomendada (si existe)
+  // ✅ VIEWS reales
+  const VIEW_LIBRARY = "media_library";
   const VIEW_LATEST = "v_media_bindings_latest";
 
   const SELECT_EVENTS = `
@@ -218,7 +218,7 @@
       folder: cleanSpaces(folder || "misc"),
       name: cleanSpaces(name || ""),
       path: cleanSpaces(path || ""),
-      public_url: cleanSpaces(public_url || "") || null,
+      public_url: cleanSpaces(public_url || ""),
       mime: mime || null,
       bytes: bytes ?? null,
     };
@@ -246,9 +246,8 @@
     const f = cleanSpaces(folder || "");
     if (f) req = req.eq("folder", f);
 
-    const query = cleanSpaces(q || "").toLowerCase();
+    const query = safeOrQuery(q || "").toLowerCase();
     if (query) {
-      // PostgREST or() necesita comas separando condiciones
       req = req.or(`name.ilike.%${query}%,path.ilike.%${query}%,public_url.ilike.%${query}%`);
     }
 
@@ -262,9 +261,12 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
+    const sid = String(scope_id || "").trim();
+    if (!sid) throw new Error("scope_id es requerido para crear bindings.");
+
     const payload = {
       scope: String(scope || "event"),
-      scope_id: scope_id ? String(scope_id) : null,
+      scope_id: sid,
       slot: String(slot || "misc"),
       media_id: String(media_id),
       note: note ? String(note) : null,
@@ -278,11 +280,14 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
 
+    const sid = String(scope_id || "").trim();
+    if (!sid) return;
+
     const { error } = await sb
       .from(BINDINGS_TABLE)
       .delete()
       .eq("scope", String(scope || "event"))
-      .eq("scope_id", String(scope_id))
+      .eq("scope_id", sid)
       .eq("slot", String(slot));
 
     if (error) throw error;
@@ -295,7 +300,7 @@
     const eid = String(eventId || "").trim();
     if (!eid) return {};
 
-    // 1) try v_media_bindings_latest
+    // 1) Try view latest
     try {
       const { data, error } = await sb
         .from(VIEW_LATEST)
@@ -314,10 +319,10 @@
       });
       return map;
     } catch (e) {
-      console.warn("[admin] view latest not available, fallback:", e);
+      console.warn("[admin] v_media_bindings_latest no disponible, fallback:", e);
     }
 
-    // 2) fallback: bindings + join assets
+    // 2) Fallback: bindings + join assets (tomar el primero por slot)
     const { data: b, error: bErr } = await sb
       .from(BINDINGS_TABLE)
       .select("slot, media_id, updated_at")
@@ -328,9 +333,7 @@
 
     if (bErr) throw bErr;
 
-    const ids = Array.from(
-      new Set((Array.isArray(b) ? b : []).map((x) => x.media_id).filter(Boolean))
-    );
+    const ids = Array.from(new Set((Array.isArray(b) ? b : []).map((x) => x.media_id).filter(Boolean)));
     if (!ids.length) return {};
 
     const { data: a, error: aErr } = await sb
@@ -359,9 +362,7 @@
   // Tabs
   // ============================================================
   function hideAllTabs() {
-    $$('[role="tabpanel"]', appPanel).forEach((p) => {
-      p.hidden = true;
-    });
+    $$('[role="tabpanel"]', appPanel).forEach((p) => (p.hidden = true));
   }
 
   function setTab(tabName) {
@@ -406,10 +407,7 @@
     if (error) {
       state.events = [];
       state.mode = isRLSError(error) ? "blocked" : "supabase";
-      setBusy(
-        false,
-        isRLSError(error) ? "RLS bloquea. Faltan policies para events." : "No se pudieron cargar eventos."
-      );
+      setBusy(false, isRLSError(error) ? "RLS bloquea. Faltan policies para events." : "No se pudieron cargar eventos.");
       throw error;
     }
 
@@ -432,13 +430,7 @@
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe. Revisá el orden: supabaseClient.js → admin.js");
 
-    const { data, error } = await sb
-      .from(EVENTS_TABLE)
-      .update(payload)
-      .eq("id", id)
-      .select(SELECT_EVENTS)
-      .single();
-
+    const { data, error } = await sb.from(EVENTS_TABLE).update(payload).eq("id", id).select(SELECT_EVENTS).single();
     if (error) throw error;
     return data;
   }
@@ -648,7 +640,7 @@
           </div>
 
           <div class="ecnMediaField">
-            <label>Carpeta (folder)</label>
+            <label>Carpeta lógica (folder)</label>
             <input id="mlFolder" type="text" placeholder="events | gallery | videos | misc" />
           </div>
         </div>
@@ -669,7 +661,7 @@
           <button class="ecnBtn ecnBtn--primary" type="button" id="mlUploadBtn">Subir + generar URL</button>
           <button class="ecnBtn" type="button" id="mlRefreshBtn">Refrescar</button>
           <span class="ecnHint" id="mlHint">
-            Elegí bucket y carpeta antes de subir. Cada upload crea un asset nuevo (se permiten repetidos) y copia el URL.
+            Bucket + folder antes de subir. Cada upload crea un asset nuevo (repetidos OK) y copia el URL.
           </span>
         </div>
 
@@ -690,19 +682,15 @@
     const b = cleanSpaces(bEl.value || "").toLowerCase() || "media";
     const def = BUCKET_DEFAULTS[b] || BUCKET_DEFAULTS.media;
 
-    // folder default si está vacío o si era uno de los defaults
     const curFolder = cleanSpaces(fEl.value || "");
     const wasDefault = ["", "events", "gallery", "videos", "misc"].includes(curFolder);
     if (wasDefault) fEl.value = def.folder;
 
-    // accept correcto
     fileEl.setAttribute("accept", def.accept);
 
-    // guardar state
     state.mediaBucket = b;
     state.mediaFolder = cleanSpaces(fEl.value || def.folder) || def.folder;
 
-    // si ya hay un archivo elegido que no calza, lo reseteamos
     const f = fileEl.files && fileEl.files[0];
     if (f) {
       const mime = String(f.type || "").toLowerCase();
@@ -798,7 +786,6 @@
                 note: "admin_use_asset",
               });
 
-              // reflejar en inputs si existen
               const mapInputIdBySlot = {
                 slide_img: "evImg",
                 slide_video: "evVideoUrl",
@@ -863,11 +850,11 @@
     }
 
     const ext = extFromName(file.name) || (bucket === "videos" ? "mp4" : "webp");
-    const filename = `${folder}/${Date.now()}_${safeId()}.${ext}`;
+    const storagePath = `${folder}/${Date.now()}_${safeId()}.${ext}`;
 
     setBusy(true, "Subiendo archivo…");
 
-    const up = await sb.storage.from(bucket).upload(filename, file, {
+    const up = await sb.storage.from(bucket).upload(storagePath, file, {
       cacheControl: "3600",
       upsert: false,
       contentType: file.type || undefined,
@@ -875,21 +862,20 @@
 
     if (up.error) throw up.error;
 
-    const pub = sb.storage.from(bucket).getPublicUrl(filename);
+    const pub = sb.storage.from(bucket).getPublicUrl(storagePath);
     const public_url = String(pub?.data?.publicUrl || "").trim();
     if (!public_url) throw new Error("No se pudo generar publicUrl (revisá bucket public).");
 
-    // Guardar asset NUEVO (repetidos permitidos)
+    // Guardar asset NUEVO (repetidos OK)
     const asset = await insertAsset({
-      folder, // carpeta lógica
-      name: file.name || filename,
-      path: `${bucket}/${filename}`, // guardamos bucket+path para que sea rastreable
+      folder, // carpeta lógica (para filtrar en librería)
+      name: file.name || storagePath,
+      path: `${bucket}/${storagePath}`, // trazable (bucket + ruta)
       public_url,
       mime: file.type || null,
       bytes: file.size ?? null,
     });
 
-    // copiar
     try {
       await navigator.clipboard.writeText(public_url);
     } catch (_) {}
@@ -897,11 +883,9 @@
     toast("Subido", "URL generada y copiada. Pegala donde quieras.", 2200);
     setBusy(false, "");
 
-    // refrescar lista y limpiar file
     await refreshMediaList();
     if (fileEl) fileEl.value = "";
 
-    // mantener estado
     state.mediaBucket = bucket;
     state.mediaFolder = folder;
 
@@ -962,7 +946,6 @@
     // panel media
     const panel = ensureMediaLibraryPanel();
     if (panel) {
-      // defaults + accept
       const bEl = $("#mlBucket");
       const fEl = $("#mlFolder");
       const sEl = $("#mlSearch");
@@ -1200,7 +1183,7 @@
         const asset = await insertAsset({
           folder,
           name,
-          path: url, // para externas: guardamos url también aquí
+          path: url, // externo: guardamos url
           public_url: url,
           mime: null,
           bytes: null,
@@ -1235,7 +1218,7 @@
       console.error(err);
       toast(
         isRLSError(err) ? "RLS" : "Error",
-        isRLSError(err) ? "RLS bloqueó el guardado. Revisá policies en media_library y media_bindings." : prettyError(err),
+        isRLSError(err) ? "RLS bloqueó el guardado. Revisá policies en media_assets y media_bindings." : prettyError(err),
         5200
       );
       return false;
@@ -1251,9 +1234,7 @@
     if (state.didBind) return;
     state.didBind = true;
 
-    $$(".tab", appPanel).forEach((t) => {
-      t.addEventListener("click", () => setTab(t.dataset.tab));
-    });
+    $$(".tab", appPanel).forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
     $("#search")?.addEventListener("input", (e) => {
       state.query = e.target.value || "";
@@ -1301,30 +1282,18 @@
       }
     });
 
-    // Inputs en panel (bucket/folder/search/file)
     appPanel.addEventListener("change", async (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement)) return;
-
-      if (t.id === "mlBucket" || t.id === "mlFolder" || t.id === "mlFile") {
-        applyBucketDefaults();
-      }
-
-      if (t.id === "mlFile") {
-        // nada extra, ya validamos en applyBucketDefaults
-      }
+      if (t.id === "mlBucket" || t.id === "mlFolder" || t.id === "mlFile") applyBucketDefaults();
     });
 
     appPanel.addEventListener("input", async (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement)) return;
 
-      if (t.id === "mlFolder") {
-        state.mediaFolder = cleanSpaces(t.value || "");
-      }
-      if (t.id === "mlBucket") {
-        state.mediaBucket = cleanSpaces(t.value || "");
-      }
+      if (t.id === "mlFolder") state.mediaFolder = cleanSpaces(t.value || "");
+      if (t.id === "mlBucket") state.mediaBucket = cleanSpaces(t.value || "");
       if (t.id === "mlSearch") {
         state.mediaSearch = cleanSpaces(t.value || "");
         clearTimeout(bindOnce.__mlTimer);
@@ -1337,14 +1306,13 @@
     if (state.didBoot) return;
     state.didBoot = true;
 
-    console.log("[admin.js] boot", { VERSION });
+    console.log("[admin.js] boot", { VERSION, ASSETS_TABLE, BINDINGS_TABLE, VIEW_LATEST, VIEW_LIBRARY });
 
     bindOnce();
 
     state.activeTab = "__init__";
     setTab("events");
 
-    // defaults panel
     setTimeout(() => {
       const panel = ensureMediaLibraryPanel();
       if (panel) {
