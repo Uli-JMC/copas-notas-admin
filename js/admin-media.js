@@ -43,7 +43,7 @@
   function toast(title, msg, ms = 3200) {
     try {
       if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, ms);
-    } catch (_) {}
+    } catch (_) { }
     alert(`${title} — ${msg}`);
   }
 
@@ -123,7 +123,7 @@
   // Permitir pegar URL
   try {
     urlEl.readOnly = false;
-  } catch (_) {}
+  } catch (_) { }
 
   // -------- Estado --------
   const state = {
@@ -238,7 +238,7 @@
     const sb = getSB();
     const { data, error } = await sb
       .from(VIEW_LATEST)
-      .select("slot, public_url, path, media_id, updated_at")
+      .select("slot, public_url, path, media_id, binding_updated_at, media_updated_at")
       .eq("scope", scope)
       .eq("scope_id", String(scope_id))
       .order("slot", { ascending: true });
@@ -550,7 +550,7 @@
         // Como NO guardamos bucket en DB, usamos el bucket seleccionado.
         // Por eso es PRO usar folders distintos (events-img vs events-video) y seleccionar bucket correcto al borrar.
         const bucket = getBucket();
-        await removeFromStorage(bucket, p).catch(() => {});
+        await removeFromStorage(bucket, p).catch(() => { });
       }
 
       state.selected = null;
@@ -590,7 +590,7 @@
 
     btnReset?.addEventListener("click", () => {
       state.selected = null;
-      try { fileEl.value = ""; } catch (_) {}
+      try { fileEl.value = ""; } catch (_) { }
       urlEl.value = "";
       if (nameEl) nameEl.value = "";
       if (tagsEl) tagsEl.value = "";
