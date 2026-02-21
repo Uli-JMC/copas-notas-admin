@@ -36,9 +36,11 @@
   /* login-only page */
   --topbarH: 86px;
 }
-
 *{box-sizing:border-box}
 html,body{height:100%}
+
+ /* Display none */
+[hidden] { display: none !important; }
 
 /* ✅ Fondo full pantalla (sin cortes) */
 body{
