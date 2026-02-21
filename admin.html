@@ -29,8 +29,8 @@
     </div>
   </header>
 
-  <!-- AUTH GATE -->
   <main class="container">
+    <!-- AUTH GATE (se mantiene oculto; tu JS maneja redirect/login) -->
     <section class="authGate" id="authGate" hidden>
       <div class="card">
         <div class="cardHead">
@@ -43,8 +43,8 @@
       </div>
     </section>
 
-    <!-- APP PANEL -->
-    <section class="appPanel" id="appPanel" hidden>
+    <!-- APP PANEL (FIX: no debe venir hidden porque admin-auth.js no lo destapa) -->
+    <section class="appPanel" id="appPanel">
       <div class="adminShell">
 
         <!-- SIDEBAR -->
@@ -152,7 +152,6 @@
 
                       <div class="field">
                         <label class="label" for="evPriceAmount">Precio</label>
-                        <!-- FIX: antes step="100" te limitaba a 0/100/200... -->
                         <input class="input" id="evPriceAmount" type="number" min="0" step="0.01" inputmode="decimal" />
                       </div>
 
@@ -335,7 +334,6 @@
                   <div class="mini">Subí imágenes, videos y asigná slots.</div>
                 </div>
 
-                <!-- Mantengo tu contenedor original para que admin-media.js siga funcionando -->
                 <div id="mediaPanel">
                   <!-- JS (admin-media.js) -->
                 </div>
@@ -376,7 +374,6 @@
                 </div>
               </div>
 
-              <!-- MODAL GALERÍA (IDs esperados por admin-gallery.js) -->
               <div class="modal" id="ecnGalleryModal" hidden aria-hidden="true" role="dialog" aria-label="Editar item de galería">
                 <div class="modalBackdrop" data-close="true"></div>
                 <div class="modalCard">
@@ -388,6 +385,7 @@
                   <form class="form" id="ecnGalleryForm" novalidate>
                     <input id="ecnPromoId" type="hidden" />
                     <input id="ecnGalName" type="hidden" />
+
                     <div class="formGrid">
                       <div class="field field--full">
                         <label class="label" for="ecnGalFile">Archivo</label>
@@ -462,7 +460,6 @@
                 <div class="note" id="ecnNote"></div>
               </div>
 
-              <!-- MODAL PROMO (IDs esperados por admin-promos.js) -->
               <div class="modal" id="ecnPromoModal" hidden aria-hidden="true" role="dialog" aria-label="Editar promoción">
                 <div class="modalBackdrop" data-close="true"></div>
                 <div class="modalCard">
@@ -567,13 +564,12 @@
   <script src="./js/admin-gallery.js"></script>
   <script src="./js/admin-promos.js"></script>
 
-  <!-- Tu validador de tamaño de archivos (lo mantengo tal cual lo tenías) -->
+  <!-- Validador de tamaño de archivos (solo si el form existe) -->
   <script>
     (() => {
       const form = document.querySelector("form#mediaUploadForm");
       const file = document.querySelector("input#mediaFile");
       const maxMB = document.querySelector("select#mediaMaxMB");
-
       if (!form || !file || !maxMB || !window.toast) return;
 
       const getMaxBytes = () => {
@@ -591,20 +587,16 @@
         if (f.size > max) toast("Archivo muy grande", `Máximo: ${fmtMB(max)}. Tu archivo: ${fmtMB(f.size)}.`);
       });
 
-      form.addEventListener(
-        "submit",
-        (e) => {
-          const f = file.files && file.files[0];
-          if (!f) return;
-          const max = getMaxBytes();
-          if (f.size > max) {
-            e.preventDefault();
-            e.stopPropagation();
-            toast("No se puede subir", `El archivo excede ${fmtMB(max)}. Reducilo o exportalo más liviano.`);
-          }
-        },
-        true
-      );
+      form.addEventListener("submit", (e) => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        const max = getMaxBytes();
+        if (f.size > max) {
+          e.preventDefault();
+          e.stopPropagation();
+          toast("No se puede subir", `El archivo excede ${fmtMB(max)}. Reducilo o exportalo más liviano.`);
+        }
+      }, true);
     })();
   </script>
 </body>
