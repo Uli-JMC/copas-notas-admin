@@ -7,6 +7,11 @@
   <title>Admin | Entre Copas &amp; Notas</title>
   <meta name="description" content="Panel de administración para eventos, fechas, inscripciones y medios." />
   <link rel="stylesheet" href="./css/admin.css" />
+
+  <!-- FIX CRÍTICO: si un elemento tiene hidden, NO puede seguir en display:flex -->
+  <style>
+    [hidden] { display: none !important; }
+  </style>
 </head>
 
 <body class="adminPage" data-page="admin">
@@ -30,7 +35,7 @@
   </header>
 
   <main class="container">
-    <!-- AUTH GATE (tu admin-auth.js maneja login/redirect) -->
+    <!-- AUTH GATE -->
     <section class="authGate" id="authGate" hidden>
       <div class="card">
         <div class="cardHead">
@@ -43,8 +48,8 @@
       </div>
     </section>
 
-    <!-- APP PANEL (NO hidden: tu admin-auth.js no lo destapa) -->
-    <section class="appPanel" id="appPanel">
+    <!-- APP PANEL -->
+    <section class="appPanel" id="appPanel" hidden>
       <div class="adminShell">
 
         <!-- SIDEBAR -->
@@ -55,8 +60,8 @@
               <div class="sideTitle">Elegí una vista</div>
             </div>
 
-            <!-- ✅ admin.js escucha .tab -->
-            <nav class="sideNav" aria-label="Secciones del administrador">
+            <!-- admin.js usa .tab -->
+            <nav class="sideNav tabs" role="tablist" aria-label="Secciones del administrador">
               <button class="navBtn tab isActive" type="button" data-tab="events" aria-selected="true">EVENTOS</button>
               <button class="navBtn tab" type="button" data-tab="dates" aria-selected="false">FECHAS</button>
               <button class="navBtn tab" type="button" data-tab="regs" aria-selected="false">INSCRIPCIONES</button>
@@ -85,20 +90,16 @@
 
             <div class="pageTools">
               <label class="srOnly" for="search">Buscar</label>
-              <input class="input input--search" id="search" type="search" placeholder="Buscar por título / tipo / mes" />
+              <input class="input input--search" id="search" type="search" placeholder="Buscar evento o inscripción" />
             </div>
           </div>
 
-          <!-- ✅ admin.js escribe aquí estados -->
-          <div class="note" id="storageNote"></div>
-
-          <!-- TABS -->
+          <!-- PANELS -->
           <div class="tabs" role="tablist" aria-label="Vistas del administrador">
 
             <!-- EVENTOS -->
             <section class="panel" id="tab-events" role="tabpanel">
               <div class="grid2">
-                <!-- LISTA -->
                 <div class="card">
                   <div class="cardHead">
                     <h3 class="h3">Eventos</h3>
@@ -109,95 +110,50 @@
                     <div class="pill">Lista</div>
                     <div class="actions">
                       <button class="btn btn--ghost" id="newEventBtn" type="button">Nuevo</button>
+                      <button class="btn btn--ghost" id="dupEventBtn" type="button">Duplicar</button>
                     </div>
                   </div>
 
-                  <!-- ✅ admin.js usa #eventsEmpty y #eventList -->
-                  <div class="empty" id="eventsEmpty" hidden>
-                    <p class="muted">No hay eventos para mostrar con ese filtro.</p>
-                  </div>
+                  <div id="eventsList" hidden></div>
 
                   <div class="list" id="eventList" aria-label="Lista de eventos">
                     <!-- JS -->
                   </div>
                 </div>
 
-                <!-- EDITOR -->
                 <div class="card">
                   <div class="cardHead">
                     <h3 class="h3">Editor</h3>
-                    <div class="mini">Campos alineados con la BD (events).</div>
+                    <div class="mini">Datos principales del evento.</div>
                   </div>
 
-                  <!-- ✅ admin.js usa #editorEmpty -->
-                  <div class="empty" id="editorEmpty">
-                    <p class="muted">Seleccioná un evento de la lista para editar.</p>
-                  </div>
-
-                  <!-- ✅ admin.js usa #eventForm y #eventId -->
-                  <form class="form" id="eventForm" novalidate hidden>
-                    <input id="eventId" type="hidden" />
-
-                    <!-- ✅ admin.js usa #eventNote -->
-                    <div class="note" id="eventNote"></div>
+                  <form class="form" id="eventForm" novalidate>
+                    <input id="evId" type="hidden" />
 
                     <div class="formGrid">
-                      <div class="field field--full">
+                      <div class="field">
                         <label class="label" for="evTitle">Título</label>
                         <input class="input" id="evTitle" type="text" maxlength="120" required />
                       </div>
 
                       <div class="field">
-                        <label class="label" for="evType">Tipo</label>
-                        <select class="input" id="evType">
-                          <option value="Cata de vino">Cata de vino</option>
-                          <option value="Maridajes">Maridajes</option>
-                          <option value="Mixología">Mixología</option>
-                          <option value="Degustación">Degustación</option>
-                          <option value="Edición especial">Edición especial</option>
-                        </select>
+                        <label class="label" for="evSlug">Slug (URL)</label>
+                        <input class="input" id="evSlug" type="text" maxlength="120" placeholder="ej: cata-italia-vs-usa" />
                       </div>
 
                       <div class="field">
-                        <label class="label" for="evMonth">Mes (clave)</label>
-                        <select class="input" id="evMonth">
-                          <option value="ENERO">ENERO</option>
-                          <option value="FEBRERO">FEBRERO</option>
-                          <option value="MARZO">MARZO</option>
-                          <option value="ABRIL">ABRIL</option>
-                          <option value="MAYO">MAYO</option>
-                          <option value="JUNIO">JUNIO</option>
-                          <option value="JULIO">JULIO</option>
-                          <option value="AGOSTO">AGOSTO</option>
-                          <option value="SEPTIEMBRE">SEPTIEMBRE</option>
-                          <option value="OCTUBRE">OCTUBRE</option>
-                          <option value="NOVIEMBRE">NOVIEMBRE</option>
-                          <option value="DICIEMBRE">DICIEMBRE</option>
-                        </select>
-                      </div>
-
-                      <div class="field field--full">
-                        <label class="label" for="evDesc">Descripción</label>
-                        <textarea class="input textarea" id="evDesc" rows="6" maxlength="520"></textarea>
-                        <div class="help">
-                          <span class="muted"><span id="descCount">0</span>/520</span>
-                          <span class="muted">Se usa en cards y detalles.</span>
-                        </div>
+                        <label class="label" for="evPlace">Lugar</label>
+                        <input class="input" id="evPlace" type="text" maxlength="120" />
                       </div>
 
                       <div class="field">
-                        <label class="label" for="evLocation">Ubicación</label>
-                        <input class="input" id="evLocation" type="text" maxlength="140" placeholder="ej: San José, CR" />
-                      </div>
-
-                      <div class="field">
-                        <label class="label" for="evTimeRange">Horario</label>
-                        <input class="input" id="evTimeRange" type="text" maxlength="80" placeholder="ej: 7:00 pm a 9:00 pm" />
+                        <label class="label" for="evSchedule">Horario</label>
+                        <input class="input" id="evSchedule" type="text" maxlength="80" placeholder="ej: 7:00 pm a 9:00 pm" />
                       </div>
 
                       <div class="field">
                         <label class="label" for="evDurationHours">Duración (horas)</label>
-                        <input class="input" id="evDurationHours" type="number" min="0" step="0.5" inputmode="decimal" />
+                        <input class="input" id="evDurationHours" type="number" min="0" step="0.5" />
                       </div>
 
                       <div class="field">
@@ -206,54 +162,62 @@
                       </div>
 
                       <div class="field">
-                        <label class="label" for="evPriceCurrency">Moneda</label>
-                        <select class="input" id="evPriceCurrency">
+                        <label class="label" for="evCurrency">Moneda</label>
+                        <select class="input" id="evCurrency">
                           <option value="CRC">CRC</option>
                           <option value="USD">USD</option>
                         </select>
                       </div>
 
                       <div class="field field--full">
-                        <label class="label" for="evMoreImgAlt">ALT imagen adicional (event_more)</label>
-                        <input class="input" id="evMoreImgAlt" type="text" maxlength="160" placeholder="Texto alternativo (accesibilidad/SEO)" />
+                        <label class="label" for="evDesc">Descripción</label>
+                        <textarea class="input textarea" id="evDesc" rows="5" maxlength="520"></textarea>
+                        <div class="help">
+                          <span id="evDescCount" class="muted">0/520</span>
+                          <span class="muted">Opcional. Ayuda con accesibilidad/SEO.</span>
+                        </div>
                       </div>
 
-                      <!-- ✅ Media solo lectura: admin.js lo llena desde v_media_bindings_latest -->
                       <div class="field field--full">
-                        <div class="kicker">MEDIOS (solo lectura / se gestionan en pestaña MEDIOS)</div>
-                        <div class="formGrid">
-                          <div class="field field--full">
-                            <label class="label" for="evImg">slide_img (URL)</label>
-                            <input class="input" id="evImg" type="url" readonly />
+                        <div class="mediaRow">
+                          <div>
+                            <div class="kicker">BANNER (URL) — DESKTOP</div>
+                            <button class="btn btn--ghost" id="evBannerDesktopBtn" type="button">Gestionar en Medios</button>
+                            <div class="mini">Solo lectura aquí. Asigná en Medios (slot desktop_event).</div>
+                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)" readonly />
                           </div>
 
-                          <div class="field field--full">
-                            <label class="label" for="evVideoUrl">slide_video (URL)</label>
-                            <input class="input" id="evVideoUrl" type="url" readonly />
-                          </div>
-
-                          <div class="field">
-                            <label class="label" for="evImgDesktop">desktop_event (URL)</label>
-                            <input class="input" id="evImgDesktop" type="url" readonly />
-                          </div>
-
-                          <div class="field">
-                            <label class="label" for="evImgMobile">mobile_event (URL)</label>
-                            <input class="input" id="evImgMobile" type="url" readonly />
-                          </div>
-
-                          <div class="field field--full">
-                            <label class="label" for="evMoreImg">event_more (URL)</label>
-                            <input class="input" id="evMoreImg" type="url" readonly />
+                          <div>
+                            <div class="kicker">BANNER (URL) — MOBILE</div>
+                            <button class="btn btn--ghost" id="evBannerMobileBtn" type="button">Gestionar en Medios</button>
+                            <div class="mini">Solo lectura aquí. Asigná en Medios (slot mobile_event).</div>
+                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)" readonly />
                           </div>
                         </div>
-                        <div class="mini">Asigná estos slots desde la pestaña <b>MEDIOS</b>.</div>
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="evAlt">Texto alternativo del banner</label>
+                        <input class="input" id="evAlt" type="text" maxlength="140" placeholder="Opcional. Ayuda con accesibilidad/SEO." />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="evActive">Estado</label>
+                        <select class="input" id="evActive">
+                          <option value="true">Publicado</option>
+                          <option value="false">Borrador</option>
+                        </select>
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="evBadge">Badge</label>
+                        <input class="input" id="evBadge" type="text" maxlength="40" placeholder="ej: Cupos limitados" />
                       </div>
                     </div>
 
                     <div class="formActions">
-                      <button class="btn btn--primary" type="submit">GUARDAR</button>
-                      <button class="btn btn--danger" id="delEventBtn" type="button">ELIMINAR</button>
+                      <button class="btn btn--primary" id="saveEventBtn" type="submit">GUARDAR</button>
+                      <button class="btn btn--danger" id="deleteEventBtn" type="button">ELIMINAR</button>
                     </div>
                   </form>
                 </div>
@@ -262,7 +226,6 @@
 
             <!-- FECHAS -->
             <section class="panel" id="tab-dates" role="tabpanel" hidden>
-              <!-- tu admin-dates.js ya maneja el contenido por IDs propios -->
               <div class="grid2">
                 <div class="card">
                   <div class="cardHead">
@@ -279,6 +242,7 @@
                   </div>
 
                   <div class="note" id="datesNote"></div>
+
                   <div class="list" id="datesEventList" aria-label="Lista de eventos para fechas"></div>
 
                   <div class="empty" id="datesEmpty" hidden>
@@ -337,7 +301,7 @@
                   <div class="pill">Registros</div>
                   <div class="actions">
                     <button class="btn btn--ghost" id="exportCsvBtn" type="button">Exportar CSV</button>
-                    <button class="btn btn--ghost" id="seedRegsBtn" type="button" hidden>Seed</button>
+                    <button class="btn btn--ghost" id="seedRegsBtn" type="button" hidden>Refrescar</button>
                   </div>
                 </div>
 
@@ -362,14 +326,135 @@
               </div>
             </section>
 
-            <!-- MEDIOS -->
+            <!-- MEDIOS (estructura completa para admin-media.js) -->
             <section class="panel" id="tab-media" role="tabpanel" hidden>
-              <div class="card">
-                <div class="cardHead">
-                  <h3 class="h3">Medios</h3>
-                  <div class="mini">Subí imágenes, videos y asigná slots.</div>
+              <div class="grid2">
+                <div class="card">
+                  <div class="cardHead">
+                    <h3 class="h3">Medios</h3>
+                    <div class="mini">Subí imágenes/videos, generá URL pública y asigná slots.</div>
+                  </div>
+
+                  <form class="form" id="mediaForm" data-max-mb="25">
+                    <input type="hidden" id="mediaId" />
+
+                    <div class="formGrid">
+                      <div class="field">
+                        <label class="label" for="mediaBucket">Bucket</label>
+                        <select class="input" id="mediaBucket">
+                          <option value="media">media (imágenes)</option>
+                          <option value="video">video (videos)</option>
+                        </select>
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaFolder">Folder</label>
+                        <input class="input" id="mediaFolder" type="text" placeholder="events | promos | menu | misc" />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaName">Nombre</label>
+                        <input class="input" id="mediaName" type="text" placeholder="Ej: hero-febrero" />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaTags">Tags</label>
+                        <input class="input" id="mediaTags" type="text" placeholder="#vino #maridaje" />
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaFile">Archivo</label>
+                        <input class="input" id="mediaFile" type="file" />
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaUrl">URL pública</label>
+                        <input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL..." />
+                      </div>
+                    </div>
+
+                    <div class="formActions" style="justify-content:flex-start;">
+                      <button class="btn btn--primary" id="mediaUploadBtn" type="submit">SUBIR</button>
+                      <button class="btn btn--ghost" id="mediaCopyBtn" type="button">COPIAR URL</button>
+                      <button class="btn btn--ghost" id="mediaResetBtn" type="button">LIMPIAR</button>
+                      <button class="btn btn--danger" id="deleteMediaBtn" type="button">ELIMINAR</button>
+                    </div>
+
+                    <div class="note" id="mediaNote" aria-live="polite"></div>
+                  </form>
+
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardHead">
+                      <h3 class="h3">Lista</h3>
+                      <div class="mini">Seleccioná un medio para previsualizar y asignar.</div>
+                    </div>
+
+                    <div class="actions" style="margin-bottom:10px;">
+                      <button class="btn btn--ghost" id="mediaRefreshBtn" type="button">Refrescar lista</button>
+                    </div>
+
+                    <div class="list" id="mediaList" aria-label="Lista de medios"></div>
+                  </div>
                 </div>
-                <div id="mediaPanel"></div>
+
+                <div class="card">
+                  <div class="cardHead">
+                    <h3 class="h3" id="mediaTitle">Preview</h3>
+                    <div class="mini">Vista previa del medio seleccionado.</div>
+                  </div>
+
+                  <div id="mediaPreviewEmpty" class="muted">No hay medio seleccionado.</div>
+
+                  <div id="mediaPreview" hidden>
+                    <div class="preview">
+                      <img id="mediaPreviewImg" alt="" />
+                    </div>
+                    <div class="note" id="mediaPreviewMeta"></div>
+                  </div>
+
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardHead">
+                      <h3 class="h3">Asignar</h3>
+                      <div class="mini">Asigná el medio a un evento/menú y su slot.</div>
+                    </div>
+
+                    <div class="formGrid">
+                      <div class="field">
+                        <label class="label" for="mediaScopeType">Tipo</label>
+                        <select class="input" id="mediaScopeType">
+                          <option value="event">Evento</option>
+                          <option value="menu_item">Menú</option>
+                        </select>
+                      </div>
+
+                      <div class="field" id="mediaScopeEventWrap">
+                        <label class="label" for="mediaEventSelect">Evento</label>
+                        <select class="input" id="mediaEventSelect">
+                          <option value="">Seleccionar evento…</option>
+                        </select>
+                      </div>
+
+                      <div class="field" id="mediaScopeMenuWrap" hidden>
+                        <label class="label" for="mediaMenuSelect">Ítem de menú</label>
+                        <select class="input" id="mediaMenuSelect">
+                          <option value="">Seleccionar ítem…</option>
+                        </select>
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaSlotSelect">Slot</label>
+                        <select class="input" id="mediaSlotSelect"></select>
+                      </div>
+                    </div>
+
+                    <div class="formActions" style="justify-content:flex-start;">
+                      <button class="btn btn--primary" id="mediaAssignBtn" type="button">ASIGNAR</button>
+                      <button class="btn btn--ghost" id="mediaViewAssignedBtn" type="button">VER ASIGNADOS</button>
+                    </div>
+
+                    <div class="list" id="mediaAssignedList" aria-label="Asignados"></div>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -421,7 +506,6 @@
                       <div class="field field--full">
                         <label class="label" for="ecnGalFile">Archivo</label>
                         <input class="input" id="ecnGalFile" type="file" accept="image/*,video/*" />
-                        <div class="mini">Se sube a Storage (según tu flujo actual).</div>
                       </div>
 
                       <div class="field">
@@ -545,7 +629,6 @@
                       <div class="field field--full">
                         <label class="label" for="ecnMediaImg">Imagen (URL)</label>
                         <input class="input" id="ecnMediaImg" type="url" placeholder="Asigná desde Medios si aplica" />
-                        <div class="mini">Si estás usando bindings, mantenelo alineado a tus slots.</div>
                       </div>
 
                       <div class="field">
@@ -591,21 +674,24 @@
   <script src="./js/admin-gallery.js"></script>
   <script src="./js/admin-promos.js"></script>
 
-  <!-- Validador de tamaño de archivos (solo si el form existe) -->
+  <!-- Validador liviano de tamaño para mediaForm -->
   <script>
     (() => {
-      const form = document.querySelector("form#mediaUploadForm");
-      const file = document.querySelector("input#mediaFile");
-      const maxMB = document.querySelector("select#mediaMaxMB");
-      if (!form || !file || !maxMB || !window.toast) return;
+      const form = document.getElementById("mediaForm");
+      const file = document.getElementById("mediaFile");
+      if (!form || !file) return;
 
       const getMaxBytes = () => {
-        const v = parseFloat(maxMB.value || "0");
-        if (!v || Number.isNaN(v)) return 10 * 1024 * 1024;
-        return v * 1024 * 1024;
+        const raw = form.getAttribute("data-max-mb");
+        const mb = Number(raw || 25);
+        const safe = Number.isFinite(mb) && mb > 0 ? mb : 25;
+        return safe * 1024 * 1024;
       };
-
       const fmtMB = (bytes) => (bytes / (1024 * 1024)).toFixed(2) + " MB";
+      const toast = (t, m) => {
+        try { if (window.toast) return window.toast(t, m); } catch (_) {}
+        alert(t + " — " + m);
+      };
 
       file.addEventListener("change", () => {
         const f = file.files && file.files[0];
