@@ -1,28 +1,35 @@
 "use strict";
 
 /**
- * admin.js — Entre Copas & Notas ✅ (Eventos + Tabs)
- * - Mantiene tu panel funcionando (events/dates/regs/media/gallery/promos)
- * - ✅ Deshabilita “Media Library” embebido en Eventos para evitar duplicación
- * - ✅ Los medios se gestionan SOLO en el tab Medios (admin-media.js)
- * - ✅ FIX CRÍTICO (2026-02-22): dispara admin:tab en window + document (compat total)
+ * admin.js — Entre Copas & Notas ✅ PRO (Eventos + Tabs)
+ * - Panel central: tabs + CRUD events
+ * - Medios: SOLO lectura en Eventos (urls vienen de v_media_bindings_latest)
+ * - Gestionar Medios: botón que abre tab "media"
+ * - FIX CRÍTICO (2026-02-22): dispara admin:tab en window + document (compat total)
  */
 
 (function () {
-  // ---------------------------
+  // ------------------------------------------------------------
+  // Guard anti doble montaje
+  // ------------------------------------------------------------
+  if (window.__ecnAdminMounted === true) return;
+  window.__ecnAdminMounted = true;
+
+  // ------------------------------------------------------------
   // DOM helpers
-  // ---------------------------
+  // ------------------------------------------------------------
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
   const appPanel = $("#appPanel");
   if (!appPanel) return;
 
-  const VERSION = "2026-02-22.admin.clean.2";
+  const VERSION = "2026-02-22.admin.pro.1";
   console.log("[admin] boot", { VERSION });
 
-  // ---------------------------
+  // ------------------------------------------------------------
   // Toast
-  // ---------------------------
+  // ------------------------------------------------------------
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -60,12 +67,13 @@
     setTimeout(kill, timeoutMs);
   }
 
-  // ---------------------------
+  // ------------------------------------------------------------
   // Utils
-  // ---------------------------
+  // ------------------------------------------------------------
   const cleanSpaces = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
   const safeStr = (x) => String(x ?? "");
-  const safeNum = (x, def = 0) => {
+  const safeNum = (x, def = null) => {
+    if (x === null || x === undefined || x === "") return def;
     const n = Number(x);
     return Number.isFinite(n) ? n : def;
   };
@@ -85,9 +93,9 @@
     );
   }
 
-  // ---------------------------
+  // ------------------------------------------------------------
   // Supabase
-  // ---------------------------
+  // ------------------------------------------------------------
   function getSB() {
     if (!window.APP) return null;
     return window.APP.supabase || window.APP.sb || null;
@@ -113,35 +121,42 @@
     }
   }
 
-  // ---------------------------
-  // Config
-  // ---------------------------
+  // ------------------------------------------------------------
+  // Config DB
+  // ------------------------------------------------------------
   const EVENTS_TABLE = "events";
   const VIEW_BINDINGS_LATEST = "v_media_bindings_latest";
-  const EVENT_SLOTS = ["slide_img", "slide_video", "desktop_event", "mobile_event", "event_more"];
 
-  // ---------------------------
-  // Tabs
-  // ---------------------------
+  // slots que nos interesan en EVENTOS (por tu HTML actual)
+  const EVENT_SLOTS_READONLY = ["desktop_event", "mobile_event"];
+
+  // ------------------------------------------------------------
+  // State
+  // ------------------------------------------------------------
   const state = {
     activeTab: "events",
     didBindTabs: false,
+    didBindEditor: false,
     query: "",
     events: [],
     selectedEventId: null,
   };
 
+  // ------------------------------------------------------------
+  // Tabs
+  // ------------------------------------------------------------
   function hideAllTabs() {
     $$('[role="tabpanel"]', appPanel).forEach((p) => (p.hidden = true));
   }
 
-  // ✅ FIX: compat total para módulos que escuchan en window vs document
+  // ✅ compat total para módulos que escuchan en window vs document
   function dispatchAdminTab(tab) {
-    const ev = new CustomEvent("admin:tab", { detail: { tab } });
-    // módulos nuevos / correctos (window)
-    try { window.dispatchEvent(ev); } catch (_) {}
-    // compat con módulos viejos (document)
-    try { document.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab } })); } catch (_) {}
+    try {
+      window.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab } }));
+    } catch (_) {}
+    try {
+      document.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab } }));
+    } catch (_) {}
   }
 
   function setTab(tabName) {
@@ -149,14 +164,14 @@
 
     $$(".tab", appPanel).forEach((t) => {
       t.setAttribute("aria-selected", t.dataset.tab === state.activeTab ? "true" : "false");
+      // opcional: clase visual
+      t.classList.toggle("isActive", t.dataset.tab === state.activeTab);
     });
 
     hideAllTabs();
     const panel = $("#tab-" + state.activeTab);
     if (panel) panel.hidden = false;
 
-    // ✅ antes: solo document.dispatchEvent(...)
-    // ✅ ahora: window + document (compat total)
     dispatchAdminTab(state.activeTab);
   }
 
@@ -170,35 +185,14 @@
 
     $("#search")?.addEventListener("input", (e) => {
       state.query = cleanSpaces(e.target.value || "");
+      // Solo filtra lista de eventos. Regs ya escucha #search en su módulo.
       renderEventList();
     });
   }
 
-  // ---------------------------
-  // ✅ Deshabilitar Media Library embebido (evita duplicación)
-  // ---------------------------
-  function ensureMediaLibraryPanel() {
-    // ✅ Entre Copas & Notas: la gestión de Medios vive SOLO en el tab “Medios” (admin-media.js).
-    // Este panel embebido en Eventos se deshabilita para evitar duplicación/confusión.
-    return null;
-  }
-
-  // ---------------------------
-  // ✅ Eventos: campos de media son SOLO lectura (gestión en tab Medios)
-  // ---------------------------
-  function setEventMediaFieldsReadOnly(on) {
-    const ids = ["evImg", "evImgDesktop", "evImgMobile", "evVideoUrl", "evMoreImg"];
-    ids.forEach((id) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.readOnly = !!on;
-      el.title = on ? "Gestionar en Medios" : "";
-    });
-  }
-
-  // ---------------------------
-  // Events CRUD
-  // ---------------------------
+  // ------------------------------------------------------------
+  // Events mapping
+  // ------------------------------------------------------------
   function mapEventRow(row) {
     const ev = row || {};
     return {
@@ -207,6 +201,7 @@
       type: safeStr(ev.type || ""),
       month_key: safeStr(ev.month_key || ""),
       description: safeStr(ev.description || ""),
+      // en tu HTML lo llamás "Lugar" y "Horario"
       location: safeStr(ev.location || ""),
       time_range: safeStr(ev.time_range || ""),
       duration_hours: ev.duration_hours,
@@ -215,6 +210,10 @@
       more_img_alt: safeStr(ev.more_img_alt || ""),
       created_at: safeStr(ev.created_at || ""),
       updated_at: safeStr(ev.updated_at || ""),
+      // opcionales si existen en tu tabla, no rompen si no
+      slug: safeStr(ev.slug || ""),
+      badge: safeStr(ev.badge || ""),
+      active: typeof ev.active === "boolean" ? ev.active : null,
     };
   }
 
@@ -246,12 +245,13 @@
     if (error) throw error;
   }
 
-  // ---------------------------
-  // Media (solo lectura) desde v_media_bindings_latest
-  // ---------------------------
+  // ------------------------------------------------------------
+  // Media readonly desde v_media_bindings_latest
+  // ------------------------------------------------------------
   async function fetchEventSlotUrlsLatest(eventId) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
+
     const eid = safeStr(eventId || "").trim();
     if (!eid) return {};
 
@@ -260,7 +260,7 @@
       .select("slot, public_url, path")
       .eq("scope", "event")
       .eq("scope_id", eid)
-      .in("slot", EVENT_SLOTS);
+      .in("slot", EVENT_SLOTS_READONLY);
 
     if (error) throw error;
 
@@ -273,12 +273,11 @@
     return map;
   }
 
-  // ---------------------------
-  // Render list
-  // ---------------------------
+  // ------------------------------------------------------------
+  // Render list (Eventos)
+  // ------------------------------------------------------------
   function renderEventList() {
     const list = $("#eventList");
-    const empty = $("#eventsEmpty");
     if (!list) return;
 
     const q = cleanSpaces(state.query).toLowerCase();
@@ -293,10 +292,12 @@
 
     list.innerHTML = "";
     if (!items.length) {
-      if (empty) empty.hidden = false;
+      const div = document.createElement("div");
+      div.className = "empty";
+      div.textContent = "No hay eventos para mostrar.";
+      list.appendChild(div);
       return;
     }
-    if (empty) empty.hidden = true;
 
     const frag = document.createDocumentFragment();
     items.forEach((ev) => {
@@ -318,47 +319,48 @@
     list.appendChild(frag);
   }
 
-  // ---------------------------
-  // Editor
-  // ---------------------------
-  function setNote(msg) {
-    const el = $("#eventNote");
-    if (el) el.textContent = cleanSpaces(msg || "");
-  }
-
-  function setStorageNote(msg) {
-    const el = $("#storageNote");
-    if (el) el.textContent = cleanSpaces(msg || "");
-  }
-
+  // ------------------------------------------------------------
+  // Editor (IDs alineados a tu admin.html PRO)
+  // ------------------------------------------------------------
   function setEditorVisible(on) {
-    const empty = $("#editorEmpty");
+    // En tu HTML no hay editorEmpty, así que solo aseguramos form visible
     const form = $("#eventForm");
-    if (empty) empty.hidden = !!on;
     if (form) form.hidden = !on;
   }
 
-  function fillEditor(ev) {
-    $("#eventId") && ($("#eventId").value = ev.id || "");
-    $("#evTitle") && ($("#evTitle").value = ev.title || "");
-    $("#evType") && ($("#evType").value = ev.type || "Cata de vino");
-    $("#evMonth") && ($("#evMonth").value = ev.month_key || "ENERO");
-    $("#evDesc") && ($("#evDesc").value = ev.description || "");
-    $("#descCount") && ($("#descCount").textContent = String((ev.description || "").length));
-    $("#evLocation") && ($("#evLocation").value = ev.location || "");
-    $("#evTimeRange") && ($("#evTimeRange").value = ev.time_range || "");
-    $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours ?? ""));
-    $("#evPriceAmount") && ($("#evPriceAmount").value = ev.price_amount ?? ""));
-    $("#evPriceCurrency") && ($("#evPriceCurrency").value = ev.price_currency || "CRC");
-    $("#evMoreImgAlt") && ($("#evMoreImgAlt").value = ev.more_img_alt || "");
+  function setDescCount() {
+    const desc = $("#evDesc");
+    const count = $("#evDescCount");
+    if (!desc || !count) return;
+    const len = safeStr(desc.value || "").length;
+    count.textContent = `${len}/520`;
+  }
 
-    // media readonly (se llena por view)
-    setEventMediaFieldsReadOnly(true);
-    $("#evImg") && ($("#evImg").value = "");
-    $("#evVideoUrl") && ($("#evVideoUrl").value = "");
-    $("#evImgDesktop") && ($("#evImgDesktop").value = "");
-    $("#evImgMobile") && ($("#evImgMobile").value = "");
-    $("#evMoreImg") && ($("#evMoreImg").value = "");
+  function fillEditor(ev) {
+    // hidden id real del HTML
+    const idEl = $("#evId");
+    if (idEl) idEl.value = ev.id || "";
+
+    $("#evTitle") && ($("#evTitle").value = ev.title || "");
+    $("#evDesc") && ($("#evDesc").value = ev.description || "");
+    setDescCount();
+
+    // estos campos existen en tu HTML PRO
+    $("#evPlace") && ($("#evPlace").value = ev.location || "");
+    $("#evSchedule") && ($("#evSchedule").value = ev.time_range || "");
+    $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours ?? "");
+    $("#evPriceAmount") && ($("#evPriceAmount").value = ev.price_amount ?? "");
+    $("#evCurrency") && ($("#evCurrency").value = ev.price_currency || "CRC");
+
+    // opcionales (si tu tabla tiene columnas y luego ajustamos payload)
+    $("#evSlug") && ($("#evSlug").value = ev.slug || "");
+    $("#evBadge") && ($("#evBadge").value = ev.badge || "");
+    $("#evActive") && (typeof ev.active === "boolean" ? ($("#evActive").value = ev.active ? "true" : "false") : null);
+    $("#evAlt") && ($("#evAlt").value = ev.more_img_alt || "");
+
+    // media readonly (tu HTML PRO)
+    $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
+    $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
   }
 
   async function openEvent(eventId) {
@@ -368,54 +370,63 @@
     state.selectedEventId = ev.id;
     setEditorVisible(true);
     fillEditor(ev);
-    setNote("");
 
-    // cargar urls latest para inputs (solo lectura)
+    // cargar urls readonly desde view
     try {
       const map = await fetchEventSlotUrlsLatest(ev.id);
-      $("#evImg") && ($("#evImg").value = map.slide_img || "");
-      $("#evVideoUrl") && ($("#evVideoUrl").value = map.slide_video || "");
-      $("#evImgDesktop") && ($("#evImgDesktop").value = map.desktop_event || "");
-      $("#evImgMobile") && ($("#evImgMobile").value = map.mobile_event || "");
-      $("#evMoreImg") && ($("#evMoreImg").value = map.event_more || "");
+      $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = map.desktop_event || "");
+      $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = map.mobile_event || "");
     } catch (e) {
       console.warn(e);
     }
   }
 
   function readEditorPayload() {
-    return {
+    // ⚠️ Solo mandamos campos que sabemos que existen en tu tabla base "events"
+    // Si luego confirmás que slug/active/badge existen, los incluimos.
+    const payload = {
       title: cleanSpaces($("#evTitle")?.value || ""),
-      type: cleanSpaces($("#evType")?.value || ""),
-      month_key: cleanSpaces($("#evMonth")?.value || ""),
       description: cleanSpaces($("#evDesc")?.value || ""),
-      location: cleanSpaces($("#evLocation")?.value || ""),
-      time_range: cleanSpaces($("#evTimeRange")?.value || ""),
-      duration_hours: safeNum($("#evDurationHours")?.value || null, null),
-      price_amount: safeNum($("#evPriceAmount")?.value || null, null),
-      price_currency: cleanSpaces($("#evPriceCurrency")?.value || "CRC"),
-      more_img_alt: cleanSpaces($("#evMoreImgAlt")?.value || ""),
+      location: cleanSpaces($("#evPlace")?.value || ""),
+      time_range: cleanSpaces($("#evSchedule")?.value || ""),
+      duration_hours: safeNum($("#evDurationHours")?.value ?? null, null),
+      price_amount: safeNum($("#evPriceAmount")?.value ?? null, null),
+      price_currency: cleanSpaces($("#evCurrency")?.value || "CRC"),
+      more_img_alt: cleanSpaces($("#evAlt")?.value || ""),
     };
+
+    // Campos opcionales (solo si están presentes y querés usarlos)
+    const slug = cleanSpaces($("#evSlug")?.value || "");
+    if (slug) payload.slug = slug;
+
+    const badge = cleanSpaces($("#evBadge")?.value || "");
+    if (badge) payload.badge = badge;
+
+    const activeStr = cleanSpaces($("#evActive")?.value || "");
+    if (activeStr === "true" || activeStr === "false") payload.active = activeStr === "true";
+
+    return payload;
   }
 
-  // ---------------------------
-  // Bind editor buttons
-  // ---------------------------
+  // ------------------------------------------------------------
+  // Bind editor actions
+  // ------------------------------------------------------------
   function bindEditorOnce() {
-    $("#evDesc")?.addEventListener("input", (e) => {
-      const v = safeStr(e.target.value || "");
-      $("#descCount") && ($("#descCount").textContent = String(v.length));
-    });
+    if (state.didBindEditor) return;
+    state.didBindEditor = true;
+
+    $("#evDesc")?.addEventListener("input", setDescCount);
+
+    // Botones: "Gestionar en Medios"
+    $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
+    $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
 
     $("#newEventBtn")?.addEventListener("click", async () => {
       setTab("events");
       setEditorVisible(true);
-      setNote("");
 
       const draft = {
         title: "Nuevo evento",
-        type: "Cata de vino",
-        month_key: "ENERO",
         description: "",
         location: "",
         time_range: "",
@@ -423,69 +434,64 @@
         price_amount: null,
         price_currency: "CRC",
         more_img_alt: "",
+        // si tu tabla tiene defaults para type/month_key no los forzamos aquí
       };
 
       try {
-        setStorageNote("Creando evento…");
+        toast("Evento", "Creando…", 900);
         const created = await insertEvent(draft);
         state.events.unshift(created);
         renderEventList();
         await openEvent(created.id);
-        setStorageNote("");
-        toast("Evento", "Creado. Completá el editor y guardá.", 2600);
+        toast("Evento", "Creado. Completá el editor y guardá.", 2200);
       } catch (e) {
         console.warn(e);
-        setStorageNote("");
         toast("Error", looksLikeRLSError(e) ? "RLS bloquea crear eventos." : (e.message || String(e)));
       }
     });
 
     $("#eventForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const id = cleanSpaces($("#eventId")?.value || "");
+      const id = cleanSpaces($("#evId")?.value || "");
       if (!id) return;
 
       try {
-        setStorageNote("Guardando…");
+        toast("Guardando", "Actualizando evento…", 900);
         const payload = readEditorPayload();
         const updated = await updateEvent(id, payload);
         state.events = state.events.map((x) => (x.id === id ? updated : x));
         renderEventList();
-        setStorageNote("");
-        toast("Guardado", "Evento actualizado.", 2200);
+        toast("Guardado", "Evento actualizado.", 1800);
       } catch (err) {
         console.warn(err);
-        setStorageNote("");
         toast("Error", looksLikeRLSError(err) ? "RLS bloquea editar eventos." : (err.message || String(err)));
       }
     });
 
-    $("#delEventBtn")?.addEventListener("click", async () => {
-      const id = cleanSpaces($("#eventId")?.value || "");
+    $("#deleteEventBtn")?.addEventListener("click", async () => {
+      const id = cleanSpaces($("#evId")?.value || "");
       if (!id) return;
       const ok = confirm("¿Eliminar este evento?");
       if (!ok) return;
 
       try {
-        setStorageNote("Eliminando…");
+        toast("Eliminando", "Procesando…", 900);
         await deleteEvent(id);
         state.events = state.events.filter((x) => x.id !== id);
         state.selectedEventId = null;
         renderEventList();
         setEditorVisible(false);
-        setStorageNote("");
-        toast("Eliminado", "Evento eliminado.", 2200);
+        toast("Eliminado", "Evento eliminado.", 1800);
       } catch (err) {
         console.warn(err);
-        setStorageNote("");
         toast("Error", looksLikeRLSError(err) ? "RLS bloquea eliminar eventos." : (err.message || String(err)));
       }
     });
   }
 
-  // ---------------------------
+  // ------------------------------------------------------------
   // Boot
-  // ---------------------------
+  // ------------------------------------------------------------
   async function boot() {
     bindTabsOnce();
     bindEditorOnce();
@@ -495,13 +501,14 @@
     if (!s) return;
 
     try {
-      setStorageNote("Cargando…");
       await fetchEvents();
       renderEventList();
-      setStorageNote("");
+
+      // Si hay eventos, abrir el primero (opcional)
+      // if (state.events[0]?.id) openEvent(state.events[0].id);
+
     } catch (e) {
       console.warn(e);
-      setStorageNote("");
       toast("Error", looksLikeRLSError(e) ? "RLS bloquea lectura de eventos." : (e.message || String(e)));
     }
   }
