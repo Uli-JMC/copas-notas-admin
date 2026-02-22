@@ -1128,3 +1128,12 @@ body.adminLoginPage .page{
   filter:brightness(.85);
 }
 .slide{ position:relative; overflow:hidden; }
+
+
+/* === FIX: MODALES OCULTOS NO PUEDEN TAPAR LA UI === */
+.modal[hidden],
+#ecnPromoModal[hidden],
+#ecnGalleryModal[hidden]{
+  display:none !important;
+  pointer-events:none !important;
+}
