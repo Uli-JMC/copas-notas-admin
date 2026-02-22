@@ -5,6 +5,7 @@
  * - Mantiene tu panel funcionando (events/dates/regs/media/gallery/promos)
  * - ✅ Deshabilita “Media Library” embebido en Eventos para evitar duplicación
  * - ✅ Los medios se gestionan SOLO en el tab Medios (admin-media.js)
+ * - ✅ FIX CRÍTICO (2026-02-22): dispara admin:tab en window + document (compat total)
  */
 
 (function () {
@@ -16,7 +17,8 @@
   const appPanel = $("#appPanel");
   if (!appPanel) return;
 
-  const VERSION = "2026-02-20.admin.clean.1";
+  const VERSION = "2026-02-22.admin.clean.2";
+  console.log("[admin] boot", { VERSION });
 
   // ---------------------------
   // Toast
@@ -133,6 +135,15 @@
     $$('[role="tabpanel"]', appPanel).forEach((p) => (p.hidden = true));
   }
 
+  // ✅ FIX: compat total para módulos que escuchan en window vs document
+  function dispatchAdminTab(tab) {
+    const ev = new CustomEvent("admin:tab", { detail: { tab } });
+    // módulos nuevos / correctos (window)
+    try { window.dispatchEvent(ev); } catch (_) {}
+    // compat con módulos viejos (document)
+    try { document.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab } })); } catch (_) {}
+  }
+
   function setTab(tabName) {
     state.activeTab = tabName || "events";
 
@@ -144,7 +155,9 @@
     const panel = $("#tab-" + state.activeTab);
     if (panel) panel.hidden = false;
 
-    document.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab: state.activeTab } }));
+    // ✅ antes: solo document.dispatchEvent(...)
+    // ✅ ahora: window + document (compat total)
+    dispatchAdminTab(state.activeTab);
   }
 
   function bindTabsOnce() {
@@ -334,8 +347,8 @@
     $("#descCount") && ($("#descCount").textContent = String((ev.description || "").length));
     $("#evLocation") && ($("#evLocation").value = ev.location || "");
     $("#evTimeRange") && ($("#evTimeRange").value = ev.time_range || "");
-    $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours ?? "");
-    $("#evPriceAmount") && ($("#evPriceAmount").value = ev.price_amount ?? "");
+    $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours ?? ""));
+    $("#evPriceAmount") && ($("#evPriceAmount").value = ev.price_amount ?? ""));
     $("#evPriceCurrency") && ($("#evPriceCurrency").value = ev.price_currency || "CRC");
     $("#evMoreImgAlt") && ($("#evMoreImgAlt").value = ev.more_img_alt || "");
 

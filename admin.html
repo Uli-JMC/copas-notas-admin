@@ -7,12 +7,16 @@
   <title>Admin | Entre Copas &amp; Notas</title>
   <meta name="description" content="Panel de administración para eventos, fechas, inscripciones y medios." />
   <link rel="stylesheet" href="./css/admin.css" />
+
+  <!-- FIX CRÍTICO: si un elemento tiene hidden, NO puede quedar visible por CSS -->
+  <style>
+    [hidden]{ display:none !important; }
+  </style>
 </head>
 
 <body class="adminPage" data-page="admin">
   <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
 
-  <!-- TOPBAR -->
   <header class="topbar">
     <div class="container">
       <div class="nav">
@@ -30,11 +34,23 @@
   </header>
 
   <main class="container">
-    <!-- APP PANEL (NO hidden: admin-auth.js solo redirige si no hay sesión) -->
-    <section class="appPanel" id="appPanel">
+    <!-- AUTH GATE (lo maneja admin-auth.js) -->
+    <section class="authGate" id="authGate" hidden>
+      <div class="card">
+        <div class="cardHead">
+          <h2 class="h2">Acceso</h2>
+          <div class="mini">Iniciá sesión para administrar el contenido.</div>
+        </div>
+        <div class="content">
+          <p class="muted">Redirigiendo al login…</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- APP -->
+    <section class="appPanel" id="appPanel" hidden>
       <div class="adminShell">
 
-        <!-- SIDEBAR -->
         <aside class="sidebar">
           <div class="sideCard">
             <div class="sideHead">
@@ -42,7 +58,6 @@
               <div class="sideTitle">Elegí una vista</div>
             </div>
 
-            <!-- ✅ admin.js busca ".tab" y data-tab -->
             <nav class="sideNav tabs sideTabs" role="tablist" aria-label="Secciones del administrador">
               <button class="navBtn tab isActive" type="button" data-tab="events" aria-selected="true">EVENTOS</button>
               <button class="navBtn tab" type="button" data-tab="dates" aria-selected="false">FECHAS</button>
@@ -59,7 +74,6 @@
           </div>
         </aside>
 
-        <!-- CONTENT -->
         <section class="content adminContent">
           <div class="pageHead">
             <div>
@@ -74,8 +88,8 @@
             </div>
           </div>
 
-          <!-- PANELS -->
           <div class="tabs" aria-label="Vistas del administrador">
+
             <!-- EVENTOS -->
             <section class="panel" id="tab-events" role="tabpanel">
               <div class="grid2">
@@ -94,10 +108,7 @@
                   </div>
 
                   <div id="eventsList" hidden></div>
-
-                  <div class="list" id="eventList" aria-label="Lista de eventos">
-                    <!-- JS -->
-                  </div>
+                  <div class="list" id="eventList" aria-label="Lista de eventos"></div>
                 </div>
 
                 <div class="card">
@@ -279,7 +290,7 @@
                   <div class="pill">Registros</div>
                   <div class="actions">
                     <button class="btn btn--ghost" id="exportCsvBtn" type="button">Exportar CSV</button>
-                    <button class="btn btn--ghost" id="seedRegsBtn" type="button" hidden>Refrescar</button>
+                    <button class="btn btn--ghost" id="seedRegsBtn" type="button">Refrescar</button>
                   </div>
                 </div>
 
@@ -287,12 +298,12 @@
                   <table class="table" aria-label="Tabla de inscripciones">
                     <thead>
                       <tr>
-                        <th>Fecha</th>
                         <th>Evento</th>
+                        <th>Fecha</th>
                         <th>Nombre</th>
                         <th>Email</th>
                         <th>Teléfono</th>
-                        <th>Estado</th>
+                        <th>Marketing</th>
                         <th class="right">Creado</th>
                       </tr>
                     </thead>
@@ -304,16 +315,135 @@
               </div>
             </section>
 
-            <!-- MEDIOS -->
+            <!-- MEDIOS ✅ (Estructura completa para admin-media.js) -->
             <section class="panel" id="tab-media" role="tabpanel" hidden>
-              <div class="card">
-                <div class="cardHead">
-                  <h3 class="h3">Medios</h3>
-                  <div class="mini">Subí imágenes, videos y asigná slots.</div>
+              <div class="grid2">
+                <div class="card">
+                  <div class="cardHead">
+                    <h3 class="h3">Medios</h3>
+                    <div class="mini">Subí imágenes/videos, generá URL pública y asigná slots.</div>
+                  </div>
+
+                  <form class="form" id="mediaForm" data-max-mb="25">
+                    <input type="hidden" id="mediaId" />
+
+                    <div class="formGrid">
+                      <div class="field">
+                        <label class="label" for="mediaBucket">Bucket</label>
+                        <select class="input" id="mediaBucket">
+                          <option value="media">media (imágenes)</option>
+                          <option value="video">video (videos)</option>
+                        </select>
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaFolder">Folder</label>
+                        <input class="input" id="mediaFolder" type="text" placeholder="events-img | promos-img | menu-img | misc-img" />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaName">Nombre</label>
+                        <input class="input" id="mediaName" type="text" placeholder="Ej: hero-febrero" />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaTags">Tags</label>
+                        <input class="input" id="mediaTags" type="text" placeholder="#vino #maridaje" />
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaFile">Archivo</label>
+                        <input class="input" id="mediaFile" type="file" />
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaUrl">URL pública</label>
+                        <input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL..." />
+                      </div>
+                    </div>
+
+                    <div class="formActions" style="justify-content:flex-start;">
+                      <button class="btn btn--primary" id="mediaUploadBtn" type="submit">SUBIR</button>
+                      <button class="btn btn--ghost" id="mediaCopyBtn" type="button">COPIAR URL</button>
+                      <button class="btn btn--ghost" id="mediaResetBtn" type="button">LIMPIAR</button>
+                      <button class="btn btn--danger" id="deleteMediaBtn" type="button">ELIMINAR</button>
+                    </div>
+
+                    <div class="note" id="mediaNote" aria-live="polite"></div>
+                  </form>
+
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardHead">
+                      <h3 class="h3">Lista</h3>
+                      <div class="mini">Seleccioná un medio para previsualizar y asignar.</div>
+                    </div>
+
+                    <div class="actions" style="margin-bottom:10px;">
+                      <button class="btn btn--ghost" id="mediaRefreshBtn" type="button">Refrescar lista</button>
+                    </div>
+
+                    <div class="list" id="mediaList" aria-label="Lista de medios"></div>
+                  </div>
                 </div>
 
-                <!-- ✅ admin-media.js usa ESTE contenedor -->
-                <div id="mediaPanel"></div>
+                <div class="card">
+                  <div class="cardHead">
+                    <h3 class="h3" id="mediaTitle">Preview</h3>
+                    <div class="mini">Vista previa del medio seleccionado.</div>
+                  </div>
+
+                  <div id="mediaPreviewEmpty" class="muted">No hay medio seleccionado.</div>
+
+                  <div id="mediaPreview" hidden>
+                    <div class="preview">
+                      <img id="mediaPreviewImg" alt="" />
+                    </div>
+                    <div class="note" id="mediaPreviewMeta"></div>
+                  </div>
+
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardHead">
+                      <h3 class="h3">Asignar</h3>
+                      <div class="mini">Asigná el medio a un evento/menú y su slot.</div>
+                    </div>
+
+                    <div class="formGrid">
+                      <div class="field">
+                        <label class="label" for="mediaScopeType">Tipo</label>
+                        <select class="input" id="mediaScopeType">
+                          <option value="event">Evento</option>
+                          <option value="menu_item">Menú</option>
+                        </select>
+                      </div>
+
+                      <div class="field" id="mediaScopeEventWrap">
+                        <label class="label" for="mediaEventSelect">Evento</label>
+                        <select class="input" id="mediaEventSelect">
+                          <option value="">Seleccionar evento…</option>
+                        </select>
+                      </div>
+
+                      <div class="field" id="mediaScopeMenuWrap" hidden>
+                        <label class="label" for="mediaMenuSelect">Ítem de menú</label>
+                        <select class="input" id="mediaMenuSelect">
+                          <option value="">Seleccionar ítem…</option>
+                        </select>
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaSlotSelect">Slot</label>
+                        <select class="input" id="mediaSlotSelect"></select>
+                      </div>
+                    </div>
+
+                    <div class="formActions" style="justify-content:flex-start;">
+                      <button class="btn btn--primary" id="mediaAssignBtn" type="button">ASIGNAR</button>
+                      <button class="btn btn--ghost" id="mediaViewAssignedBtn" type="button">VER ASIGNADOS</button>
+                    </div>
+
+                    <div class="list" id="mediaAssignedList" aria-label="Asignados"></div>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -526,11 +656,54 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/supabaseClient.js"></script>
   <script src="./js/admin-auth.js"></script>
+
   <script src="./js/admin.js"></script>
   <script src="./js/admin-dates.js"></script>
   <script src="./js/admin-registrations.js"></script>
   <script src="./js/admin-media.js"></script>
   <script src="./js/admin-gallery.js"></script>
   <script src="./js/admin-promos.js"></script>
+
+  <!-- Validador liviano de tamaño para mediaForm -->
+  <script>
+    (() => {
+      const form = document.getElementById("mediaForm");
+      const file = document.getElementById("mediaFile");
+      if (!form || !file) return;
+
+      const getMaxBytes = () => {
+        const raw = form.getAttribute("data-max-mb");
+        const mb = Number(raw || 25);
+        const safe = Number.isFinite(mb) && mb > 0 ? mb : 25;
+        return safe * 1024 * 1024;
+      };
+
+      const fmtMB = (bytes) => (bytes / (1024 * 1024)).toFixed(2) + " MB";
+
+      const toast = (t, m) => {
+        try { if (window.toast) return window.toast(t, m); } catch (_) {}
+        try { if (window.APP && typeof APP.toast === "function") return APP.toast(t, m); } catch (_) {}
+        alert(t + " — " + m);
+      };
+
+      file.addEventListener("change", () => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        const max = getMaxBytes();
+        if (f.size > max) toast("Archivo muy grande", `Máximo: ${fmtMB(max)}. Tu archivo: ${fmtMB(f.size)}.`);
+      });
+
+      form.addEventListener("submit", (e) => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        const max = getMaxBytes();
+        if (f.size > max) {
+          e.preventDefault();
+          e.stopPropagation();
+          toast("No se puede subir", `El archivo excede ${fmtMB(max)}. Reducilo o exportalo más liviano.`);
+        }
+      }, true);
+    })();
+  </script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* ============================================================
-   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-01 PATCH+
+   admin-registrations.js ✅ PRO (Supabase READ + Filtros + CSV) — 2026-02 PATCH++
    - Admin: lista inscripciones desde public.registrations (solo lectura)
    - Join: events.title + event_dates.label (vía FK)
    - Filtro usa el search global #search (filtra local, sin pedir a DB)
@@ -10,6 +10,10 @@
    - Espera admin:ready (admin-auth.js)
    - Carga solo al abrir tab "regs" vía admin:tab (admin.js)
    - Throttle anti rebote
+
+   ✅ FIX CRÍTICO (2026-02-22):
+   - Escucha admin:tab en window + document (compat total)
+   - Alinea columnas con tu thead: Fecha | Evento | Nombre | Email | Teléfono | Estado | Creado
 ============================================================ */
 (function () {
   "use strict";
@@ -18,7 +22,7 @@
   if (window.__ecnRegsMounted === true) return;
   window.__ecnRegsMounted = true;
 
-  const VERSION = "2026-01-19.3";
+  const VERSION = "2026-02-22.regs.clean.1";
   const $ = (sel) => document.querySelector(sel);
 
   // ------------------------------------------------------------
@@ -29,7 +33,7 @@
   const tab = $("#tab-regs");
   const tbody = $("#regsTbody");
   const exportBtn = $("#exportCsvBtn");
-  const refreshBtn = $("#seedRegsBtn");
+  const refreshBtn = $("#seedRegsBtn"); // "Seed" => Refrescar
   const searchEl = $("#search");
 
   if (!tab || !tbody || !exportBtn) return;
@@ -235,7 +239,7 @@
   const S = {
     list: [],
     loading: false,
-    loadingUi: false, // ✅ NUEVO: para mostrar "Actualizando…" aunque haya data
+    loadingUi: false,
     didBind: false,
     didBoot: false,
     didLoadOnce: false,
@@ -289,7 +293,6 @@
   }
 
   function normalizeRow(r) {
-    // ✅ Soportar object o array (según relación/embedded)
     const ev = Array.isArray(r?.events) ? r.events[0] : r?.events;
     const dt = Array.isArray(r?.event_dates) ? r.event_dates[0] : r?.event_dates;
 
@@ -306,6 +309,7 @@
       name: safeStr(r?.name),
       email: safeStr(r?.email),
       phone: safeStr(r?.phone || ""),
+      // en tu UI esto va como "Estado" (Sí/No). Aquí mantenemos el opt-in como booleano.
       marketing: !!r?.marketing_opt_in,
       createdAt: safeStr(r?.created_at || ""),
       eventId: safeStr(r?.event_id || ""),
@@ -324,26 +328,27 @@
   }
 
   // ------------------------------------------------------------
-  // Render
+  // Render (alineado a tu thead actual)
   // ------------------------------------------------------------
   function render() {
     const list = filterList(S.list);
 
-    // ✅ Mensaje de “actualizando” aunque haya data
+    // UX: “Actualizando…” aunque haya data
     if (S.loadingUi && list.length) {
-      // Mantenemos tabla, pero dejamos 1 fila arriba tipo status
-      tbody.innerHTML = `
+      tbody.innerHTML =
+        `
         <tr>
           <td colspan="7" style="opacity:.75; padding:14px;">
             Actualizando…
           </td>
         </tr>
-      ` + list.slice(0, 999).map((r) => {
-        const created = fmtDate(r.createdAt);
-        return `
+      ` +
+        list.slice(0, 999).map((r) => {
+          const created = fmtDate(r.createdAt);
+          return `
           <tr data-id="${escapeHtml(r.id)}">
-            <td>${escapeHtml(r.eventTitle)}</td>
-            <td>${escapeHtml(r.dateLabel)}</td>
+            <td>${escapeHtml(r.dateLabel || "—")}</td>
+            <td>${escapeHtml(r.eventTitle || "—")}</td>
             <td>${escapeHtml(r.name)}</td>
             <td>${escapeHtml(r.email)}</td>
             <td>${escapeHtml(r.phone || "—")}</td>
@@ -351,7 +356,7 @@
             <td>${escapeHtml(created)}</td>
           </tr>
         `;
-      }).join("");
+        }).join("");
       return;
     }
 
@@ -382,8 +387,8 @@
         const created = fmtDate(r.createdAt);
         return `
           <tr data-id="${escapeHtml(r.id)}">
-            <td>${escapeHtml(r.eventTitle)}</td>
-            <td>${escapeHtml(r.dateLabel)}</td>
+            <td>${escapeHtml(r.dateLabel || "—")}</td>
+            <td>${escapeHtml(r.eventTitle || "—")}</td>
             <td>${escapeHtml(r.name)}</td>
             <td>${escapeHtml(r.email)}</td>
             <td>${escapeHtml(r.phone || "—")}</td>
@@ -403,7 +408,6 @@
 
     S.loadingUi = true;
     try {
-      // UX: bloquear botones durante carga
       if (refreshBtn) refreshBtn.disabled = true;
       if (exportBtn) exportBtn.disabled = true;
 
@@ -528,8 +532,9 @@
     // Filtro global (local)
     searchEl?.addEventListener("input", () => render());
 
-    // Evento de tabs (única fuente)
+    // ✅ FIX: escuchar en window + document (por compat con emisores)
     window.addEventListener("admin:tab", onAdminTab);
+    document.addEventListener("admin:tab", onAdminTab);
   }
 
   // ------------------------------------------------------------
