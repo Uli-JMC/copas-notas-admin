@@ -1140,440 +1140,227 @@ body.adminLoginPage .page{
 
 
 /* ============================================================
-   ✅ UI LIGHT THEME TOKENS (blanco/morado base)
+   ✅ UI LIGHT (Pro 2026) — Mantiene estructura actual y JS
+   Activación: <body class="adminPage uiLight"> / adminLoginPage uiLight
 ============================================================ */
-body.adminPage.uiLight,
-body.adminLoginPage.uiLight{
-  --wp-bg: #f6f6fb;
-  --wp-surface: rgba(255,255,255,.88);
-  --wp-surface2: rgba(255,255,255,.96);
-  --wp-line: rgba(20, 14, 40, .10);
-  --wp-line2: rgba(20, 14, 40, .14);
+body.uiLight{
+  --bg: #f6f6fb;
+  --bg2:#ffffff;
 
-  --wp-text: rgba(18, 12, 30, .92);
-  --wp-muted: rgba(18, 12, 30, .60);
-  --wp-muted2: rgba(18, 12, 30, .48);
+  --text: rgba(18,12,30,.92);
+  --muted: rgba(18,12,30,.62);
+  --muted2: rgba(18,12,30,.52);
 
-  --wp-brand: #7c5cff;
-  --wp-brand2:#5b3bff;
-  --wp-mint:  #2dd4bf;
-  --wp-danger:#ef476f;
+  --line: rgba(20,14,40,.10);
+  --line2: rgba(20,14,40,.16);
 
-  --wp-radius: 18px;
-  --wp-radius2: 22px;
-  --wp-shadow: 0 18px 60px rgba(20, 14, 40, .10);
-  --wp-shadow2: 0 10px 26px rgba(20, 14, 40, .08);
+  --focus: rgba(124,92,255,.22);
+
+  --shadow: 0 18px 60px rgba(20,14,40,.10);
+  --shadow2: 0 12px 30px rgba(20,14,40,.08);
+
+  --btnBg: rgba(124,92,255,.10);
+  --btnBgHover: rgba(124,92,255,.14);
+
+  --brand: #7c5cff;
+  --brand2:#5b3bff;
+  --danger:#ef476f;
 }
 
-body.adminPage.uiLight,
-body.adminLoginPage.uiLight{
-  color: var(--wp-text);
-  background:
-    radial-gradient(900px 700px at 15% -10%, rgba(124,92,255,.16), transparent 60%),
-    radial-gradient(900px 700px at 90% 0%, rgba(124,92,255,.10), transparent 55%),
-    linear-gradient(180deg, #ffffff, var(--wp-bg));
-  background-attachment: fixed;
+body.uiLight{
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(1100px 900px at 18% -10%, rgba(124,92,255,.18), transparent 60%),
+    radial-gradient(1000px 900px at 92% 0%, rgba(124,92,255,.10), transparent 55%),
+    linear-gradient(180deg, var(--bg2), var(--bg));
 }
 
-/* Inputs + buttons baseline */
-body.adminPage.uiLight .input,
-body.adminPage.uiLight input,
-body.adminPage.uiLight select,
-body.adminPage.uiLight textarea,
-body.adminLoginPage.uiLight input{
-  background: rgba(255,255,255,.92);
-  border: 1px solid var(--wp-line2);
-  color: rgba(18,12,30,.92);
-}
-
-body.adminPage.uiLight .btn,
-body.adminLoginPage.uiLight .btn{
-  border-radius: 999px;
-}
-
-body.adminPage.uiLight .btn--primary,
-body.adminLoginPage.uiLight .btn.primary,
-body.adminLoginPage.uiLight .btn--primary{
-  background: linear-gradient(135deg, rgba(124,92,255,1), rgba(91,59,255,.88));
-  border: 1px solid rgba(124,92,255,.55);
-  color: #fff;
-}
-
-
-
-/* ============================================================
-   ✅ PRO UI 2026 — STRUCTURE REWORK (Left menu + Right content)
-   - Menú lateral fijo estilo Oracle/WordPress
-   - Dashboard Quick Actions en panel derecho
-   - Encabezado de sección + divisor + buscador + refrescar
-   - Panels desplegables + toasts
-============================================================ */
-
-body.adminPage.uiLight{
-  --navW: 268px;
-  --topH: 64px;
-}
-
-/* Shell */
-.adminShell{
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: var(--navW) 1fr;
-  background: transparent;
-}
-
-/* Left Nav */
-.leftNav{
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  padding: 14px 12px;
-  border-right: 1px solid var(--wp-line);
-  background:
-    radial-gradient(700px 520px at 10% 0%, rgba(124,92,255,.16), transparent 60%),
-    linear-gradient(180deg, rgba(255,255,255,.92), rgba(246,246,251,.98));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  overflow: auto;
-}
-
-.leftBrand{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding: 10px 10px 14px;
-  border-bottom: 1px solid rgba(20,14,40,.08);
-  margin-bottom: 10px;
-}
-
-.leftLogo{
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background: rgba(124,92,255,.12);
-  border: 1px solid rgba(124,92,255,.22);
-  font-weight: 900;
-  color: rgba(18,12,30,.90);
-}
-
-.leftBrandTop{
-  font-weight: 900;
-  letter-spacing:.02em;
-  color: rgba(18,12,30,.90);
-  line-height: 1.1;
-}
-.leftBrandSub{
-  font-size: 12px;
-  color: var(--wp-muted);
-  letter-spacing:.10em;
-  text-transform: uppercase;
-}
-
-.leftMenu{
-  display:flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 6px;
-}
-
-.leftItem{
-  width:100%;
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  padding: 11px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(20,14,40,.06);
+body.uiLight .topbar{
   background: rgba(255,255,255,.70);
-  cursor:pointer;
-  transition: background .15s ease, border-color .15s ease, transform .12s ease;
-  text-align: left;
+  border-bottom: 1px solid var(--line);
 }
 
-.leftItem:hover{
+body.uiLight .brand:hover{ background: rgba(124,92,255,.06); }
+body.uiLight .brand img{
+  border: 1px solid var(--line2);
+  background: rgba(124,92,255,.06);
+}
+
+body.uiLight .panel{
+  background: rgba(255,255,255,.70);
+  border-color: var(--line);
+  box-shadow: var(--shadow2);
+}
+
+body.uiLight .card,
+body.uiLight .sideCard,
+body.uiLight .tableWrap,
+body.uiLight .list{
+  background: rgba(255,255,255,.78);
+  border-color: var(--line);
+  box-shadow: var(--shadow2);
+}
+
+body.uiLight th{
+  background: rgba(255,255,255,.92);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+body.uiLight td{
+  color: rgba(18,12,30,.88);
+  border-bottom: 1px solid rgba(20,14,40,.08);
+}
+
+body.uiLight tbody tr:hover td{ background: rgba(124,92,255,.05); }
+
+body.uiLight .btn{
   background: rgba(124,92,255,.08);
   border-color: rgba(124,92,255,.18);
-  transform: translateY(-1px);
-}
-
-.leftItem.isActive{
-  background: linear-gradient(135deg, rgba(124,92,255,.16), rgba(124,92,255,.06));
-  border-color: rgba(124,92,255,.34);
-  box-shadow: 0 12px 26px rgba(124,92,255,.12);
-}
-
-.liIco{
-  width: 30px;
-  height: 30px;
-  border-radius: 12px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background: rgba(255,255,255,.80);
-  border: 1px solid rgba(20,14,40,.08);
-  font-size: 15px;
-}
-
-.liTxt{
-  font-weight: 850;
-  letter-spacing:.02em;
-  color: rgba(18,12,30,.88);
-}
-
-.leftFoot{
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(20,14,40,.08);
-  background: rgba(255,255,255,.72);
-}
-
-.leftFootRow{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom: 8px;
-}
-
-/* Right Area */
-.rightArea{
-  min-height: 100vh;
-  display:flex;
-  flex-direction: column;
-}
-
-.rightTop{
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  height: var(--topH);
-  display:flex;
-  align-items:center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 18px;
-  background: rgba(255,255,255,.78);
-  border-bottom: 1px solid var(--wp-line);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-
-.rightTopLeft{
-  display:flex;
-  align-items:center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.rightTopRight{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-}
-
-.rightTitle .h2{
-  font-size: 18px;
-  font-weight: 950;
-  letter-spacing:.02em;
-}
-
-.topSearch .input{
-  width: min(520px, 44vw);
-}
-
-.rightContent{
-  padding: 18px;
-}
-
-/* Section header inside panels */
-.sectionHead{
-  display:flex;
-  align-items:flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 6px 14px;
-}
-
-.sectionTitle{
-  margin: 0;
-  font-size: 22px;
-  font-weight: 950;
-  letter-spacing:.01em;
-}
-
-.sectionMeta{
-  display:flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.metaChip{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(124,92,255,.10);
-  border: 1px solid rgba(124,92,255,.18);
-  color: rgba(18,12,30,.84);
-  font-weight: 750;
-  font-size: 12px;
-}
-
-.sectionHeadRight{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.sectionSearch .input{
-  width: min(420px, 36vw);
-}
-
-.sectionDivider{
-  height: 1px;
-  background: rgba(20,14,40,.10);
-  margin: 0 6px 14px;
-}
-
-/* Panels: make them feel like "page" */
-.panel{
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-}
-
-/* Keep cards consistent */
-.card{
-  border-radius: var(--wp-radius2) !important;
-}
-
-/* Dashboard */
-.dashGrid{
-  display:grid;
-  grid-template-columns: 1fr 360px;
-  gap: 14px;
-}
-
-.qaBoard{
-  display:grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 12px;
-  padding: 4px 0 10px;
-}
-
-.qaSquare{
-  border-radius: 20px;
-  border: 1px solid rgba(20,14,40,.10);
-  background: rgba(255,255,255,.86);
-  padding: 14px;
-  display:flex;
-  flex-direction: column;
-  gap: 8px;
-  text-align:left;
-  cursor:pointer;
-  transition: transform .12s ease, background .15s ease, border-color .15s ease;
-  min-height: 118px;
-}
-
-.qaSquare:hover{
-  transform: translateY(-1px);
-  background: rgba(124,92,255,.07);
-  border-color: rgba(124,92,255,.20);
-}
-
-.qaIco{
-  width: 44px;
-  height: 44px;
-  border-radius: 16px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background: rgba(124,92,255,.10);
-  border: 1px solid rgba(124,92,255,.18);
-  font-size: 18px;
-}
-
-.qaTxt{
-  font-weight: 950;
   color: rgba(18,12,30,.92);
 }
-
-.qaSub{
-  font-size: 12px;
-  color: var(--wp-muted);
+body.uiLight .btn:hover{
+  background: rgba(124,92,255,.12);
+  border-color: rgba(124,92,255,.30);
+}
+body.uiLight .btn.btn--ghost{
+  background: transparent;
+  border-color: var(--line2);
+}
+body.uiLight .btn.primary,
+body.uiLight .btn.btn--primary{
+  color: #fff;
+  background: linear-gradient(135deg, rgba(124,92,255,1), rgba(91,59,255,.88));
+  border-color: rgba(124,92,255,.55);
 }
 
-/* Status list */
-.statusList{ display:flex; flex-direction: column; gap:10px; padding: 8px 0 10px; }
-.statusItem{ display:flex; align-items:center; gap:10px; padding: 10px 12px; border-radius: 16px; border: 1px solid rgba(20,14,40,.08); background: rgba(255,255,255,.82); }
-.dot{ width:10px; height:10px; border-radius: 99px; background: rgba(18,12,30,.30); }
-.dot.ok{ background: rgba(45,212,191,.90); }
-.dot.info{ background: rgba(124,92,255,.80); }
-.statusTxt{ color: rgba(18,12,30,.86); font-weight: 750; }
+body.uiLight .input,
+body.uiLight input,
+body.uiLight select,
+body.uiLight textarea{
+  background: rgba(255,255,255,.92);
+  border-color: var(--line2);
+  color: rgba(18,12,30,.92);
+}
+body.uiLight .input:focus,
+body.uiLight input:focus,
+body.uiLight select:focus,
+body.uiLight textarea:focus{
+  box-shadow: 0 0 0 4px var(--focus);
+  border-color: rgba(124,92,255,.50);
+}
 
-/* Toasts */
-.toasts{
-  position: fixed;
-  top: 76px;
-  right: 18px;
+/* ============================================================
+   ✅ ESTRUCTURA (SIN tocar IDs): Sidebar fijo izquierdo tipo WP/Oracle
+============================================================ */
+.adminShell{
+  display:grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  align-items:start;
+}
+
+/* Sidebar pegado y con scroll propio */
+.sidebar{
+  position: sticky;
+  top: 96px;
+  height: calc(100vh - 110px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+/* Mejor “menu” vertical */
+.sideTabs{
   display:flex;
   flex-direction: column;
-  gap: 10px;
-  z-index: 9999;
+  gap: 8px;
+  margin: 10px 0 0;
 }
-
-.toast{
-  opacity: 0;
-  transform: translateY(-6px);
-  transition: opacity .15s ease, transform .15s ease;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(20,14,40,.10);
-  background: rgba(255,255,255,.92);
-  color: rgba(18,12,30,.90);
-  box-shadow: var(--wp-shadow2);
-  max-width: 360px;
-}
-
-.toast.show{ opacity: 1; transform: translateY(0); }
-.toast.ok{ border-color: rgba(45,212,191,.32); }
-.toast.warn{ border-color: rgba(239, 163, 71, .34); }
-.toast.err{ border-color: rgba(239,71,111,.32); }
-
-/* Media thumbs — generic */
-.list img{
+.sideTabs .tab{
+  width: 100%;
   border-radius: 14px;
-  border: 1px solid rgba(20,14,40,.10);
+  text-align:left;
+  justify-content:flex-start;
+  padding: 12px 12px;
+  font-size: 12px;
 }
 
-/* Responsive */
-@media (max-width: 1020px){
-  body.adminPage.uiLight{ --navW: 248px; }
-  .dashGrid{ grid-template-columns: 1fr; }
-  .qaBoard{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .sectionSearch .input{ width: min(520px, 70vw); }
-}
+/* Content ocupa */
+.adminContent{ min-width: 0; }
 
-@media (max-width: 820px){
+/* Mobile: sidebar arriba */
+@media (max-width: 980px){
   .adminShell{ grid-template-columns: 1fr; }
-  .leftNav{
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: min(86vw, var(--navW));
-    transform: translateX(-102%);
-    transition: transform .18s ease;
-    z-index: 999;
-  }
-  .leftNav.open{ transform: translateX(0); }
-  .topSearch .input{ width: 56vw; }
+  .sidebar{ position: static; height: auto; overflow: visible; }
+  .sideTabs{ flex-direction: row; flex-wrap: wrap; }
+  .sideTabs .tab{ width:auto; border-radius: 999px; }
+}
+
+/* ============================================================
+   ✅ DASH Quick Actions (solo visual, NO toca DB)
+============================================================ */
+.dashQuick{
+  margin-top: 14px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.76);
+  box-shadow: var(--shadow2);
+  padding: 14px;
+}
+.dashHead{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.qaGrid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 980px){
+  .qaGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px){
+  .qaGrid{ grid-template-columns: 1fr; }
+}
+
+.qaTile{
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.88);
+  padding: 14px;
+  display:flex;
+  gap: 12px;
+  align-items:center;
+  cursor:pointer;
+  text-align:left;
+  transition: transform .12s ease, border-color .15s ease, background .15s ease;
+}
+.qaTile:hover{
+  transform: translateY(-1px);
+  background: rgba(124,92,255,.06);
+  border-color: rgba(124,92,255,.22);
+}
+.qaTile--link{ text-decoration:none; color: inherit; }
+.qaIcon{
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display:grid;
+  place-items:center;
+  border: 1px solid rgba(124,92,255,.18);
+  background: rgba(124,92,255,.10);
+  font-size: 18px;
+}
+.qaTitle{
+  font-weight: 850;
+  letter-spacing:.01em;
+}
+.qaSub{
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
 }
