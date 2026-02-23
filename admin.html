@@ -33,106 +33,158 @@
     </div>
   </header>
 
-  <main class="container">
-    <!-- AUTH GATE (lo maneja admin-auth.js) -->
-    <section class="authGate" id="authGate" hidden>
-      <div class="card">
-        <div class="cardHead">
-          <h2 class="h2">Acceso</h2>
-          <div class="mini">Iniciá sesión para administrar el contenido.</div>
-        </div>
-        <div class="content">
-          <p class="muted">Redirigiendo al login…</p>
+  
+  <main class="adminShell" role="main">
+    <aside class="leftNav" aria-label="Menú principal">
+      <div class="leftBrand">
+        <div class="leftLogo" aria-hidden="true">◎</div>
+        <div class="leftBrandTxt">
+          <div class="leftBrandTop">Content</div>
+          <div class="leftBrandSub">Management</div>
         </div>
       </div>
-    </section>
 
-    <!-- APP -->
-    <section class="appPanel" id="appPanel" hidden>
-      <div class="adminShell">
+      <nav class="leftMenu" role="tablist" aria-label="Secciones">
+        <button class="leftItem navBtn tab isActive" type="button" data-tab="dashboard" aria-selected="true">
+          <span class="liIco">🏠</span><span class="liTxt">Dashboard</span>
+        </button>
+        <button class="leftItem navBtn tab" type="button" data-tab="events" aria-selected="false">
+          <span class="liIco">📅</span><span class="liTxt">Eventos</span>
+        </button>
+        <button class="leftItem navBtn tab" type="button" data-tab="dates" aria-selected="false">
+          <span class="liIco">🗓️</span><span class="liTxt">Fechas</span>
+        </button>
+        <button class="leftItem navBtn tab" type="button" data-tab="regs" aria-selected="false">
+          <span class="liIco">🧾</span><span class="liTxt">Inscripciones</span>
+        </button>
+        <button class="leftItem navBtn tab" type="button" data-tab="media" aria-selected="false">
+          <span class="liIco">🖼️</span><span class="liTxt">Medios</span>
+        </button>
+        <button class="leftItem navBtn tab" type="button" data-tab="gallery" aria-selected="false">
+          <span class="liIco">🧩</span><span class="liTxt">Galería</span>
+        </button>
+        <button class="leftItem navBtn tab" type="button" data-tab="promos" aria-selected="false">
+          <span class="liIco">🏷️</span><span class="liTxt">Promos</span>
+        </button>
+      </nav>
 
-        <aside class="sidebar">
-          <div class="sideCard">
-            <div class="sideHead">
-              <div class="kicker">SECCIONES</div>
-              <div class="sideTitle">Elegí una vista</div>
-            </div>
+      <div class="leftFoot">
+        <div class="leftFootRow">
+          <span class="pill">PRO 2026</span>
+          <a class="btn btn--ghost" href="./admin-login.html">Auth</a>
+        </div>
+        <div class="mini">Accesos rápidos y paneles desplegables.</div>
+      </div>
+    </aside>
 
-            <nav class="sideNav tabs sideTabs" role="tablist" aria-label="Secciones del administrador">
-              <button class="navBtn tab isActive" type="button" data-tab="events" aria-selected="true">EVENTOS</button>
-              <button class="navBtn tab" type="button" data-tab="dates" aria-selected="false">FECHAS</button>
-              <button class="navBtn tab" type="button" data-tab="regs" aria-selected="false">INSCRIPCIONES</button>
-              <button class="navBtn tab" type="button" data-tab="media" aria-selected="false">MEDIOS</button>
-              <button class="navBtn tab" type="button" data-tab="gallery" aria-selected="false">GALERÍA</button>
-              <button class="navBtn tab" type="button" data-tab="promos" aria-selected="false">PROMOS</button>
-            </nav>
-
-            <div class="sideFoot sideFooter">
-              <span class="sideChip">TIP</span>
-              <span class="sideFootText">Usá el buscador arriba para filtrar rápido.</span>
-            </div>
+    <section class="rightArea">
+      <header class="rightTop">
+        <div class="rightTopLeft">
+          <button class="btn btn--ghost" type="button" id="mobileMenuBtn" aria-label="Abrir menú">☰</button>
+          <div class="rightTitle">
+            <div class="kicker">ADMIN</div>
+            <div class="h2">Panel de Contenido</div>
           </div>
-
-          <div class="quickActions" aria-label="Quick Actions">
-            <div class="qaTitle">
-              <p class="kicker">QUICK ACTIONS</p>
-              <span class="pill">PRO</span>
-            </div>
-
-            <div class="qaGrid">
-              <button class="qaBtn" type="button" id="qaNewEvent">
-                <span class="qaMeta">
-                  <span class="qaLabel">Nuevo evento</span>
-                  <span class="qaHint">Crear y publicar rápido</span>
-                </span>
-                <span class="qaPill">EVENT</span>
-              </button>
-
-              <button class="qaBtn" type="button" id="qaUploadMedia">
-                <span class="qaMeta">
-                  <span class="qaLabel">Subir medio</span>
-                  <span class="qaHint">Imagen/video + URL</span>
-                </span>
-                <span class="qaPill">MEDIA</span>
-              </button>
-
-              <button class="qaBtn" type="button" id="qaNewPromo">
-                <span class="qaMeta">
-                  <span class="qaLabel">Nueva promo</span>
-                  <span class="qaHint">Banner/card/toast</span>
-                </span>
-                <span class="qaPill">PROMO</span>
-              </button>
-
-              <button class="qaBtn" type="button" id="qaRefreshAll">
-                <span class="qaMeta">
-                  <span class="qaLabel">Refrescar</span>
-                  <span class="qaHint">Listas y tablas</span>
-                </span>
-                <span class="qaPill">SYNC</span>
-              </button>
-            </div>
+        </div>
+        <div class="rightTopRight">
+          <div class="topSearch">
+            <input class="input" id="globalSearch" type="search" placeholder="Buscar global (eventos, medios, promos…)" />
           </div>
-        </aside>
+          <button class="btn btn--primary" type="button" id="topSaveBtn" hidden>Guardar</button>
+        </div>
+      </header>
 
-        <section class="content adminContent">
-          <div class="pageHead">
-            <div>
-              <div class="kicker">GESTIÓN</div>
-              <h1 class="h1">Panel de administración</h1>
-              <div class="mini">Eventos, fechas, cupos, inscripciones y recursos visuales.</div>
-            </div>
+      <div class="rightContent tabs" aria-label="Contenido">
+        
+            <section class="panel" id="tab-dashboard" role="tabpanel">
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Dashboard</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip">Acciones rápidas y estado general</span>
+                  </div>
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
 
-            <div class="pageTools">
-              <label class="srOnly" for="search">Buscar</label>
-              <input class="input input--search" id="search" type="search" placeholder="Buscar evento o inscripción" />
-            </div>
-          </div>
+              <div class="dashGrid">
+                <div class="dashMain card">
+                  <div class="cardHead">
+                    <h3 class="h3">Quick Actions</h3>
+                    <div class="mini">Creá, refrescá o gestioná contenido sin navegar.</div>
+                  </div>
 
-          <div class="tabs" aria-label="Vistas del administrador">
+                  <div class="qaBoard">
+                    <button class="qaSquare" type="button" id="qaGoEvents">
+                      <span class="qaIco">📅</span>
+                      <span class="qaTxt">Eventos</span>
+                      <span class="qaSub">Crear / editar</span>
+                    </button>
+                    <button class="qaSquare" type="button" id="qaGoDates">
+                      <span class="qaIco">🗓️</span>
+                      <span class="qaTxt">Fechas</span>
+                      <span class="qaSub">Cupos / horarios</span>
+                    </button>
+                    <button class="qaSquare" type="button" id="qaGoRegs">
+                      <span class="qaIco">🧾</span>
+                      <span class="qaTxt">Inscripciones</span>
+                      <span class="qaSub">Ver / filtrar</span>
+                    </button>
+                    <button class="qaSquare" type="button" id="qaGoMedia">
+                      <span class="qaIco">🖼️</span>
+                      <span class="qaTxt">Medios</span>
+                      <span class="qaSub">Subir / URL</span>
+                    </button>
+                    <button class="qaSquare" type="button" id="qaGoGallery">
+                      <span class="qaIco">🧩</span>
+                      <span class="qaTxt">Galería</span>
+                      <span class="qaSub">Items por evento</span>
+                    </button>
+                    <button class="qaSquare" type="button" id="qaGoPromos">
+                      <span class="qaIco">🏷️</span>
+                      <span class="qaTxt">Promos</span>
+                      <span class="qaSub">Banners / cards</span>
+                    </button>
+                  </div>
+                </div>
 
-            <!-- EVENTOS -->
-            <section class="panel" id="tab-events" role="tabpanel">
+                <div class="dashSide card">
+                  <div class="cardHead">
+                    <h3 class="h3">Estado</h3>
+                    <div class="mini">Mensajes de guardado/actualización aparecen aquí.</div>
+                  </div>
+                  <div class="statusList" id="statusList">
+                    <div class="statusItem">
+                      <span class="dot ok"></span>
+                      <span class="statusTxt">Sistema operativo</span>
+                    </div>
+                    <div class="statusItem">
+                      <span class="dot info"></span>
+                      <span class="statusTxt">Seleccioná una sección del menú</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+        <section class="panel" id="tab-events" role="tabpanel" hidden>
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Eventos</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip" id="eventosMeta">Estado BD: eventos</span>
+                  </div>
+                </div>
+                <div class="sectionHeadRight">
+                  <div class="sectionSearch">
+                    <input class="input" type="search" placeholder="Filtrar por título / slug / badge" aria-label="Buscar en Eventos">
+                  </div>
+                  <button class="btn btn--ghost" type="button" id="eventsRefreshBtn" >Refrescar</button>
+                  
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
+    
               <div class="grid2">
                 <div class="card">
                   <div class="cardHead">
@@ -158,7 +210,10 @@
                     <div class="mini">Datos principales del evento.</div>
                   </div>
 
-                  <form class="form" id="eventForm" novalidate>
+                  <details class="drop" open>
+                      <summary>Formulario: Evento<span class="muted">desplegable</span></summary>
+                      <div class="dropBody">
+<form class="form" id="eventForm" novalidate>
                     <input id="evId" type="hidden" />
 
                     <div class="formGrid">
@@ -251,12 +306,29 @@
                       <button class="btn btn--danger" id="deleteEventBtn" type="button">ELIMINAR</button>
                     </div>
                   </form>
+                      </div>
+                    </details>
                 </div>
               </div>
             </section>
-
-            <!-- FECHAS -->
-            <section class="panel" id="tab-dates" role="tabpanel" hidden>
+        <section class="panel" id="tab-dates" role="tabpanel" hidden>
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Fechas</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip" id="fechasMeta">Estado BD: fechas</span>
+                  </div>
+                </div>
+                <div class="sectionHeadRight">
+                  <div class="sectionSearch">
+                    <input class="input" type="search" placeholder="Buscar por evento / fecha / cupos" aria-label="Buscar en Fechas">
+                  </div>
+                  <button class="btn btn--ghost" type="button" id="datesRefreshBtn2" >Refrescar</button>
+                  
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
+    
               <div class="grid2">
                 <div class="card">
                   <div class="cardHead">
@@ -289,7 +361,10 @@
                   <div class="split">
                     <div class="list" id="datesListByEvent" aria-label="Fechas del evento"></div>
 
-                    <form class="form" id="dateForm" novalidate>
+                    <details class="drop" open>
+                      <summary>Formulario: Fecha<span class="muted">desplegable</span></summary>
+                      <div class="dropBody">
+<form class="form" id="dateForm" novalidate>
                       <input id="dateId" type="hidden" />
 
                       <div class="field">
@@ -314,13 +389,30 @@
                         <button class="btn btn--ghost" id="dateClearBtn" type="button">LIMPIAR</button>
                       </div>
                     </form>
+                      </div>
+                    </details>
                   </div>
                 </div>
               </div>
             </section>
-
-            <!-- INSCRIPCIONES -->
-            <section class="panel" id="tab-regs" role="tabpanel" hidden>
+        <section class="panel" id="tab-regs" role="tabpanel" hidden>
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Inscripciones</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip" id="inscripcionesMeta">Estado BD: registros</span>
+                  </div>
+                </div>
+                <div class="sectionHeadRight">
+                  <div class="sectionSearch">
+                    <input class="input" type="search" placeholder="Buscar por nombre / email / evento" aria-label="Buscar en Inscripciones">
+                  </div>
+                  <button class="btn btn--ghost" type="button" id="regsRefreshBtn" >Refrescar</button>
+                  
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
+    
               <div class="card">
                 <div class="cardHead">
                   <h3 class="h3">Inscripciones</h3>
@@ -355,9 +447,24 @@
                 <div class="muted small">Tip: usá el buscador para filtrar por evento o email.</div>
               </div>
             </section>
-
-            <!-- MEDIOS ✅ (Estructura completa para admin-media.js) -->
-            <section class="panel" id="tab-media" role="tabpanel" hidden>
+        <section class="panel" id="tab-media" role="tabpanel" hidden>
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Medios</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip" id="mediosMeta">Estado BD: media</span>
+                  </div>
+                </div>
+                <div class="sectionHeadRight">
+                  <div class="sectionSearch">
+                    <input class="input" type="search" placeholder="Buscar por nombre / folder / slot" aria-label="Buscar en Medios">
+                  </div>
+                  <button class="btn btn--ghost" type="button" id="mediaRefreshBtn2" >Refrescar</button>
+                  
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
+    
               <div class="grid2">
                 <div class="card">
                   <div class="cardHead">
@@ -365,7 +472,10 @@
                     <div class="mini">Subí imágenes/videos, generá URL pública y asigná slots.</div>
                   </div>
 
-                  <form class="form" id="mediaForm" data-max-mb="25">
+                  <details class="drop" open>
+                      <summary>Formulario: Medio<span class="muted">desplegable</span></summary>
+                      <div class="dropBody">
+<form class="form" id="mediaForm" data-max-mb="25">
                     <input type="hidden" id="mediaId" />
 
                     <div class="formGrid">
@@ -412,6 +522,8 @@
 
                     <div class="note" id="mediaNote" aria-live="polite"></div>
                   </form>
+                      </div>
+                    </details>
 
                   <div class="card" style="margin-top:14px;">
                     <div class="cardHead">
@@ -487,9 +599,24 @@
                 </div>
               </div>
             </section>
-
-            <!-- GALERÍA -->
-            <section class="panel" id="tab-gallery" role="tabpanel" hidden>
+        <section class="panel" id="tab-gallery" role="tabpanel" hidden>
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Galería</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip" id="galeríaMeta">Estado BD: galería</span>
+                  </div>
+                </div>
+                <div class="sectionHeadRight">
+                  <div class="sectionSearch">
+                    <input class="input" type="search" placeholder="Buscar por evento / título / tag" aria-label="Buscar en Galería">
+                  </div>
+                  <button class="btn btn--ghost" type="button" id="galleryRefreshBtn2" >Refrescar</button>
+                  
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
+    
               <div class="card" id="ecnGalleryCard">
                 <div class="cardHead">
                   <h3 class="h3">Galería</h3>
@@ -528,7 +655,10 @@
                     <button class="btn btn--ghost" id="ecnGalleryClose" type="button" aria-label="Cerrar">✕</button>
                   </div>
 
-                  <form class="form" id="ecnGalleryForm" novalidate>
+                  <details class="drop" open>
+                      <summary>Formulario: Galería<span class="muted">desplegable</span></summary>
+                      <div class="dropBody">
+<form class="form" id="ecnGalleryForm" novalidate>
                     <input id="ecnPromoId" type="hidden" />
                     <input id="ecnGalName" type="hidden" />
 
@@ -565,12 +695,29 @@
                       <button class="btn btn--ghost" id="ecnGalReset" type="button">RESET</button>
                     </div>
                   </form>
+                      </div>
+                    </details>
                 </div>
               </div>
             </section>
-
-            <!-- PROMOS -->
-            <section class="panel" id="tab-promos" role="tabpanel" hidden>
+        <section class="panel" id="tab-promos" role="tabpanel" hidden>
+              <header class="sectionHead">
+                <div class="sectionHeadLeft">
+                  <h2 class="sectionTitle">Promos</h2>
+                  <div class="sectionMeta">
+                    <span class="metaChip" id="promosMeta">Estado BD: promos</span>
+                  </div>
+                </div>
+                <div class="sectionHeadRight">
+                  <div class="sectionSearch">
+                    <input class="input" type="search" placeholder="Buscar por título / tipo / activo" aria-label="Buscar en Promos">
+                  </div>
+                  <button class="btn btn--ghost" type="button" id="promosRefreshBtn2" >Refrescar</button>
+                  
+                </div>
+              </header>
+              <div class="sectionDivider"></div>
+    
               <div class="card">
                 <div class="cardHead">
                   <h3 class="h3">Promos</h3>
@@ -611,7 +758,10 @@
                     <button class="btn btn--ghost" id="ecnPromoClose" type="button" aria-label="Cerrar">✕</button>
                   </div>
 
-                  <form class="form" id="ecnPromoForm" novalidate>
+                  <details class="drop" open>
+                      <summary>Formulario: Promo<span class="muted">desplegable</span></summary>
+                      <div class="dropBody">
+<form class="form" id="ecnPromoForm" novalidate>
                     <input id="ecnPromoId" type="hidden" />
 
                     <div class="formGrid">
@@ -683,15 +833,15 @@
                       <button class="btn btn--ghost" id="ecnDismiss" type="button" hidden>DISMISS</button>
                     </div>
                   </form>
+                      </div>
+                    </details>
                 </div>
               </div>
             </section>
-
-          </div>
-        </section>
       </div>
     </section>
   </main>
+
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -748,46 +898,91 @@
   </script>
 
   <script>
-    // Quick Actions (no rompe tu JS existente)
     (function(){
-      const $ = (sel) => document.querySelector(sel);
-      const byId = (id) => document.getElementById(id);
+      const $ = (s, r=document)=>r.querySelector(s);
+      const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
-      const safeClick = (el) => { try{ el && el.click(); }catch(_){} };
-      const safeFocus = (el) => { try{ el && el.focus({ preventScroll:false }); }catch(_){} };
+      const tabs = $$('[data-tab]');
+      const panels = $$('.panel[id^="tab-"]');
 
-      // Tabs helpers (usa tus data-tab existentes)
-      const openTab = (tabName) => safeClick($(`[data-tab="${tabName}"]`));
+      function showTab(name){
+        // update buttons
+        tabs.forEach(b=>{
+          const on = b.getAttribute('data-tab') === name;
+          b.classList.toggle('isActive', on);
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        // update panels
+        panels.forEach(p=>{
+          const id = p.id.replace('tab-','');
+          const on = id === name;
+          if(on) p.removeAttribute('hidden'); else p.setAttribute('hidden','');
+        });
+      }
 
-      // Nuevo evento -> usa tu botón existente
-      const qaNewEvent = byId("qaNewEvent");
-      if (qaNewEvent) qaNewEvent.addEventListener("click", () => safeClick(byId("newEventBtn")));
-
-      // Subir medio -> abre tab Medios y enfoca el form
-      const qaUploadMedia = byId("qaUploadMedia");
-      if (qaUploadMedia) qaUploadMedia.addEventListener("click", () => {
-        openTab("media");
-        // intenta enfocar el input URL o el file
-        setTimeout(() => {
-          safeFocus(byId("mediaUrl") || byId("mediaFile") || byId("mediaName"));
-        }, 60);
+      // menu clicks
+      tabs.forEach(b=>{
+        b.addEventListener('click', ()=>showTab(b.getAttribute('data-tab')));
       });
 
-      // Nueva promo -> abre tab Promos y dispara tu botón
-      const qaNewPromo = byId("qaNewPromo");
-      if (qaNewPromo) qaNewPromo.addEventListener("click", () => {
-        openTab("promos");
-        setTimeout(() => safeClick(byId("newPromoBtn")), 40);
+      // default
+      showTab('dashboard');
+
+      // Quick Actions (dashboard)
+      const go = (name)=>()=>showTab(name);
+      const map = {
+        qaGoEvents:'events',
+        qaGoDates:'dates',
+        qaGoRegs:'regs',
+        qaGoMedia:'media',
+        qaGoGallery:'gallery',
+        qaGoPromos:'promos',
+      };
+      Object.entries(map).forEach(([id,name])=>{
+        const el = document.getElementById(id);
+        if(el) el.addEventListener('click', go(name));
       });
 
-      // Refrescar -> refresca tablas principales (si existen)
-      const qaRefreshAll = byId("qaRefreshAll");
-      if (qaRefreshAll) qaRefreshAll.addEventListener("click", () => {
-        safeClick(byId("datesRefreshBtn"));
-        safeClick(byId("mediaRefreshBtn"));
-        safeClick(byId("refreshGalleryBtn"));
-        safeClick(byId("refreshPromosBtn"));
-      });
+      // Mobile menu
+      const mobileBtn = document.getElementById('mobileMenuBtn');
+      const leftNav = document.querySelector('.leftNav');
+      if(mobileBtn && leftNav){
+        mobileBtn.addEventListener('click', ()=>leftNav.classList.toggle('open'));
+      }
+
+      // Generic: click thumbnail in lists to expand preview (Media/Gallery)
+      // Works if JS renders <img> inside list items.
+      function bindThumbPreview(listId, previewImgId){
+        const list = document.getElementById(listId);
+        const img = document.getElementById(previewImgId);
+        if(!list || !img) return;
+        list.addEventListener('click', (e)=>{
+          const target = e.target;
+          if(!(target instanceof HTMLElement)) return;
+          const im = target.closest('img');
+          if(!im) return;
+          const src = im.getAttribute('src');
+          if(!src) return;
+          img.setAttribute('src', src);
+          // ensure preview visible if it's in a details drop
+          const details = img.closest('details');
+          if(details) details.open = true;
+        });
+      }
+      bindThumbPreview('mediaList', 'mediaPreviewImg');
+      bindThumbPreview('ecnGalleryList', 'ecnGalPreviewImg');
+
+      // Alerts hooks (basic): expose window.adminToast for your existing JS to use if needed
+      window.adminToast = function(msg, type='ok'){
+        const host = document.getElementById('toasts');
+        if(!host) return;
+        const t = document.createElement('div');
+        t.className = 'toast ' + type;
+        t.textContent = msg;
+        host.appendChild(t);
+        setTimeout(()=>t.classList.add('show'), 10);
+        setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(), 200); }, 2800);
+      };
     })();
   </script>
 
