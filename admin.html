@@ -14,7 +14,7 @@
   </style>
 </head>
 
-<body class="adminPage" data-page="admin">
+<body class="adminPage uiLight" data-page="admin">
   <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
 
   <header class="topbar">
@@ -70,6 +70,47 @@
             <div class="sideFoot sideFooter">
               <span class="sideChip">TIP</span>
               <span class="sideFootText">Usá el buscador arriba para filtrar rápido.</span>
+            </div>
+          </div>
+
+          <div class="quickActions" aria-label="Quick Actions">
+            <div class="qaTitle">
+              <p class="kicker">QUICK ACTIONS</p>
+              <span class="pill">PRO</span>
+            </div>
+
+            <div class="qaGrid">
+              <button class="qaBtn" type="button" id="qaNewEvent">
+                <span class="qaMeta">
+                  <span class="qaLabel">Nuevo evento</span>
+                  <span class="qaHint">Crear y publicar rápido</span>
+                </span>
+                <span class="qaPill">EVENT</span>
+              </button>
+
+              <button class="qaBtn" type="button" id="qaUploadMedia">
+                <span class="qaMeta">
+                  <span class="qaLabel">Subir medio</span>
+                  <span class="qaHint">Imagen/video + URL</span>
+                </span>
+                <span class="qaPill">MEDIA</span>
+              </button>
+
+              <button class="qaBtn" type="button" id="qaNewPromo">
+                <span class="qaMeta">
+                  <span class="qaLabel">Nueva promo</span>
+                  <span class="qaHint">Banner/card/toast</span>
+                </span>
+                <span class="qaPill">PROMO</span>
+              </button>
+
+              <button class="qaBtn" type="button" id="qaRefreshAll">
+                <span class="qaMeta">
+                  <span class="qaLabel">Refrescar</span>
+                  <span class="qaHint">Listas y tablas</span>
+                </span>
+                <span class="qaPill">SYNC</span>
+              </button>
             </div>
           </div>
         </aside>
@@ -705,5 +746,50 @@
       }, true);
     })();
   </script>
+
+  <script>
+    // Quick Actions (no rompe tu JS existente)
+    (function(){
+      const $ = (sel) => document.querySelector(sel);
+      const byId = (id) => document.getElementById(id);
+
+      const safeClick = (el) => { try{ el && el.click(); }catch(_){} };
+      const safeFocus = (el) => { try{ el && el.focus({ preventScroll:false }); }catch(_){} };
+
+      // Tabs helpers (usa tus data-tab existentes)
+      const openTab = (tabName) => safeClick($(`[data-tab="${tabName}"]`));
+
+      // Nuevo evento -> usa tu botón existente
+      const qaNewEvent = byId("qaNewEvent");
+      if (qaNewEvent) qaNewEvent.addEventListener("click", () => safeClick(byId("newEventBtn")));
+
+      // Subir medio -> abre tab Medios y enfoca el form
+      const qaUploadMedia = byId("qaUploadMedia");
+      if (qaUploadMedia) qaUploadMedia.addEventListener("click", () => {
+        openTab("media");
+        // intenta enfocar el input URL o el file
+        setTimeout(() => {
+          safeFocus(byId("mediaUrl") || byId("mediaFile") || byId("mediaName"));
+        }, 60);
+      });
+
+      // Nueva promo -> abre tab Promos y dispara tu botón
+      const qaNewPromo = byId("qaNewPromo");
+      if (qaNewPromo) qaNewPromo.addEventListener("click", () => {
+        openTab("promos");
+        setTimeout(() => safeClick(byId("newPromoBtn")), 40);
+      });
+
+      // Refrescar -> refresca tablas principales (si existen)
+      const qaRefreshAll = byId("qaRefreshAll");
+      if (qaRefreshAll) qaRefreshAll.addEventListener("click", () => {
+        safeClick(byId("datesRefreshBtn"));
+        safeClick(byId("mediaRefreshBtn"));
+        safeClick(byId("refreshGalleryBtn"));
+        safeClick(byId("refreshPromosBtn"));
+      });
+    })();
+  </script>
+
 </body>
 </html>
