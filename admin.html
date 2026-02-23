@@ -14,7 +14,7 @@
   </style>
 </head>
 
-<body class="adminPage uiLight" data-page="admin">
+<body class="adminPage" data-page="admin">
   <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
 
   <header class="topbar">
@@ -87,66 +87,6 @@
               <input class="input input--search" id="search" type="search" placeholder="Buscar evento o inscripción" />
             </div>
           </div>
-            <div class="dashQuick" id="dashQuick" aria-label="Quick Actions">
-              <div class="dashHead">
-                <div>
-                  <div class="kicker">INICIO</div>
-                  <div class="h2" style="margin:0;">Quick Actions</div>
-                  <div class="mini">Acciones rápidas para administrar contenido.</div>
-                </div>
-              </div>
-
-              <div class="qaGrid" role="list">
-                <button class="qaTile" type="button" id="qaNewEvent" role="listitem">
-                  <div class="qaIcon" aria-hidden="true">📅</div>
-                  <div class="qaMeta">
-                    <div class="qaTitle">Nuevo evento</div>
-                    <div class="qaSub">Crear y publicar</div>
-                  </div>
-                </button>
-
-                <button class="qaTile" type="button" id="qaNewDate" role="listitem">
-                  <div class="qaIcon" aria-hidden="true">⏱️</div>
-                  <div class="qaMeta">
-                    <div class="qaTitle">Nueva fecha</div>
-                    <div class="qaSub">Cupos y etiqueta</div>
-                  </div>
-                </button>
-
-                <button class="qaTile" type="button" id="qaUploadMedia" role="listitem">
-                  <div class="qaIcon" aria-hidden="true">🖼️</div>
-                  <div class="qaMeta">
-                    <div class="qaTitle">Subir medio</div>
-                    <div class="qaSub">URL pública + slots</div>
-                  </div>
-                </button>
-
-                <button class="qaTile" type="button" id="qaNewPromo" role="listitem">
-                  <div class="qaIcon" aria-hidden="true">🏷️</div>
-                  <div class="qaMeta">
-                    <div class="qaTitle">Nueva promo</div>
-                    <div class="qaSub">Banner / Card / Toast</div>
-                  </div>
-                </button>
-
-                <button class="qaTile" type="button" id="qaRefreshAll" role="listitem">
-                  <div class="qaIcon" aria-hidden="true">🔄</div>
-                  <div class="qaMeta">
-                    <div class="qaTitle">Refrescar</div>
-                    <div class="qaSub">Listas y tablas</div>
-                  </div>
-                </button>
-
-                <a class="qaTile qaTile--link" href="./index.html" role="listitem">
-                  <div class="qaIcon" aria-hidden="true">🌐</div>
-                  <div class="qaMeta">
-                    <div class="qaTitle">Ver sitio</div>
-                    <div class="qaSub">Abrir público</div>
-                  </div>
-                </a>
-              </div>
-            </div>
-
 
           <div class="tabs" aria-label="Vistas del administrador">
 
@@ -765,108 +705,5 @@
       }, true);
     })();
   </script>
-
-  <!-- ✅ UI Enhancements (NO rompe carga BD / mantiene IDs) -->
-  <script>
-    (function(){
-      const $ = (s, r=document) => r.querySelector(s);
-      const byId = (id) => document.getElementById(id);
-
-      // Toast helper (usa window.toast o APP.toast si existen)
-      window.adminToast = function(title, msg){
-        try{ if (window.toast) return window.toast(title, msg); }catch(e){}
-        try{ if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg); }catch(e){}
-        // fallback minimal usando tu contenedor #toasts
-        const host = byId("toasts");
-        if(!host) return alert(title + " — " + msg);
-        const el = document.createElement("div");
-        el.className = "toast";
-        el.innerHTML = '<div><p class="tTitle"></p><p class="tMsg"></p></div><button class="close" type="button" aria-label="Cerrar">✕</button>';
-        el.querySelector(".tTitle").textContent = title;
-        el.querySelector(".tMsg").textContent = msg;
-        el.querySelector(".close").addEventListener("click", ()=> el.remove());
-        host.appendChild(el);
-        setTimeout(()=>{ try{ el.remove(); }catch(_){} }, 4200);
-      };
-
-      // Dashboard quick actions: se oculta cuando el usuario elige una sección
-      const dash = byId("dashQuick");
-      const tabs = document.querySelectorAll(".sideTabs .tab");
-      const hideDash = ()=>{ if(dash) dash.style.display = "none"; };
-      const showDash = ()=>{ if(dash) dash.style.display = ""; };
-
-      // Si el usuario no ha interactuado, mostramos quick actions
-      // Al primer click en un tab, ocultamos.
-      tabs.forEach(t => t.addEventListener("click", hideDash, {passive:true}));
-
-      // Quick actions -> reusan tus botones/flows existentes
-      const safeClick = (el)=>{ try{ el && el.click(); }catch(_){} };
-
-      const qaNewEvent = byId("qaNewEvent");
-      if(qaNewEvent) qaNewEvent.addEventListener("click", ()=>{ hideDash(); safeClick(byId("newEventBtn")); });
-
-      const qaNewDate = byId("qaNewDate");
-      if(qaNewDate) qaNewDate.addEventListener("click", ()=>{
-        hideDash();
-        safeClick(document.querySelector('[data-tab="dates"]'));
-        setTimeout(()=> safeClick(byId("datesNewBtn")), 60);
-      });
-
-      const qaUploadMedia = byId("qaUploadMedia");
-      if(qaUploadMedia) qaUploadMedia.addEventListener("click", ()=>{
-        hideDash();
-        safeClick(document.querySelector('[data-tab="media"]'));
-        setTimeout(()=>{ const f = byId("mediaFile") || byId("mediaUrl") || byId("mediaName"); try{ f && f.focus(); }catch(_){} }, 80);
-      });
-
-      const qaNewPromo = byId("qaNewPromo");
-      if(qaNewPromo) qaNewPromo.addEventListener("click", ()=>{
-        hideDash();
-        safeClick(document.querySelector('[data-tab="promos"]'));
-        setTimeout(()=> safeClick(byId("newPromoBtn")), 60);
-      });
-
-      const qaRefreshAll = byId("qaRefreshAll");
-      if(qaRefreshAll) qaRefreshAll.addEventListener("click", ()=>{
-        safeClick(byId("datesRefreshBtn"));
-        safeClick(byId("seedRegsBtn"));
-        safeClick(byId("mediaRefreshBtn"));
-        safeClick(byId("refreshGalleryBtn"));
-        safeClick(byId("refreshPromosBtn"));
-        window.adminToast("Refrescando", "Actualizando listas…");
-      });
-
-      // Media: click en thumbnail => mostrar preview grande
-      const mediaList = byId("mediaList");
-      if(mediaList){
-        mediaList.addEventListener("click", (e)=>{
-          const img = e.target && e.target.closest && e.target.closest("img");
-          if(!img) return;
-          const src = img.getAttribute("src");
-          const preview = byId("mediaPreviewImg");
-          const previewWrap = byId("mediaPreview");
-          const empty = byId("mediaPreviewEmpty");
-          if(src && preview){
-            preview.src = src;
-            if(previewWrap) previewWrap.hidden = false;
-            if(empty) empty.hidden = true;
-          }
-        });
-      }
-
-      // Galería: click en preview de tabla => abre modal y setea preview (si tu JS no lo hace ya)
-      const gallery = byId("galleryTbody");
-      if(gallery){
-        gallery.addEventListener("click", (e)=>{
-          const img = e.target && e.target.closest && e.target.closest("img");
-          if(!img) return;
-          const src = img.getAttribute("src");
-          const p = byId("ecnGalPreviewImg");
-          if(src && p) p.src = src;
-        });
-      }
-    })();
-  </script>
-
 </body>
 </html>
