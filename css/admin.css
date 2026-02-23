@@ -1140,63 +1140,382 @@ body.adminLoginPage .page{
 
 
 /* ============================================================
-   FLAT ADMIN 2026  (NO SHADOWS • ORACLE STYLE • SAFE FOR DB)
+   ✅ UI LIGHT (Pro 2026) — Mantiene estructura actual y JS
+   Activación: <body class="adminPage uiLight"> / adminLoginPage uiLight
 ============================================================ */
-body.adminPage, body.adminLoginPage{
-  font-family: Helvetica, Arial, sans-serif !important;
-  background:#f6f7f9;
-  color:#111;
+body.uiLight{
+  --bg: #f6f6fb;
+  --bg2:#ffffff;
+
+  --text: rgba(18,12,30,.92);
+  --muted: rgba(18,12,30,.62);
+  --muted2: rgba(18,12,30,.52);
+
+  --line: rgba(20,14,40,.10);
+  --line2: rgba(20,14,40,.16);
+
+  --focus: rgba(124,92,255,.22);
+
+  --shadow: 0 18px 60px rgba(20,14,40,.10);
+  --shadow2: 0 12px 30px rgba(20,14,40,.08);
+
+  --btnBg: rgba(124,92,255,.10);
+  --btnBgHover: rgba(124,92,255,.14);
+
+  --brand: #7c5cff;
+  --brand2:#5b3bff;
+  --danger:#ef476f;
 }
+
+body.uiLight{
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(1100px 900px at 18% -10%, rgba(124,92,255,.18), transparent 60%),
+    radial-gradient(1000px 900px at 92% 0%, rgba(124,92,255,.10), transparent 55%),
+    linear-gradient(180deg, var(--bg2), var(--bg));
+}
+
+body.uiLight .topbar{
+  background: rgba(255,255,255,.70);
+  border-bottom: 1px solid var(--line);
+}
+
+body.uiLight .brand:hover{ background: rgba(124,92,255,.06); }
+body.uiLight .brand img{
+  border: 1px solid var(--line2);
+  background: rgba(124,92,255,.06);
+}
+
+body.uiLight .panel{
+  background: rgba(255,255,255,.70);
+  border-color: var(--line);
+  box-shadow: var(--shadow2);
+}
+
+body.uiLight .card,
+body.uiLight .sideCard,
+body.uiLight .tableWrap,
+body.uiLight .list{
+  background: rgba(255,255,255,.78);
+  border-color: var(--line);
+  box-shadow: var(--shadow2);
+}
+
+body.uiLight th{
+  background: rgba(255,255,255,.92);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+body.uiLight td{
+  color: rgba(18,12,30,.88);
+  border-bottom: 1px solid rgba(20,14,40,.08);
+}
+
+body.uiLight tbody tr:hover td{ background: rgba(124,92,255,.05); }
+
+body.uiLight .btn{
+  background: rgba(124,92,255,.08);
+  border-color: rgba(124,92,255,.18);
+  color: rgba(18,12,30,.92);
+}
+body.uiLight .btn:hover{
+  background: rgba(124,92,255,.12);
+  border-color: rgba(124,92,255,.30);
+}
+body.uiLight .btn.btn--ghost{
+  background: transparent;
+  border-color: var(--line2);
+}
+body.uiLight .btn.primary,
+body.uiLight .btn.btn--primary{
+  color: #fff;
+  background: linear-gradient(135deg, rgba(124,92,255,1), rgba(91,59,255,.88));
+  border-color: rgba(124,92,255,.55);
+}
+
+body.uiLight .input,
+body.uiLight input,
+body.uiLight select,
+body.uiLight textarea{
+  background: rgba(255,255,255,.92);
+  border-color: var(--line2);
+  color: rgba(18,12,30,.92);
+}
+body.uiLight .input:focus,
+body.uiLight input:focus,
+body.uiLight select:focus,
+body.uiLight textarea:focus{
+  box-shadow: 0 0 0 4px var(--focus);
+  border-color: rgba(124,92,255,.50);
+}
+
+/* ============================================================
+   ✅ ESTRUCTURA (SIN tocar IDs): Sidebar fijo izquierdo tipo WP/Oracle
+============================================================ */
+.adminShell{
+  display:grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  align-items:start;
+}
+
+/* Sidebar pegado y con scroll propio */
 .sidebar{
-  width:260px;
-  position:sticky;
-  top:0;
-  height:100vh;
-  background:#2e2a3b;
-  color:white;
-  border-right:1px solid #444;
+  position: sticky;
+  top: 96px;
+  height: calc(100vh - 110px);
+  overflow: auto;
+  padding-right: 2px;
 }
-.sideNav button{
-  width:100%;
-  padding:14px;
-  background:none;
-  border:none;
-  color:white;
+
+/* Mejor “menu” vertical */
+.sideTabs{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+.sideTabs .tab{
+  width: 100%;
+  border-radius: 14px;
   text-align:left;
-  border-bottom:1px solid rgba(255,255,255,.1);
+  justify-content:flex-start;
+  padding: 12px 12px;
+  font-size: 12px;
 }
-.sideNav button:hover{ background:#3d3652; }
-.sideNav button.isActive{ background:#5c50a8; }
-.content, .panel, .card{
-  background:white;
-  border:1px solid #ddd;
-  border-radius:10px;
-  box-shadow:none !important;
+
+/* Content ocupa */
+.adminContent{ min-width: 0; }
+
+/* Mobile: sidebar arriba */
+@media (max-width: 980px){
+  .adminShell{ grid-template-columns: 1fr; }
+  .sidebar{ position: static; height: auto; overflow: visible; }
+  .sideTabs{ flex-direction: row; flex-wrap: wrap; }
+  .sideTabs .tab{ width:auto; border-radius: 999px; }
 }
-.list{
-  max-height:380px;
-  overflow:auto;
-  border:1px solid #ddd;
+
+/* ============================================================
+   ✅ DASH Quick Actions (solo visual, NO toca DB)
+============================================================ */
+.dashQuick{
+  margin-top: 14px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.76);
+  box-shadow: var(--shadow2);
+  padding: 14px;
 }
-.list img{
-  width:46px;
-  height:46px;
-  object-fit:cover;
-  border-radius:6px;
+.dashHead{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
-.btn{
-  border-radius:8px !important;
-  padding:8px 16px;
-  border:1px solid #aaa;
-  background:#fff;
+
+.qaGrid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
-.btn--primary{
-  background:#5c50a8;
-  color:white;
-  border:none;
+@media (max-width: 980px){
+  .qaGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.input{
-  border-radius:8px;
-  border:1px solid #ccc;
-  padding:8px;
+@media (max-width: 520px){
+  .qaGrid{ grid-template-columns: 1fr; }
+}
+
+.qaTile{
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.88);
+  padding: 14px;
+  display:flex;
+  gap: 12px;
+  align-items:center;
+  cursor:pointer;
+  text-align:left;
+  transition: transform .12s ease, border-color .15s ease, background .15s ease;
+}
+.qaTile:hover{
+  transform: translateY(-1px);
+  background: rgba(124,92,255,.06);
+  border-color: rgba(124,92,255,.22);
+}
+.qaTile--link{ text-decoration:none; color: inherit; }
+.qaIcon{
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display:grid;
+  place-items:center;
+  border: 1px solid rgba(124,92,255,.18);
+  background: rgba(124,92,255,.10);
+  font-size: 18px;
+}
+.qaTitle{
+  font-weight: 850;
+  letter-spacing:.01em;
+}
+.qaSub{
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+
+/* ============================================================
+   ✅ PATCH 2026-02-22 — VISIBILIDAD SIDEBAR + HELVETICA + LAYOUT
+   (NO rompe BD/JS: solo CSS, mantiene IDs/clases)
+============================================================ */
+
+/* Tipografía global */
+body.adminPage.uiLight,
+body.adminLoginPage.uiLight{
+  font-family: Helvetica, Arial, system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
+}
+
+/* Mapear variables base usadas por el CSS original a modo claro */
+body.adminPage.uiLight,
+body.adminLoginPage.uiLight{
+  --bg: #ffffff;
+  --bg2: #f6f6fb;
+
+  --text: rgba(18, 12, 30, .92);
+  --muted: rgba(18, 12, 30, .62);
+  --muted2: rgba(18, 12, 30, .50);
+
+  --line: rgba(20, 14, 40, .10);
+  --line2: rgba(20, 14, 40, .14);
+
+  --shadow: 0 18px 60px rgba(20, 14, 40, .10);
+  --shadow2: 0 12px 30px rgba(20, 14, 40, .08);
+}
+
+/* Contenedor a pantalla más amplia y mejor distribución */
+body.adminPage.uiLight main.container{
+  max-width: none !important;
+  width: 100% !important;
+  padding: 22px 22px 28px !important;
+}
+
+/* Shell: sidebar fijo izquierda + contenido derecha */
+body.adminPage.uiLight .adminShell{
+  display: grid !important;
+  grid-template-columns: 290px minmax(0, 1fr) !important;
+  gap: 22px !important;
+  align-items: start !important;
+}
+
+/* Sidebar visible (tu problema actual: contraste muy bajo) */
+body.adminPage.uiLight .sidebar{
+  position: sticky !important;
+  top: 92px !important;
+  height: calc(100dvh - 110px) !important;
+  overflow: auto !important;
+  padding-right: 2px;
+}
+
+body.adminPage.uiLight .sideCard{
+  background: rgba(255,255,255,.92) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow2) !important;
+}
+
+body.adminPage.uiLight .sideHead .kicker{
+  color: rgba(18,12,30,.55) !important;
+}
+body.adminPage.uiLight .sideHead .sideTitle{
+  color: rgba(18,12,30,.92) !important;
+  font-weight: 800 !important;
+}
+
+/* Tabs/Items del menú: alto contraste */
+body.adminPage.uiLight .sideTabs .tab{
+  background: rgba(255,255,255,.70) !important;
+  border: 1px solid var(--line) !important;
+  color: rgba(18,12,30,.86) !important;
+  font-weight: 800 !important;
+}
+
+body.adminPage.uiLight .sideTabs .tab:hover{
+  background: rgba(124,92,255,.10) !important;
+  border-color: rgba(124,92,255,.22) !important;
+}
+
+body.adminPage.uiLight .sideTabs .tab.isActive,
+body.adminPage.uiLight .sideTabs .tab[aria-selected="true"]{
+  background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(124,92,255,.08)) !important;
+  border-color: rgba(124,92,255,.45) !important;
+  color: rgba(18,12,30,.92) !important;
+  box-shadow: 0 0 0 4px rgba(124,92,255,.10) !important;
+}
+
+/* Área derecha: encabezado más “dashboard” y bien acomodado */
+body.adminPage.uiLight .pageHead{
+  align-items: flex-end !important;
+  gap: 14px !important;
+  padding: 6px 6px 10px !important;
+}
+
+body.adminPage.uiLight .pageHead .h1{
+  letter-spacing: -0.02em;
+}
+
+/* Buscador header: ancho correcto */
+body.adminPage.uiLight .pageTools{
+  min-width: 360px !important;
+  max-width: 520px !important;
+  width: 42vw !important;
+}
+
+/* Mejor grid para cards principales */
+body.adminPage.uiLight .grid2{
+  display: grid !important;
+  grid-template-columns: 1.05fr .95fr !important;
+  gap: 18px !important;
+}
+
+@media (max-width: 1100px){
+  body.adminPage.uiLight .adminShell{ grid-template-columns: 1fr !important; }
+  body.adminPage.uiLight .sidebar{ position: relative !important; top: auto !important; height: auto !important; }
+  body.adminPage.uiLight .grid2{ grid-template-columns: 1fr !important; }
+  body.adminPage.uiLight .pageTools{ width: 100% !important; min-width: 0 !important; max-width: none !important; }
+}
+
+/* Inputs con altura/espaciado consistente */
+body.adminPage.uiLight .input,
+body.adminPage.uiLight select,
+body.adminPage.uiLight textarea{
+  font-family: Helvetica, Arial, sans-serif !important;
+  font-size: 14px !important;
+}
+
+/* Botones más “template dashboard” */
+body.adminPage.uiLight .btn{
+  border-radius: 999px !important;
+  padding: 10px 14px !important;
+  font-weight: 800 !important;
+}
+
+/* Headings y labels */
+body.adminPage.uiLight .h1,
+body.adminPage.uiLight .h2,
+body.adminPage.uiLight .h3{
+  font-family: Helvetica, Arial, sans-serif !important;
+}
+
+body.adminPage.uiLight label,
+body.adminPage.uiLight .label{
+  font-weight: 800 !important;
+  color: rgba(18,12,30,.85) !important;
+}
+
+/* Fix: algunos elementos estaban quedando “lavados” por opacity heredada */
+body.adminPage.uiLight .sideNav,
+body.adminPage.uiLight .sideFoot,
+body.adminPage.uiLight .pill{
+  opacity: 1 !important;
 }
