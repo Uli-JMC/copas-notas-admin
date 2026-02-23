@@ -1364,3 +1364,158 @@ body.uiLight textarea:focus{
   color: var(--muted);
   font-size: 13px;
 }
+
+
+/* ============================================================
+   ✅ PATCH 2026-02-22 — VISIBILIDAD SIDEBAR + HELVETICA + LAYOUT
+   (NO rompe BD/JS: solo CSS, mantiene IDs/clases)
+============================================================ */
+
+/* Tipografía global */
+body.adminPage.uiLight,
+body.adminLoginPage.uiLight{
+  font-family: Helvetica, Arial, system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
+}
+
+/* Mapear variables base usadas por el CSS original a modo claro */
+body.adminPage.uiLight,
+body.adminLoginPage.uiLight{
+  --bg: #ffffff;
+  --bg2: #f6f6fb;
+
+  --text: rgba(18, 12, 30, .92);
+  --muted: rgba(18, 12, 30, .62);
+  --muted2: rgba(18, 12, 30, .50);
+
+  --line: rgba(20, 14, 40, .10);
+  --line2: rgba(20, 14, 40, .14);
+
+  --shadow: 0 18px 60px rgba(20, 14, 40, .10);
+  --shadow2: 0 12px 30px rgba(20, 14, 40, .08);
+}
+
+/* Contenedor a pantalla más amplia y mejor distribución */
+body.adminPage.uiLight main.container{
+  max-width: none !important;
+  width: 100% !important;
+  padding: 22px 22px 28px !important;
+}
+
+/* Shell: sidebar fijo izquierda + contenido derecha */
+body.adminPage.uiLight .adminShell{
+  display: grid !important;
+  grid-template-columns: 290px minmax(0, 1fr) !important;
+  gap: 22px !important;
+  align-items: start !important;
+}
+
+/* Sidebar visible (tu problema actual: contraste muy bajo) */
+body.adminPage.uiLight .sidebar{
+  position: sticky !important;
+  top: 92px !important;
+  height: calc(100dvh - 110px) !important;
+  overflow: auto !important;
+  padding-right: 2px;
+}
+
+body.adminPage.uiLight .sideCard{
+  background: rgba(255,255,255,.92) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow2) !important;
+}
+
+body.adminPage.uiLight .sideHead .kicker{
+  color: rgba(18,12,30,.55) !important;
+}
+body.adminPage.uiLight .sideHead .sideTitle{
+  color: rgba(18,12,30,.92) !important;
+  font-weight: 800 !important;
+}
+
+/* Tabs/Items del menú: alto contraste */
+body.adminPage.uiLight .sideTabs .tab{
+  background: rgba(255,255,255,.70) !important;
+  border: 1px solid var(--line) !important;
+  color: rgba(18,12,30,.86) !important;
+  font-weight: 800 !important;
+}
+
+body.adminPage.uiLight .sideTabs .tab:hover{
+  background: rgba(124,92,255,.10) !important;
+  border-color: rgba(124,92,255,.22) !important;
+}
+
+body.adminPage.uiLight .sideTabs .tab.isActive,
+body.adminPage.uiLight .sideTabs .tab[aria-selected="true"]{
+  background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(124,92,255,.08)) !important;
+  border-color: rgba(124,92,255,.45) !important;
+  color: rgba(18,12,30,.92) !important;
+  box-shadow: 0 0 0 4px rgba(124,92,255,.10) !important;
+}
+
+/* Área derecha: encabezado más “dashboard” y bien acomodado */
+body.adminPage.uiLight .pageHead{
+  align-items: flex-end !important;
+  gap: 14px !important;
+  padding: 6px 6px 10px !important;
+}
+
+body.adminPage.uiLight .pageHead .h1{
+  letter-spacing: -0.02em;
+}
+
+/* Buscador header: ancho correcto */
+body.adminPage.uiLight .pageTools{
+  min-width: 360px !important;
+  max-width: 520px !important;
+  width: 42vw !important;
+}
+
+/* Mejor grid para cards principales */
+body.adminPage.uiLight .grid2{
+  display: grid !important;
+  grid-template-columns: 1.05fr .95fr !important;
+  gap: 18px !important;
+}
+
+@media (max-width: 1100px){
+  body.adminPage.uiLight .adminShell{ grid-template-columns: 1fr !important; }
+  body.adminPage.uiLight .sidebar{ position: relative !important; top: auto !important; height: auto !important; }
+  body.adminPage.uiLight .grid2{ grid-template-columns: 1fr !important; }
+  body.adminPage.uiLight .pageTools{ width: 100% !important; min-width: 0 !important; max-width: none !important; }
+}
+
+/* Inputs con altura/espaciado consistente */
+body.adminPage.uiLight .input,
+body.adminPage.uiLight select,
+body.adminPage.uiLight textarea{
+  font-family: Helvetica, Arial, sans-serif !important;
+  font-size: 14px !important;
+}
+
+/* Botones más “template dashboard” */
+body.adminPage.uiLight .btn{
+  border-radius: 999px !important;
+  padding: 10px 14px !important;
+  font-weight: 800 !important;
+}
+
+/* Headings y labels */
+body.adminPage.uiLight .h1,
+body.adminPage.uiLight .h2,
+body.adminPage.uiLight .h3{
+  font-family: Helvetica, Arial, sans-serif !important;
+}
+
+body.adminPage.uiLight label,
+body.adminPage.uiLight .label{
+  font-weight: 800 !important;
+  color: rgba(18,12,30,.85) !important;
+}
+
+/* Fix: algunos elementos estaban quedando “lavados” por opacity heredada */
+body.adminPage.uiLight .sideNav,
+body.adminPage.uiLight .sideFoot,
+body.adminPage.uiLight .pill{
+  opacity: 1 !important;
+}
