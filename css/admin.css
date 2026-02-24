@@ -1,162 +1,285 @@
 /* ============================================================
-   admin.css ✅ PRO UI (2026-02) — FULL (SPACING FIX + PRO POLISH)
-   - Mantiene tus clases/IDs (NO rompe JS)
-   - ✅ FIX “todo pegado”: inputs SIN margin, spacing por .field
-   - ✅ Sidebar layout + cards + tabs + tables + forms
-   - ✅ Media tab fix + Gallery/Promo modal fixes
+   admin.css ✅ ENTRE COPAS & NOTAS — TEMPLATE-LIKE (2026-02-24)
+   OBJETIVO (según tu pedido):
+   - ✅ Menu sólido a la izquierda (header a footer) + contenido a la derecha
+   - ✅ Mantener IDs/clases (NO rompe JS / BD)
+   - ✅ Paleta BN: negro, gris, blanco (alto contraste)
+   - ✅ Sin sombras / sin blur / sin gradientes
+   - ✅ Bordes redondeados modernos (pero flat)
+   - ✅ Mejor espaciado entre labels/inputs
+   - ✅ Quick links visibles cuando NO haya botones/acciones
+   - ✅ Módulos alineados (grid consistente)
+   - ✅ Conserva fixes: media tab + modales gallery/promo
 ============================================================ */
 
+/* ----------------------------
+   TOKENS
+---------------------------- */
 :root{
-  --bg:#0b0b0c;
-  --bg2:#07090f;
+  --bg:#0b0b0b;
+  --panel:#101010;
+  --panel2:#0e0e0e;
 
-  --text: rgba(255,255,255,.92);
-  --muted: rgba(255,255,255,.62);
-  --muted2: rgba(255,255,255,.52);
+  --text:#f3f3f3;
+  --muted:#bdbdbd;
+  --muted2:#9c9c9c;
 
-  --line: rgba(255,255,255,.12);
-  --line2: rgba(255,255,255,.18);
+  --line:#242424;
+  --line2:#2f2f2f;
 
-  --focus: rgba(124,92,255,.32);
+  --focus:#6ea8ff;
 
-  --max: 1200px;
-  --radius: 18px;
-  --radius2: 22px;
+  --max: 1320px;
 
-  --shadow: 0 18px 60px rgba(0,0,0,.55);
-  --shadow2: 0 12px 30px rgba(0,0,0,.35);
+  --radius: 14px;
+  --radius2: 18px;
 
-  --btnBg: rgba(255,255,255,.10);
-  --btnBgHover: rgba(255,255,255,.14);
+  --sideW: 288px;
+  --topbarH: 72px;
 
-  --brand: #7c5cff;
-  --brand2:#2dd4bf;
   --danger:#ff4d6d;
-
-  /* login-only page */
-  --topbarH: 86px;
 }
-*{box-sizing:border-box}
-html,body{height:100%}
 
- /* Display none */
-[hidden] { display: none !important; }
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+[hidden]{ display:none !important; }
 
-/* ✅ Fondo full pantalla (sin cortes) */
 body{
-  min-height: 100vh;
   margin:0;
-  color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", Helvetica, sans-serif;
-  letter-spacing:.2px;
-
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(1100px 900px at 20% -10%, rgba(124,92,255,.18), transparent 60%),
-    radial-gradient(1000px 900px at 90% 0%, rgba(45,212,191,.10), transparent 55%),
-    linear-gradient(180deg, var(--bg2), var(--bg));
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-size: cover;
+  min-height:100vh;
+  color:var(--text);
+  font-family: Helvetica, Arial, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg); /* ✅ sin gradientes */
 }
 
-a{color:inherit}
-.container{ width: min(var(--max), calc(100% - 40px)); margin:0 auto; }
+/* enlaces */
+a{ color:inherit; text-decoration:none; }
+::selection{ background: rgba(110,168,255,.25); }
 
-::selection{ background: rgba(124,92,255,.35); }
+/* container */
+.container{
+  width: min(var(--max), calc(100% - 40px));
+  margin: 0 auto;
+}
 
 /* ============================================================
-   TOPBAR
+   LAYOUT: sidebar fijo izquierda (header a footer)
 ============================================================ */
-.topbar{
-  position: sticky; top:0; z-index: 50;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  background: rgba(0,0,0,.45);
-  border-bottom: 1px solid rgba(255,255,255,.08);
+body.adminPage{
+  padding-left: var(--sideW);
 }
 
-.nav{
-  display:flex; align-items:center; justify-content:space-between;
-  gap:14px; padding: 14px 0;
+.adminShell{
+  display:block; /* sidebar ya es fixed */
 }
 
-.brand{
-  display:flex; align-items:center; gap:10px;
-  text-decoration:none;
-  padding: 6px 8px;
+/* Sidebar */
+.sidebar{
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sideW);
+  background: var(--panel2);
+  border-right: 1px solid var(--line);
+  padding: 18px 14px;
+  overflow: auto;
+}
+
+.sideCard{
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.sideHead{
+  padding: 8px 10px 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+
+.kicker{
+  margin:0 0 8px;
+  color: var(--muted2);
+  font-size: 11px;
+  letter-spacing:.18em;
+  text-transform: uppercase;
+}
+
+.sideTitle{
+  font-weight: 800;
+  letter-spacing:.02em;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.sideNav{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Botones del menú (usa tus .navBtn y .tab existentes) */
+.navBtn, .sideTabs .tab{
+  width: 100%;
+  text-align:left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 12px 12px;
   border-radius: 14px;
-  transition: background .15s ease;
+  font-size: 12px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
-.brand:hover{ background: rgba(255,255,255,.04); }
 
-.brand img{
-  width:34px; height:34px; object-fit:contain;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.12);
+.navBtn:hover, .sideTabs .tab:hover{
   background: rgba(255,255,255,.04);
-  padding: 4px;
+  border-color: rgba(255,255,255,.07);
+  color: var(--text);
 }
-.brand span{
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight:700;
-  letter-spacing:.03em;
+
+/* Estado activo (tu JS setea aria-selected + isActive) */
+.tab[aria-selected="true"],
+.navBtn[aria-selected="true"],
+.tab.isActive{
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.14);
+  color: var(--text);
+}
+
+/* Sidebar tip */
+.sideFoot, .sideFooter{
+  margin-top: 14px;
+  padding: 12px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.02);
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.sideChip{
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing:.14em;
+  text-transform: uppercase;
   white-space:nowrap;
 }
 
-.navRight{ display:flex; gap:10px; align-items:center; }
+.sideFootText{
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 
 /* ============================================================
-   BUTTONS
+   TOPBAR (flat, sin blur)
+============================================================ */
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--topbarH);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.nav{
+  height: var(--topbarH);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 6px 8px;
+  border-radius: 14px;
+}
+.brand:hover{ background: rgba(255,255,255,.03); }
+
+.brand img{
+  width:34px; height:34px;
+  object-fit:contain;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: rgba(255,255,255,.02);
+  padding: 5px;
+}
+
+.brand span{
+  font-weight: 800;
+  letter-spacing:.02em;
+  white-space:nowrap;
+}
+
+.navRight{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
+/* ============================================================
+   BUTTONS (flat)
 ============================================================ */
 .btn{
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.04);
+  border: 1px solid var(--line2);
+  background: transparent;
   color: var(--text);
-  padding: 11px 14px;
-  border-radius: 999px;
-  font-size: 13px;
-  letter-spacing:.10em;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  letter-spacing:.12em;
   text-transform: uppercase;
-  text-decoration:none;
   display:inline-flex;
   align-items:center;
   justify-content:center;
   gap:10px;
-  transition: transform .10s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
-  outline:none;
   cursor:pointer;
   user-select:none;
   white-space:nowrap;
 }
 
 .btn:hover{
-  transform: translateY(-1px);
-  border-color: rgba(255,255,255,.26);
-  background: rgba(255,255,255,.06);
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.18);
 }
 
 .btn:focus-visible{
-  box-shadow: 0 0 0 4px var(--focus);
-  border-color: rgba(124,92,255,.45);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(110,168,255,.35);
+  border-color: rgba(110,168,255,.55);
 }
 
-.btn.primary{
-  background: linear-gradient(135deg, rgba(124,92,255,.95), rgba(124,92,255,.55));
-  border-color: rgba(124,92,255,.55);
-  box-shadow: 0 10px 28px rgba(124,92,255,.18);
+.btn.primary, .btn--primary{
+  background: #ffffff;
+  color: #0b0b0b;
+  border-color: #ffffff;
 }
-.btn.primary:hover{
-  background: linear-gradient(135deg, rgba(124,92,255,1), rgba(124,92,255,.62));
-  border-color: rgba(124,92,255,.70);
+.btn.primary:hover, .btn--primary:hover{
+  background: rgba(255,255,255,.92);
+  border-color: rgba(255,255,255,.92);
 }
 
 .btn.btn--ghost{
   background: transparent;
-  border-color: rgba(255,255,255,.14);
 }
-.btn.btn--ghost:hover{
-  background: rgba(255,255,255,.05);
+
+.btn.btn--danger{
+  border-color: rgba(255,77,109,.45);
+  color: #ffd1da;
+}
+.btn.btn--danger:hover{
+  background: rgba(255,77,109,.10);
+  border-color: rgba(255,77,109,.65);
 }
 
 .btn.sm{
@@ -166,75 +289,71 @@ a{color:inherit}
 }
 
 /* ============================================================
-   PAGE / HEAD
+   MAIN
 ============================================================ */
-.page{ padding: 22px 0 58px; }
+main.container{ padding: 18px 0 44px; }
+.adminContent{ min-width: 0; }
 
-.app .head{
+.pageHead{
   display:flex;
-  gap: 14px;
   justify-content:space-between;
   align-items:flex-end;
-  flex-wrap:wrap;
-  margin-bottom: 16px;
-}
-
-.kicker{
-  margin:0 0 8px;
-  color: rgba(255,255,255,.56);
-  font-size: 12px;
-  letter-spacing:.18em;
-  text-transform: uppercase;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
 }
 
 .h1{
   margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight: 750;
-  letter-spacing:.02em;
-  font-size: 30px;
+  font-weight: 900;
+  letter-spacing:.01em;
+  font-size: 24px;
 }
-.h2{
-  margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight: 750;
-  letter-spacing:.02em;
-  font-size: 26px;
-}
-.h3{
-  margin:0;
-  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-weight: 750;
-  letter-spacing:.02em;
-  font-size: 20px;
-}
+.h2{ margin:0; font-weight:900; font-size: 20px; }
+.h3{ margin:0; font-weight:900; font-size: 16px; }
 
-.sub{
-  margin: 10px 0 0;
-  color: rgba(255,255,255,.78);
-  line-height: 1.6;
-  font-size: 14px;
-}
+.mini{ color: var(--muted); font-size: 13px; line-height: 1.5; }
+.muted{ color: var(--muted); }
+.small{ font-size: 12px; color: var(--muted2); }
+.right{ text-align:right; }
 
-.headActions{ display:flex; gap:10px; align-items:center; }
-
-.search{
-  width: min(460px, 100%);
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.30);
-  padding: 12px 14px;
-  color: var(--text);
-  outline:none;
-  transition: box-shadow .15s ease, border-color .15s ease;
-}
-.search:focus{
-  box-shadow: 0 0 0 4px var(--focus);
-  border-color: rgba(124,92,255,.45);
+.pageTools{ min-width: 320px; }
+.search, .input--search{
+  width: min(520px, 100%);
+  border-radius: 14px;
 }
 
 /* ============================================================
-   TABS (más pro)
+   QUICK LINKS (solo cuando no hay acciones)
+============================================================ */
+.quickLinks{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.quickLinks .qlBtn{
+  border: 1px solid var(--line2);
+  background: rgba(255,255,255,.02);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  letter-spacing: .04em;
+  cursor:pointer;
+}
+.quickLinks .qlBtn:hover{
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.18);
+}
+
+/* ============================================================
+   TABS (si aún se usan arriba)
 ============================================================ */
 .tabs{
   display:flex;
@@ -244,65 +363,44 @@ a{color:inherit}
 }
 
 .tab{
-  border:1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.04);
-  color: rgba(255,255,255,.86);
+  border: 1px solid var(--line2);
+  background: rgba(255,255,255,.02);
+  color: var(--text);
   padding: 10px 12px;
-  border-radius: 999px;
+  border-radius: 14px;
   font-size: 12px;
   letter-spacing:.16em;
   text-transform: uppercase;
   cursor:pointer;
-  position: relative;
-  transition: background .15s ease, border-color .15s ease, transform .10s ease;
 }
 
 .tab:hover{
-  transform: translateY(-1px);
-  border-color: rgba(255,255,255,.22);
-  background: rgba(255,255,255,.06);
-}
-
-.tab[aria-selected="true"]{
-  border-color: rgba(124,92,255,.55);
-  background: linear-gradient(135deg, rgba(124,92,255,.22), rgba(45,212,191,.10));
-}
-
-.tab[aria-selected="true"]::after{
-  content:"";
-  position:absolute;
-  left: 14px;
-  right: 14px;
-  bottom: -6px;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(124,92,255,.95), rgba(45,212,191,.80));
-  opacity: .95;
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.18);
 }
 
 /* ============================================================
-   PANELS / CARDS / GRIDS
+   PANELS / CARDS / GRIDS (flat + alineación)
 ============================================================ */
 .panel{
   border-radius: var(--radius2);
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.42);
-  box-shadow: var(--shadow2);
-  padding: 20px; /* ✅ más aire */
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 18px;
 }
 
 .grid2{
   display:grid;
-  grid-template-columns: 1fr 1.12fr;
-  gap: 16px; /* ✅ más aire */
+  grid-template-columns: 1.05fr .95fr;
+  gap: 16px;
+  align-items:start;
 }
 
 .card{
   border-radius: var(--radius2);
-  border: 1px solid rgba(255,255,255,.10);
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-  box-shadow: var(--shadow2);
-  padding: 18px; /* ✅ más aire */
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px;
   min-width: 0;
 }
 
@@ -314,51 +412,33 @@ a{color:inherit}
   margin-bottom: 12px;
 }
 
-.mini{
-  color: rgba(255,255,255,.62);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.toolbar{
+.toolbar, .listHead{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
   align-items:center;
+  justify-content:space-between;
   margin: 10px 0 14px;
   padding: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.28);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.01);
 }
 
 .note{
   margin-top: 12px;
-  color: rgba(255,255,255,.72);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
 }
 
 .empty{
   margin-top: 12px;
-  color: rgba(255,255,255,.72);
-  border: 1px dashed rgba(255,255,255,.18);
+  color: var(--muted);
+  border: 1px dashed rgba(255,255,255,.16);
   border-radius: 16px;
   padding: 14px;
   line-height: 1.6;
-}
-
-/* Events list head (tu HTML) */
-.listHead{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin: 10px 0 12px;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.26);
 }
 
 /* ============================================================
@@ -366,8 +446,8 @@ a{color:inherit}
 ============================================================ */
 .list{
   border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.24);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.01);
   overflow:hidden;
 }
 
@@ -379,15 +459,15 @@ a{color:inherit}
   gap:10px;
   justify-content:space-between;
   align-items:flex-start;
-  transition: background .15s ease;
 }
-.item:last-child{ border-bottom:0; }
-.item:hover{ background: rgba(255,255,255,.04); }
 
-.itemTitle{ margin:0; font-weight:750; }
+.item:last-child{ border-bottom:0; }
+.item:hover{ background: rgba(255,255,255,.03); }
+
+.itemTitle{ margin:0; font-weight:900; }
 .itemMeta{
   margin:6px 0 0;
-  color: rgba(255,255,255,.70);
+  color: var(--muted2);
   font-size: 12px;
   letter-spacing:.10em;
   text-transform: uppercase;
@@ -399,79 +479,82 @@ a{color:inherit}
   flex-wrap:wrap;
   justify-content:flex-end;
 }
+
 .pill{
-  border:1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.06);
+  border:1px solid var(--line2);
+  background: rgba(255,255,255,.02);
   padding: 7px 10px;
   border-radius: 999px;
   font-size: 11px;
   letter-spacing:.14em;
   text-transform: uppercase;
   white-space:nowrap;
+  color: var(--muted);
 }
 
 .pill.danger{
-  border-color: rgba(255,77,109,.35);
-  background: rgba(255,77,109,.12);
+  border-color: rgba(255,77,109,.45);
+  background: rgba(255,77,109,.10);
+  color: #ffd1da;
 }
 
-/* Marca visual del item activo en la lista (tu JS usa .item.active) */
 .item.active{
-  background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(45,212,191,.08));
-  border-left: 3px solid rgba(124,92,255,.75);
+  background: rgba(255,255,255,.05);
+  border-left: 3px solid rgba(255,255,255,.35);
 }
 
 /* ============================================================
-   FORMS (SPACING FIX PRO)
+   FORMS (spacing pro + labels)
 ============================================================ */
 .form{ display:block; }
 
-/* ✅ Espaciado PRO por campo (aquí va el “aire”) */
 .field{
   display:flex;
   flex-direction:column;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;           /* ✅ más aire */
+  margin-bottom: 14px; /* ✅ más aire */
 }
 
-.row{
+.row, .formGrid{
   display:grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px; /* ✅ más aire */
+  gap: 14px 16px;
 }
 
-.label{
+.label, label{
   display:block;
   margin:0;
-  color: rgba(255,255,255,.58);
-  font-size: 12px;
-  letter-spacing:.14em;
+  color: var(--muted2);
+  font-size: 11px;
+  letter-spacing:.16em;
   text-transform: uppercase;
+  font-weight: 800;
 }
 
-/* ✅ Inputs SIN margin (era el problema) */
+/* Inputs SIN margin */
 .input, .select, .textarea,
 input, select, textarea{
   width:100%;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.28);
+  border: 1px solid var(--line2);
+  background: rgba(255,255,255,.02);
   color: var(--text);
   padding: 12px 12px;
-  margin: 0; /* ✅ clave */
+  margin: 0;
   outline:none;
   font-size: 14px;
-  transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
 }
 
 .textarea{ resize: vertical; }
 
 .input:focus, .select:focus, .textarea:focus,
 input:focus, select:focus, textarea:focus{
-  box-shadow: 0 0 0 4px var(--focus);
-  border-color: rgba(124,92,255,.45);
-  background: rgba(0,0,0,.34);
+  border-color: rgba(110,168,255,.55);
+  box-shadow: 0 0 0 3px rgba(110,168,255,.25);
+  background: rgba(255,255,255,.03);
 }
+
+.help{ display:flex; justify-content:space-between; gap:10px; margin-top: 6px; }
 
 .formActions{
   margin-top: 14px;
@@ -481,20 +564,14 @@ input:focus, select:focus, textarea:focus{
   align-items:center;
 }
 
-/* Pills dentro del listHead */
-.listHead .pill{
-  background: rgba(124,92,255,.10);
-  border-color: rgba(124,92,255,.20);
-}
-
 /* ============================================================
    TABLE
 ============================================================ */
 .tableWrap{
   overflow:auto;
   border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.22);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.01);
 }
 
 .table{
@@ -511,27 +588,23 @@ th,td{
 }
 
 th{
-  color: rgba(255,255,255,.58);
-  font-size: 12px;
-  letter-spacing:.14em;
+  color: var(--muted2);
+  font-size: 11px;
+  letter-spacing:.16em;
   text-transform: uppercase;
   position: sticky;
   top:0;
-  background: rgba(0,0,0,.65);
-  backdrop-filter: blur(8px);
+  background: var(--panel2);
 }
 
 td{
-  color: rgba(255,255,255,.84);
+  color: var(--text);
   font-size: 13px;
   line-height:1.4;
 }
 
-tbody tr:hover td{
-  background: rgba(255,255,255,.03);
-}
+tbody tr:hover td{ background: rgba(255,255,255,.02); }
 
-/* Tabla: contenedor de acciones consistente */
 .tableActions{
   display:flex;
   gap:8px;
@@ -540,12 +613,12 @@ tbody tr:hover td{
 }
 
 /* ============================================================
-   TOASTS
+   TOASTS (flat)
 ============================================================ */
 .toasts{
   position: fixed;
   right: 14px;
-  top: 76px;
+  top: 14px;
   display:flex;
   flex-direction:column;
   gap:10px;
@@ -558,50 +631,32 @@ tbody tr:hover td{
   min-width: 280px;
   max-width: 380px;
   border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(15,20,32,.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line2);
+  background: var(--panel);
   padding: 12px 12px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.55);
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-  transform: translateY(-6px);
-  opacity:0;
-  animation: toastIn .22s ease forwards;
 }
-@keyframes toastIn{ to{ transform: translateY(0); opacity:1; } }
 
 .toast .tTitle{
   margin:0;
-  font-size: 12px;
-  letter-spacing:.14em;
+  font-size: 11px;
+  letter-spacing:.16em;
   text-transform: uppercase;
-  color: var(--text);
 }
+
 .toast .tMsg{
   margin:6px 0 0;
-  color: rgba(255,255,255,.76);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
 }
-.toast .close{
-  margin-left:auto;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.06);
-  color: var(--text);
-  border-radius: 999px;
-  width: 34px; height: 34px;
-  display:grid;
-  place-items:center;
-  cursor:pointer;
-}
-.toast .close:hover{ background: rgba(255,255,255,.10); }
 
 /* ============================================================
-   LOGIN PAGE
+   LOGIN PAGE (mismo look)
 ============================================================ */
+body.adminLoginPage{
+  background: var(--bg);
+}
+
 body.adminLoginPage .page{
   min-height: 100vh;
   display:flex;
@@ -610,16 +665,17 @@ body.adminLoginPage .page{
 }
 
 .login{
-  display:flex; justify-content:center; align-items:center;
+  display:flex;
+  justify-content:center;
+  align-items:center;
   min-height: calc(100vh - var(--topbarH));
 }
 
 .loginCard{
   width: min(520px, 100%);
-  border-radius: calc(var(--radius) + 8px);
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.48);
-  box-shadow: var(--shadow);
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
   padding: 18px;
 }
 
@@ -629,217 +685,42 @@ body.adminLoginPage .page{
   gap:12px;
   margin-bottom: 10px;
 }
+
 .loginBrand img{
   width:44px;
   height:44px;
   object-fit:contain;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.04);
+  border: 1px solid var(--line2);
+  background: rgba(255,255,255,.02);
   padding: 6px;
 }
 
 .fine{
   margin: 12px 0 0;
-  color: rgba(255,255,255,.62);
+  color: var(--muted);
   font-size:12px;
   line-height:1.55;
 }
 
 .hint{
   margin: 8px 0 0;
-  color: rgba(255,255,255,.62);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.counter{
-  margin-top: 8px;
-  display:flex;
-  justify-content:flex-end;
-  color: rgba(255,255,255,.62);
-  font-size: 12px;
-  letter-spacing:.08em;
-}
-
 /* ============================================================
-   GALLERY + PROMOS (compat)
+   MEDIA TAB — mantenemos FIXS (flat)
 ============================================================ */
-#galPreview{
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.26);
-  padding: 12px;
-}
+#tab-media .grid2{ align-items: start; }
+#tab-media .field{ min-width: 0; }
 
-.galPreviewRow{
-  display:grid;
-  grid-template-columns: 96px 1fr;
-  gap: 12px;
-  align-items:start;
-}
-
-.galThumb{
-  width:96px; height:96px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.12);
-  overflow:hidden;
-  background: rgba(255,255,255,.06);
-}
-.galThumb img{ width:100%; height:100%; object-fit: cover; display:block; }
-
-.galPreviewMeta{ display:flex; flex-direction:column; gap: 6px; }
-.galTitle{ margin:0; font-weight:750; }
-.galSub{ margin:0; color: rgba(255,255,255,.72); font-size: 12px; letter-spacing:.10em; text-transform: uppercase; }
-
-.galPills{ display:flex; gap:8px; flex-wrap:wrap; margin-top: 7px; }
-
-.galleryItemActions{ display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
-
-/* PROMOS */
-#promoPreview{
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.26);
-  padding: 12px;
-}
-#promoPreview .pills{ justify-content: flex-start; }
-#promosList .item{ cursor: default; }
-
-/* ============================================================
-   RESPONSIVE
-============================================================ */
-@media (max-width: 980px){
-  .grid2{ grid-template-columns: 1fr; }
-  .row{ grid-template-columns: 1fr; }
-  .container{ width: calc(100% - 28px); }
-  body.adminLoginPage .page{ padding: 22px 0; }
-}
-
-/* ============================================================
-   ✅ Sidebar Pro Layout
-============================================================ */
-.adminLayout{
-  display:grid;
-  grid-template-columns: 280px 1fr;
-  gap: 14px;
-  align-items:start;
-  margin-top: 6px;
-}
-
-.adminSide{
-  position: sticky;
-  top: 96px; /* abajo de la topbar */
-  align-self:start;
-}
-
-.sideCard{
-  border-radius: 22px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-  box-shadow: 0 12px 30px rgba(0,0,0,.35);
-  padding: 14px;
-}
-
-.sideTitle{
-  padding: 8px 8px 10px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-  margin-bottom: 10px;
-}
-
-.sideKicker{
-  color: rgba(255,255,255,.55);
-  font-size: 12px;
-  letter-spacing:.18em;
-  text-transform: uppercase;
-}
-
-.sideHint{
-  margin-top: 6px;
-  color: rgba(255,255,255,.82);
-  font-weight: 700;
-  letter-spacing:.01em;
-}
-
-.sideTabs{
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  margin: 12px 0 10px;
-}
-
-.sideTabs .tab{
-  width: 100%;
-  justify-content: flex-start;
-  text-align:left;
-  padding: 12px 14px;
-  border-radius: 16px;
-  letter-spacing: .12em;
-}
-
-.sideTabs .tab[aria-selected="true"]::after{ display:none; }
-
-.sideTabs .tab[aria-selected="true"]{
-  border-color: rgba(124,92,255,.60);
-  background: linear-gradient(135deg, rgba(124,92,255,.22), rgba(45,212,191,.10));
-  box-shadow: inset 0 0 0 1px rgba(124,92,255,.18);
-}
-
-.sideFooter{
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.22);
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-}
-
-.sideChip{
-  border: 1px solid rgba(124,92,255,.40);
-  background: rgba(124,92,255,.14);
-  color: rgba(255,255,255,.92);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  letter-spacing:.14em;
-  text-transform: uppercase;
-  white-space:nowrap;
-}
-
-.sideFootText{
-  color: rgba(255,255,255,.72);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-/* Responsive: sidebar pasa arriba */
-@media (max-width: 980px){
-  .adminLayout{ grid-template-columns: 1fr; }
-  .adminSide{ position: static; top: auto; }
-  .sideTabs{ flex-direction: row; flex-wrap: wrap; }
-  .sideTabs .tab{
-    width: auto;
-    border-radius: 999px;
-    padding: 10px 12px;
-  }
-}
-
-.adminContent{ min-width: 0; }
-
-/* ============================================================
-   MEDIA TAB — FIX PRO (solo lo necesario)
-============================================================ */
-#tab-media .grid2 { align-items: start; }
-#tab-media .field { min-width: 0; }
-
-/* Settings UI inyectado */
 #tab-media [data-media-settings="1"]{
   border-radius: 18px !important;
   padding: 14px !important;
-  background: rgba(0,0,0,.18) !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.01) !important;
+  border: 1px solid var(--line) !important;
 }
 
 #tab-media [data-media-settings="1"] label{
@@ -861,11 +742,6 @@ body.adminLoginPage .page{
   max-width: 52vw;
 }
 
-#tab-media #mediaResetSettingsBtn{
-  min-height: 40px;
-  padding: 10px 14px;
-}
-
 @media (max-width: 820px){
   #tab-media [data-media-settings="1"] > div{
     flex-direction: column !important;
@@ -877,22 +753,18 @@ body.adminLoginPage .page{
   }
 }
 
-/* File input */
-#tab-media #mediaFile{
-  padding: 10px 12px;
-  line-height: 1.2;
+#tab-media #mediaResetSettingsBtn{
+  min-height: 40px;
+  padding: 10px 14px;
 }
 
-/* Botonera */
+#tab-media #mediaFile{ padding: 10px 12px; line-height: 1.2; }
+
 #tab-media #mediaForm .formActions{
-  display: flex;
+  display:flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: center;
-}
-
-#tab-media #mediaForm .formActions .btn{
-  min-height: 42px;
+  align-items:center;
 }
 
 @media (max-width: 820px){
@@ -905,7 +777,6 @@ body.adminLoginPage .page{
   }
 }
 
-/* Preview */
 #tab-media #mediaPreviewImg{
   width: 100%;
   height: auto;
@@ -914,30 +785,17 @@ body.adminLoginPage .page{
   border: 1px solid rgba(255,255,255,.10) !important;
 }
 
-/* Lista: thumb | meta | acciones */
-#tab-media #mediaList .item > div{
-  display: grid !important;
-  grid-template-rows: auto 1fr auto;
-  gap: 12px !important;
-  align-items: start !important;
-}
-
-/* Acciones: columna ordenada */
+/* Lista media: acciones ordenadas */
 #tab-media #mediaList .pills{
-  display: flex !important;
+  display:flex !important;
   flex-direction: column !important;
   gap: 10px !important;
   align-items: stretch !important;
   min-width: 160px;
 }
-
 #tab-media #mediaList .pills .btn{ width: 100%; }
 
-/* Mobile: acciones abajo en fila */
 @media (max-width: 820px){
-  #tab-media #mediaList .item > div{
-    grid-template-rows: auto 1fr;
-  }
   #tab-media #mediaList .pills{
     flex-direction: row !important;
     flex-wrap: wrap !important;
@@ -950,7 +808,7 @@ body.adminLoginPage .page{
 }
 
 /* ============================================================
-   ✅ GALLERY MODAL (ecn) — FINAL DEPURADO (sin choques)
+   GALLERY MODAL (ecn) — conserva tamaños/fixes (flat)
 ============================================================ */
 #ecnGalleryModal{
   position: fixed;
@@ -959,8 +817,7 @@ body.adminLoginPage .page{
   align-items: flex-start;
   justify-content: center;
   padding: 24px 0;
-  overflow: hidden !important; /* overlay NO scrollea */
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden !important;
 }
 
 #ecnGalleryModal > *{
@@ -969,23 +826,15 @@ body.adminLoginPage .page{
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 22px;
-}
-
-#ecnGalleryModal input,
-#ecnGalleryModal select,
-#ecnGalleryModal textarea,
-#ecnGalleryModal .input,
-#ecnGalleryModal .select,
-#ecnGalleryModal .textarea{
-  margin: 0 !important;
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
 }
 
 #ecnGalleryModal #ecnGalleryForm{
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 0 !important;
   overscroll-behavior: contain;
 }
 
@@ -994,9 +843,8 @@ body.adminLoginPage .page{
   height: clamp(260px, 48vh, 400px);
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(0,0,0,.25);
-  border: 1px solid rgba(255,255,255,.10);
-  margin-bottom: 0px;
+  background: rgba(255,255,255,.01);
+  border: 1px solid var(--line);
 }
 
 #ecnGalleryModal #ecnGalPreviewImg{
@@ -1004,38 +852,17 @@ body.adminLoginPage .page{
   height: 100%;
   object-fit: contain;
   display: block;
-  background: rgba(0,0,0,.18);
+  background: rgba(255,255,255,.01);
 }
 
 #ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
   z-index: 10;
-  background: rgba(20,20,20,.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--panel2);
   margin: 0 !important;
 }
 
-/* Scrollbar dark SOLO dentro del modal */
-#ecnGalleryModal #ecnGalleryForm{
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
-}
-#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar{ width: 10px; }
-#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-track{
-  background: rgba(0,0,0,.18);
-  border-left: 1px solid rgba(255,255,255,.08);
-}
-#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,.20);
-  border-radius: 999px;
-  border: 2px solid rgba(0,0,0,.18);
-}
-#ecnGalleryModal #ecnGalleryForm::-webkit-scrollbar-thumb:hover{
-  background: rgba(255,255,255,.28);
-}
-
 /* ============================================================
-   ✅ PROMO MODAL (ecn) — FIX SIZE (NO GIGANTE)
+   PROMO MODAL (ecn) — size fix (flat)
 ============================================================ */
 #ecnPromoModal{
   position: fixed;
@@ -1045,17 +872,17 @@ body.adminLoginPage .page{
   align-items: flex-start;
   justify-content: center;
   overflow: hidden !important;
-  pointer-events: auto;
 }
 
 #ecnPromoModal > *{
-  pointer-events: auto;
   width: min(920px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 22px;
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
 }
 
 #ecnPromoModal #ecnPromoForm{
@@ -1065,70 +892,15 @@ body.adminLoginPage .page{
   overscroll-behavior: contain;
 }
 
-#ecnPromoModal input,
-#ecnPromoModal select,
-#ecnPromoModal textarea,
-#ecnPromoModal .input,
-#ecnPromoModal .select,
-#ecnPromoModal .textarea{
-  margin: 0 !important;
-}
-
-#ecnPromoModal #ecnPromoForm .field{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 #ecnPromoModal #ecnPromoForm .row{
-  display: grid;
+  display:grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
 @media (max-width: 820px){
-  #ecnPromoModal #ecnPromoForm .row{
-    grid-template-columns: 1fr;
-  }
+  #ecnPromoModal #ecnPromoForm .row{ grid-template-columns: 1fr; }
 }
-
-#ecnPromoModal #ecnPromoForm > div[style*="position: sticky"]{
-  z-index: 10;
-  background: rgba(20,20,20,.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  margin: 0 !important;
-}
-
-#ecnPromoModal #ecnPromoForm{
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.22) rgba(0,0,0,.18);
-}
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar{ width: 10px; }
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-track{
-  background: rgba(0,0,0,.18);
-  border-left: 1px solid rgba(255,255,255,.08);
-}
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,.20);
-  border-radius: 999px;
-  border: 2px solid rgba(0,0,0,.18);
-}
-#ecnPromoModal #ecnPromoForm::-webkit-scrollbar-thumb:hover{
-  background: rgba(255,255,255,.28);
-}
-
-/* ============================================================
-   HOME SLIDES (si se reutiliza en front)
-============================================================ */
-.heroBgVideo{
-  position:absolute; inset:0;
-  width:100%; height:100%;
-  object-fit:cover;
-  filter:brightness(.85);
-}
-.slide{ position:relative; overflow:hidden; }
-
 
 /* === FIX: MODALES OCULTOS NO PUEDEN TAPAR LA UI === */
 .modal[hidden],
@@ -1138,384 +910,28 @@ body.adminLoginPage .page{
   pointer-events:none !important;
 }
 
-
 /* ============================================================
-   ✅ UI LIGHT (Pro 2026) — Mantiene estructura actual y JS
-   Activación: <body class="adminPage uiLight"> / adminLoginPage uiLight
+   RESPONSIVE
 ============================================================ */
-body.uiLight{
-  --bg: #f6f6fb;
-  --bg2:#ffffff;
-
-  --text: rgba(18,12,30,.92);
-  --muted: rgba(18,12,30,.62);
-  --muted2: rgba(18,12,30,.52);
-
-  --line: rgba(20,14,40,.10);
-  --line2: rgba(20,14,40,.16);
-
-  --focus: rgba(124,92,255,.22);
-
-  --shadow: 0 18px 60px rgba(20,14,40,.10);
-  --shadow2: 0 12px 30px rgba(20,14,40,.08);
-
-  --btnBg: rgba(124,92,255,.10);
-  --btnBgHover: rgba(124,92,255,.14);
-
-  --brand: #7c5cff;
-  --brand2:#5b3bff;
-  --danger:#ef476f;
-}
-
-body.uiLight{
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(1100px 900px at 18% -10%, rgba(124,92,255,.18), transparent 60%),
-    radial-gradient(1000px 900px at 92% 0%, rgba(124,92,255,.10), transparent 55%),
-    linear-gradient(180deg, var(--bg2), var(--bg));
-}
-
-body.uiLight .topbar{
-  background: rgba(255,255,255,.70);
-  border-bottom: 1px solid var(--line);
-}
-
-body.uiLight .brand:hover{ background: rgba(124,92,255,.06); }
-body.uiLight .brand img{
-  border: 1px solid var(--line2);
-  background: rgba(124,92,255,.06);
-}
-
-body.uiLight .panel{
-  background: rgba(255,255,255,.70);
-  border-color: var(--line);
-  box-shadow: var(--shadow2);
-}
-
-body.uiLight .card,
-body.uiLight .sideCard,
-body.uiLight .tableWrap,
-body.uiLight .list{
-  background: rgba(255,255,255,.78);
-  border-color: var(--line);
-  box-shadow: var(--shadow2);
-}
-
-body.uiLight th{
-  background: rgba(255,255,255,.92);
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-}
-
-body.uiLight td{
-  color: rgba(18,12,30,.88);
-  border-bottom: 1px solid rgba(20,14,40,.08);
-}
-
-body.uiLight tbody tr:hover td{ background: rgba(124,92,255,.05); }
-
-body.uiLight .btn{
-  background: rgba(124,92,255,.08);
-  border-color: rgba(124,92,255,.18);
-  color: rgba(18,12,30,.92);
-}
-body.uiLight .btn:hover{
-  background: rgba(124,92,255,.12);
-  border-color: rgba(124,92,255,.30);
-}
-body.uiLight .btn.btn--ghost{
-  background: transparent;
-  border-color: var(--line2);
-}
-body.uiLight .btn.primary,
-body.uiLight .btn.btn--primary{
-  color: #fff;
-  background: linear-gradient(135deg, rgba(124,92,255,1), rgba(91,59,255,.88));
-  border-color: rgba(124,92,255,.55);
-}
-
-body.uiLight .input,
-body.uiLight input,
-body.uiLight select,
-body.uiLight textarea{
-  background: rgba(255,255,255,.92);
-  border-color: var(--line2);
-  color: rgba(18,12,30,.92);
-}
-body.uiLight .input:focus,
-body.uiLight input:focus,
-body.uiLight select:focus,
-body.uiLight textarea:focus{
-  box-shadow: 0 0 0 4px var(--focus);
-  border-color: rgba(124,92,255,.50);
-}
-
-/* ============================================================
-   ✅ ESTRUCTURA (SIN tocar IDs): Sidebar fijo izquierdo tipo WP/Oracle
-============================================================ */
-.adminShell{
-  display:grid;
-  grid-template-columns: 260px 1fr;
-  gap: 16px;
-  align-items:start;
-}
-
-/* Sidebar pegado y con scroll propio */
-.sidebar{
-  position: sticky;
-  top: 96px;
-  height: calc(100vh - 110px);
-  overflow: auto;
-  padding-right: 2px;
-}
-
-/* Mejor “menu” vertical */
-.sideTabs{
-  display:flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 10px 0 0;
-}
-.sideTabs .tab{
-  width: 100%;
-  border-radius: 14px;
-  text-align:left;
-  justify-content:flex-start;
-  padding: 12px 12px;
-  font-size: 12px;
-}
-
-/* Content ocupa */
-.adminContent{ min-width: 0; }
-
-/* Mobile: sidebar arriba */
-@media (max-width: 980px){
-  .adminShell{ grid-template-columns: 1fr; }
-  .sidebar{ position: static; height: auto; overflow: visible; }
-  .sideTabs{ flex-direction: row; flex-wrap: wrap; }
-  .sideTabs .tab{ width:auto; border-radius: 999px; }
-}
-
-/* ============================================================
-   ✅ DASH Quick Actions (solo visual, NO toca DB)
-============================================================ */
-.dashQuick{
-  margin-top: 14px;
-  border-radius: 22px;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.76);
-  box-shadow: var(--shadow2);
-  padding: 14px;
-}
-.dashHead{
-  display:flex;
-  align-items:flex-end;
-  justify-content:space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.qaGrid{
-  display:grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-@media (max-width: 980px){
-  .qaGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 520px){
-  .qaGrid{ grid-template-columns: 1fr; }
-}
-
-.qaTile{
-  border-radius: 18px;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.88);
-  padding: 14px;
-  display:flex;
-  gap: 12px;
-  align-items:center;
-  cursor:pointer;
-  text-align:left;
-  transition: transform .12s ease, border-color .15s ease, background .15s ease;
-}
-.qaTile:hover{
-  transform: translateY(-1px);
-  background: rgba(124,92,255,.06);
-  border-color: rgba(124,92,255,.22);
-}
-.qaTile--link{ text-decoration:none; color: inherit; }
-.qaIcon{
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display:grid;
-  place-items:center;
-  border: 1px solid rgba(124,92,255,.18);
-  background: rgba(124,92,255,.10);
-  font-size: 18px;
-}
-.qaTitle{
-  font-weight: 850;
-  letter-spacing:.01em;
-}
-.qaSub{
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-
-/* ============================================================
-   ✅ PATCH 2026-02-22 — VISIBILIDAD SIDEBAR + HELVETICA + LAYOUT
-   (NO rompe BD/JS: solo CSS, mantiene IDs/clases)
-============================================================ */
-
-/* Tipografía global */
-body.adminPage.uiLight,
-body.adminLoginPage.uiLight{
-  font-family: Helvetica, Arial, system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
-}
-
-/* Mapear variables base usadas por el CSS original a modo claro */
-body.adminPage.uiLight,
-body.adminLoginPage.uiLight{
-  --bg: #ffffff;
-  --bg2: #f6f6fb;
-
-  --text: rgba(18, 12, 30, .92);
-  --muted: rgba(18, 12, 30, .62);
-  --muted2: rgba(18, 12, 30, .50);
-
-  --line: rgba(20, 14, 40, .10);
-  --line2: rgba(20, 14, 40, .14);
-
-  --shadow: 0 18px 60px rgba(20, 14, 40, .10);
-  --shadow2: 0 12px 30px rgba(20, 14, 40, .08);
-}
-
-/* Contenedor a pantalla más amplia y mejor distribución */
-body.adminPage.uiLight main.container{
-  max-width: none !important;
-  width: 100% !important;
-  padding: 22px 22px 28px !important;
-}
-
-/* Shell: sidebar fijo izquierda + contenido derecha */
-body.adminPage.uiLight .adminShell{
-  display: grid !important;
-  grid-template-columns: 290px minmax(0, 1fr) !important;
-  gap: 22px !important;
-  align-items: start !important;
-}
-
-/* Sidebar visible (tu problema actual: contraste muy bajo) */
-body.adminPage.uiLight .sidebar{
-  position: sticky !important;
-  top: 92px !important;
-  height: calc(100dvh - 110px) !important;
-  overflow: auto !important;
-  padding-right: 2px;
-}
-
-body.adminPage.uiLight .sideCard{
-  background: rgba(255,255,255,.92) !important;
-  border: 1px solid var(--line) !important;
-  box-shadow: var(--shadow2) !important;
-}
-
-body.adminPage.uiLight .sideHead .kicker{
-  color: rgba(18,12,30,.55) !important;
-}
-body.adminPage.uiLight .sideHead .sideTitle{
-  color: rgba(18,12,30,.92) !important;
-  font-weight: 800 !important;
-}
-
-/* Tabs/Items del menú: alto contraste */
-body.adminPage.uiLight .sideTabs .tab{
-  background: rgba(255,255,255,.70) !important;
-  border: 1px solid var(--line) !important;
-  color: rgba(18,12,30,.86) !important;
-  font-weight: 800 !important;
-}
-
-body.adminPage.uiLight .sideTabs .tab:hover{
-  background: rgba(124,92,255,.10) !important;
-  border-color: rgba(124,92,255,.22) !important;
-}
-
-body.adminPage.uiLight .sideTabs .tab.isActive,
-body.adminPage.uiLight .sideTabs .tab[aria-selected="true"]{
-  background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(124,92,255,.08)) !important;
-  border-color: rgba(124,92,255,.45) !important;
-  color: rgba(18,12,30,.92) !important;
-  box-shadow: 0 0 0 4px rgba(124,92,255,.10) !important;
-}
-
-/* Área derecha: encabezado más “dashboard” y bien acomodado */
-body.adminPage.uiLight .pageHead{
-  align-items: flex-end !important;
-  gap: 14px !important;
-  padding: 6px 6px 10px !important;
-}
-
-body.adminPage.uiLight .pageHead .h1{
-  letter-spacing: -0.02em;
-}
-
-/* Buscador header: ancho correcto */
-body.adminPage.uiLight .pageTools{
-  min-width: 360px !important;
-  max-width: 520px !important;
-  width: 42vw !important;
-}
-
-/* Mejor grid para cards principales */
-body.adminPage.uiLight .grid2{
-  display: grid !important;
-  grid-template-columns: 1.05fr .95fr !important;
-  gap: 18px !important;
-}
-
-@media (max-width: 1100px){
-  body.adminPage.uiLight .adminShell{ grid-template-columns: 1fr !important; }
-  body.adminPage.uiLight .sidebar{ position: relative !important; top: auto !important; height: auto !important; }
-  body.adminPage.uiLight .grid2{ grid-template-columns: 1fr !important; }
-  body.adminPage.uiLight .pageTools{ width: 100% !important; min-width: 0 !important; max-width: none !important; }
-}
-
-/* Inputs con altura/espaciado consistente */
-body.adminPage.uiLight .input,
-body.adminPage.uiLight select,
-body.adminPage.uiLight textarea{
-  font-family: Helvetica, Arial, sans-serif !important;
-  font-size: 14px !important;
-}
-
-/* Botones más “template dashboard” */
-body.adminPage.uiLight .btn{
-  border-radius: 999px !important;
-  padding: 10px 14px !important;
-  font-weight: 800 !important;
-}
-
-/* Headings y labels */
-body.adminPage.uiLight .h1,
-body.adminPage.uiLight .h2,
-body.adminPage.uiLight .h3{
-  font-family: Helvetica, Arial, sans-serif !important;
-}
-
-body.adminPage.uiLight label,
-body.adminPage.uiLight .label{
-  font-weight: 800 !important;
-  color: rgba(18,12,30,.85) !important;
-}
-
-/* Fix: algunos elementos estaban quedando “lavados” por opacity heredada */
-body.adminPage.uiLight .sideNav,
-body.adminPage.uiLight .sideFoot,
-body.adminPage.uiLight .pill{
-  opacity: 1 !important;
+@media (max-width: 1020px){
+  body.adminPage{ padding-left: 0; }
+  .sidebar{
+    position: sticky;
+    top: 0;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 12px 12px;
+    z-index: 60;
+  }
+  .sideNav{
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .navBtn{ width: auto; text-align:center; }
+  .grid2{ grid-template-columns: 1fr; }
+  .row, .formGrid{ grid-template-columns: 1fr; }
+  .container{ width: calc(100% - 28px); }
 }
