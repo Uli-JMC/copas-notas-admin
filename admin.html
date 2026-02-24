@@ -132,7 +132,6 @@
                   <form class="form" id="eventForm" novalidate>
                     <input id="evId" type="hidden" />
 
-                    <!-- ✅ OJO: formGrid sigue 2 cols, pero usamos .ev-span para forzar 1 col desde Moneda hacia abajo -->
                     <div class="formGrid">
                       <div class="field">
                         <label class="label" for="evTitle">Título</label>
@@ -141,8 +140,7 @@
 
                       <div class="field">
                         <label class="label" for="evSlug">Slug (URL)</label>
-                        <input class="input" id="evSlug" type="text" maxlength="120"
-                          placeholder="ej: cata-italia-vs-usa" />
+                        <input class="input" id="evSlug" type="text" maxlength="120" placeholder="ej: cata-italia-vs-usa" />
                       </div>
 
                       <div class="field">
@@ -152,8 +150,7 @@
 
                       <div class="field">
                         <label class="label" for="evSchedule">Horario</label>
-                        <input class="input" id="evSchedule" type="text" maxlength="80"
-                          placeholder="ej: 7:00 pm a 9:00 pm" />
+                        <input class="input" id="evSchedule" type="text" maxlength="80" placeholder="ej: 7:00 pm a 9:00 pm" />
                       </div>
 
                       <div class="field">
@@ -166,8 +163,7 @@
                         <input class="input" id="evPriceAmount" type="number" min="0" step="0.01" inputmode="decimal" />
                       </div>
 
-                      <!-- ✅ desde aquí (Moneda) todo full-width -->
-                      <div class="field ev-span">
+                      <div class="field">
                         <label class="label" for="evCurrency">Moneda</label>
                         <select class="input" id="evCurrency">
                           <option value="CRC">CRC</option>
@@ -175,7 +171,7 @@
                         </select>
                       </div>
 
-                      <div class="field field--full ev-span">
+                      <div class="field field--full">
                         <label class="label" for="evDesc">Descripción</label>
                         <textarea class="input textarea" id="evDesc" rows="5" maxlength="520"></textarea>
                         <div class="help">
@@ -184,35 +180,30 @@
                         </div>
                       </div>
 
-                      <!-- ✅ MEDIOS CARGADOS (1 sola columna / 1 solo botón se fue al final) -->
-                      <div class="field field--full ev-span">
-                        <div class="sectionTitle">Medios cargados</div>
-                        <div class="mini sectionSub">
-                          Estos links son <strong>solo lectura</strong>. Asigná banners en <strong>Medios</strong>.
-                        </div>
+                      <!-- MEDIOS CARGADOS -->
+                      <div class="field field--full">
+                        <div class="kicker">MEDIOS CARGADOS</div>
 
-                        <div class="mediaStack">
-                          <div class="field compact">
-                            <label class="label" for="evBannerDesktopUrl">Banner (URL) — Desktop</label>
-                            <input class="input mono" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)" readonly />
-                            <div class="mini mini--below">Slot: <span class="mono">desktop_event</span></div>
+                        <div class="mediaRow mediaRow--stack">
+                          <div class="mediaBox">
+                            <div class="kicker">BANNER (URL) — DESKTOP</div>
+                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)" readonly />
+                            <div class="mini mini--below">Solo lectura aquí. Asigná en Medios (slot <span class="mono">desktop_event</span>).</div>
                           </div>
 
-                          <div class="field compact">
-                            <label class="label" for="evBannerMobileUrl">Banner (URL) — Mobile</label>
-                            <input class="input mono" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)" readonly />
-                            <div class="mini mini--below">Slot: <span class="mono">mobile_event</span></div>
+                          <div class="mediaBox">
+                            <div class="kicker">BANNER (URL) — MOBILE</div>
+                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)" readonly />
+                            <div class="mini mini--below">Solo lectura aquí. Asigná en Medios (slot <span class="mono">mobile_event</span>).</div>
                           </div>
                         </div>
                       </div>
 
-                      <div class="field field--full ev-span">
+                      <div class="field field--full">
                         <label class="label" for="evAlt">Texto alternativo del banner</label>
-                        <input class="input" id="evAlt" type="text" maxlength="140"
-                          placeholder="Opcional. Ayuda con accesibilidad/SEO." />
+                        <input class="input" id="evAlt" type="text" maxlength="140" placeholder="Opcional. Ayuda con accesibilidad/SEO." />
                       </div>
 
-                      <!-- ✅ excepción: Estado + Badge en 2 columnas -->
                       <div class="field">
                         <label class="label" for="evActive">Estado</label>
                         <select class="input" id="evActive">
@@ -223,17 +214,13 @@
 
                       <div class="field">
                         <label class="label" for="evBadge">Badge</label>
-                        <input class="input" id="evBadge" type="text" maxlength="40"
-                          placeholder="ej: Cupos limitados" />
+                        <input class="input" id="evBadge" type="text" maxlength="40" placeholder="ej: Cupos limitados" />
                       </div>
                     </div>
 
                     <div class="formActions">
                       <button class="btn btn--primary" id="saveEventBtn" type="submit">GUARDAR</button>
-
-                      <!-- ✅ ÚNICO botón de gestionar medios (va al tab Media) -->
-                      <button class="btn btn--ghost" id="evManageMediaBtn" type="button">GESTIONAR MEDIOS</button>
-
+                      <button class="btn btn--ghost" id="manageMediaBtn" type="button">GESTIONAR MEDIOS</button>
                       <button class="btn btn--danger" id="deleteEventBtn" type="button">ELIMINAR</button>
                     </div>
                   </form>
@@ -250,8 +237,12 @@
                     <div class="mini">Administrá fechas y cupos por evento.</div>
                   </div>
 
-                  <div class="listHead">
-                    <div class="pill">Eventos</div>
+                  <!-- Header ordenado: pill + título + acciones -->
+                  <div class="listHead listHead--dates">
+                    <div class="lhLeft">
+                      <div class="pill">Eventos</div>
+                      <div class="lhTitle">Seleccione el evento</div>
+                    </div>
                     <div class="actions">
                       <button class="btn btn--ghost" id="datesRefreshBtn" type="button">Actualizar</button>
                       <button class="btn btn--ghost" id="datesNewBtn" type="button">Nueva fecha</button>
@@ -267,19 +258,19 @@
                 </div>
 
                 <div class="card" id="datesEditor" hidden>
-                  <div class="cardHead">
+                  <div class="cardHead cardHead--stack">
                     <h3 class="h3" id="datesEventTitle">Evento</h3>
                     <div class="mini" id="datesEventMeta">Seleccioná una fecha para editar.</div>
                   </div>
 
-                  <div class="split">
+                  <div class="split split--dates">
                     <div class="list" id="datesListByEvent" aria-label="Fechas del evento"></div>
 
                     <form class="form" id="dateForm" novalidate>
                       <input id="dateId" type="hidden" />
 
                       <div class="field">
-                        <label class="label" for="dateLabel">Etiqueta</label>
+                        <label class="label" for="dateLabel">Horario</label>
                         <input class="input" id="dateLabel" type="text" maxlength="120" placeholder="ej: Viernes 7pm" />
                       </div>
 
@@ -294,7 +285,7 @@
                         </div>
                       </div>
 
-                      <div class="formActions">
+                      <div class="formActions formActions--stack">
                         <button class="btn btn--primary" id="dateSaveBtn" type="submit">GUARDAR</button>
                         <button class="btn btn--danger" id="dateDeleteBtn" type="button">ELIMINAR</button>
                         <button class="btn btn--ghost" id="dateClearBtn" type="button">LIMPIAR</button>
@@ -342,7 +333,7 @@
               </div>
             </section>
 
-            <!-- MEDIOS -->
+            <!-- MEDIOS ✅ -->
             <section class="panel" id="tab-media" role="tabpanel" hidden>
               <div class="grid2">
                 <div class="card">
@@ -386,8 +377,7 @@
 
                       <div class="field field--full">
                         <label class="label" for="mediaUrl">URL pública</label>
-                        <input class="input" id="mediaUrl" type="text"
-                          placeholder="Se llena al subir o pegá una URL..." />
+                        <input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL..." />
                       </div>
                     </div>
 
@@ -695,6 +685,21 @@
   <script src="./js/admin-gallery.js"></script>
   <script src="./js/admin-promos.js"></script>
 
+  <!-- Ir a MEDIOS desde EVENTOS -->
+  <script>
+    (function () {
+      const btn = document.getElementById('manageMediaBtn');
+      if (!btn) return;
+
+      function clickTab(tab) {
+        const b = document.querySelector('.sideTabs [data-tab="' + tab + '"]');
+        if (b) b.click();
+      }
+
+      btn.addEventListener('click', () => clickTab('media'));
+    })();
+  </script>
+
   <!-- Validador liviano de tamaño para mediaForm -->
   <script>
     (() => {
@@ -796,5 +801,4 @@
   </script>
 
 </body>
-
 </html>
