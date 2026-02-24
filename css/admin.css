@@ -1066,3 +1066,69 @@ input, select, textarea{
 .item a:hover{
   text-decoration: underline;
 }
+
+/* ============================================================
+   LAYOUT PRO: "panel" = contenedor / "card" = 2 paneles reales
+   (Eventos, Fechas, Medios)
+============================================================ */
+
+/* 1) El panel no debe verse como "un mega panel" */
+.panel{
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+/* 2) grid2 SIEMPRE en 2 columnas (si hay espacio) */
+.grid2{
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+  gap: 18px !important;
+  align-items: start !important;
+}
+
+/* 3) Cada card es el "panel" visual */
+.card{
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius2) !important;
+  background: var(--panel) !important;
+  padding: 16px !important;
+  min-width: 0 !important;
+}
+
+/* Opcional pro: que ambas columnas se vean parejas */
+#tab-events .grid2 > .card,
+#tab-dates  .grid2 > .card,
+#tab-media  .grid2 > .card{
+  align-self: stretch;
+}
+
+/* 4) FECHAS: dentro del editor, split a 2 columnas (lista | form) */
+#tab-dates .split{
+  display: grid !important;
+  grid-template-columns: minmax(0,.95fr) minmax(0,1.05fr) !important;
+  gap: 16px !important;
+  align-items: start !important;
+  margin-top: 12px;
+}
+
+/* 5) EVENTOS: mediaRow (banner desktop | banner mobile) en 2 columnas */
+.mediaRow{
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+  gap: 16px !important;
+  align-items: start !important;
+}
+
+/* 6) Responsive: en pantallas chicas, todo en 1 columna */
+@media (max-width: 980px){
+  .grid2{
+    grid-template-columns: 1fr !important;
+  }
+  #tab-dates .split{
+    grid-template-columns: 1fr !important;
+  }
+  .mediaRow{
+    grid-template-columns: 1fr !important;
+  }
+}
