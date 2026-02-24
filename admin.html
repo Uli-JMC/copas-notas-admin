@@ -11,9 +11,7 @@
 
   <!-- FIX CRÍTICO: si un elemento tiene hidden, NO puede quedar visible por CSS -->
   <style>
-    [hidden] {
-      display: none !important;
-    }
+    [hidden] { display: none !important; }
   </style>
 </head>
 
@@ -30,7 +28,8 @@
 
         <div class="navRight">
           <a class="btn btn--ghost" href="https://entrecopasynotas.com" target="_blank" rel="noopener"
-            id="viewSiteBtn">VER SITIO</a> <button class="btn btn--ghost" id="logoutBtn" type="button">SALIR</button>
+            id="viewSiteBtn">VER SITIO</a>
+          <button class="btn btn--ghost" id="logoutBtn" type="button">SALIR</button>
         </div>
       </div>
     </div>
@@ -133,6 +132,7 @@
                   <form class="form" id="eventForm" novalidate>
                     <input id="evId" type="hidden" />
 
+                    <!-- ✅ OJO: formGrid sigue 2 cols, pero usamos .ev-span para forzar 1 col desde Moneda hacia abajo -->
                     <div class="formGrid">
                       <div class="field">
                         <label class="label" for="evTitle">Título</label>
@@ -166,7 +166,8 @@
                         <input class="input" id="evPriceAmount" type="number" min="0" step="0.01" inputmode="decimal" />
                       </div>
 
-                      <div class="field">
+                      <!-- ✅ desde aquí (Moneda) todo full-width -->
+                      <div class="field ev-span">
                         <label class="label" for="evCurrency">Moneda</label>
                         <select class="input" id="evCurrency">
                           <option value="CRC">CRC</option>
@@ -174,7 +175,7 @@
                         </select>
                       </div>
 
-                      <div class="field field--full">
+                      <div class="field field--full ev-span">
                         <label class="label" for="evDesc">Descripción</label>
                         <textarea class="input textarea" id="evDesc" rows="5" maxlength="520"></textarea>
                         <div class="help">
@@ -183,34 +184,35 @@
                         </div>
                       </div>
 
-                      <div class="field field--full">
-                        <div class="mediaRow">
-                          <div>
-                            <div class="kicker">BANNER (URL) — DESKTOP</div>
-                            <button class="btn btn--ghost" id="evBannerDesktopBtn" type="button">Gestionar en
-                              Medios</button>
-                            <div class="mini">Solo lectura aquí. Asigná en Medios (slot desktop_event).</div>
-                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)"
-                              readonly />
+                      <!-- ✅ MEDIOS CARGADOS (1 sola columna / 1 solo botón se fue al final) -->
+                      <div class="field field--full ev-span">
+                        <div class="sectionTitle">Medios cargados</div>
+                        <div class="mini sectionSub">
+                          Estos links son <strong>solo lectura</strong>. Asigná banners en <strong>Medios</strong>.
+                        </div>
+
+                        <div class="mediaStack">
+                          <div class="field compact">
+                            <label class="label" for="evBannerDesktopUrl">Banner (URL) — Desktop</label>
+                            <input class="input mono" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)" readonly />
+                            <div class="mini mini--below">Slot: <span class="mono">desktop_event</span></div>
                           </div>
 
-                          <div>
-                            <div class="kicker">BANNER (URL) — MOBILE</div>
-                            <button class="btn btn--ghost" id="evBannerMobileBtn" type="button">Gestionar en
-                              Medios</button>
-                            <div class="mini">Solo lectura aquí. Asigná en Medios (slot mobile_event).</div>
-                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)"
-                              readonly />
+                          <div class="field compact">
+                            <label class="label" for="evBannerMobileUrl">Banner (URL) — Mobile</label>
+                            <input class="input mono" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)" readonly />
+                            <div class="mini mini--below">Slot: <span class="mono">mobile_event</span></div>
                           </div>
                         </div>
                       </div>
 
-                      <div class="field field--full">
+                      <div class="field field--full ev-span">
                         <label class="label" for="evAlt">Texto alternativo del banner</label>
                         <input class="input" id="evAlt" type="text" maxlength="140"
                           placeholder="Opcional. Ayuda con accesibilidad/SEO." />
                       </div>
 
+                      <!-- ✅ excepción: Estado + Badge en 2 columnas -->
                       <div class="field">
                         <label class="label" for="evActive">Estado</label>
                         <select class="input" id="evActive">
@@ -228,6 +230,10 @@
 
                     <div class="formActions">
                       <button class="btn btn--primary" id="saveEventBtn" type="submit">GUARDAR</button>
+
+                      <!-- ✅ ÚNICO botón de gestionar medios (va al tab Media) -->
+                      <button class="btn btn--ghost" id="evManageMediaBtn" type="button">GESTIONAR MEDIOS</button>
+
                       <button class="btn btn--danger" id="deleteEventBtn" type="button">ELIMINAR</button>
                     </div>
                   </form>
@@ -336,7 +342,7 @@
               </div>
             </section>
 
-            <!-- MEDIOS ✅ (Estructura completa para admin-media.js) -->
+            <!-- MEDIOS -->
             <section class="panel" id="tab-media" role="tabpanel" hidden>
               <div class="grid2">
                 <div class="card">
@@ -757,7 +763,6 @@
 
       function hasActions(panel) {
         if (!panel) return false;
-        // Si hay botones visibles (acciones), ocultamos quick links
         const selectors = [
           '.formActions .btn',
           '.toolbar .btn',
@@ -786,7 +791,7 @@
 
       window.addEventListener('load', refresh);
       window.addEventListener('resize', refresh);
-      window.setInterval(refresh, 800); // robusto sin depender de tus módulos
+      window.setInterval(refresh, 800);
     })();
   </script>
 

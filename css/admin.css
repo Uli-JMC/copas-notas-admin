@@ -1,43 +1,39 @@
 /* ============================================================
-   admin.css ✅ ENTRE COPAS & NOTAS — LIGHT + PURPLE PRO (2026-02-24) — DEPURADO
+   admin.css ✅ ENTRE COPAS & NOTAS — LIGHT + PURPLE PRO (2026-02-24)
    OBJETIVO:
    - Sidebar morado oscuro + texto blanco (hover morado más oscuro)
    - Fondo gris claro
    - Texto general gris oscuro
    - Bordes finos gris
    - Sin sombras / sin blur / sin gradientes
-   - Primary (acciones importantes): morado claro sólido
+   - Primary: morado sólido
    - Ghost/lineal: borde + texto
    - Danger: lineal + texto rojo
    - Descriptivos bajo labels: pequeños y visibles
-   - Panel = contenedor / Card = panel visual (2 columnas)
-   - FIX EVENTOS:
-       * FormGrid 2 columnas (base)
-       * Desde Moneda (incl) hasta Alt: 1 columna
-       * Estado + Badge: 2 columnas al final
-       * Bloque “Gestionar en Medios” (mediaRow): 1 columna en Eventos
+   - EVENTOS: desde Moneda (incl) en 1 columna; Estado+Badge en 2 cols
+   - EVENTOS: "Medios cargados" + minis debajo + 1 solo botón al final
 ============================================================ */
 
 /* ----------------------------
    TOKENS
 ---------------------------- */
 :root{
-  /* Base */
-  --bg:#f3f4f6;           /* gris claro */
-  --panel:#ffffff;        /* panel blanco */
-  --panel2:#f7f7f9;       /* panel suave */
-  --text:#2b2f36;         /* texto principal gris oscuro */
-  --muted:#5f6772;        /* texto secundario */
-  --muted2:#737c88;       /* labels / meta */
-  --line:#d6d9df;         /* borde fino gris */
-  --line2:#cfd3da;        /* borde un poco más fuerte */
+  --bg:#f3f4f6;
+  --panel:#ffffff;
+  --panel2:#f7f7f9;
 
-  /* Purple system */
-  --side:#2b104a;         /* morado oscuro sidebar */
-  --side2:#240d3e;        /* hover morado más oscuro */
+  --text:#2b2f36;
+  --muted:#5f6772;
+  --muted2:#737c88;
+
+  --line:#d6d9df;
+  --line2:#cfd3da;
+
+  --side:#2b104a;
+  --side2:#240d3e;
   --sideLine:rgba(255,255,255,.18);
 
-  --primary:#7c3aed;      /* morado claro (acciones importantes) */
+  --primary:#7c3aed;
   --primaryHover:#6d28d9;
   --primaryText:#ffffff;
 
@@ -69,7 +65,7 @@ body{
 
 /* Enlaces */
 a{ color:inherit; text-decoration:none; }
-a:hover{ text-decoration: none; }
+a:hover{ text-decoration:none; }
 ::selection{ background: rgba(124,58,237,.18); }
 
 /* Container */
@@ -88,7 +84,7 @@ a:hover{ text-decoration: none; }
 }
 
 /* ============================================================
-   LAYOUT: sidebar fijo izquierda (header a footer)
+   LAYOUT: sidebar fijo izquierda
 ============================================================ */
 body.adminPage{ padding-left: var(--sideW); }
 .adminShell{ display:block; }
@@ -104,7 +100,6 @@ body.adminPage{ padding-left: var(--sideW); }
   overflow: auto;
 }
 
-/* Sidebar structure */
 .sideCard{ background: transparent; border: 0; padding: 0; }
 
 .sideHead{
@@ -193,7 +188,7 @@ body.adminPage{ padding-left: var(--sideW); }
 }
 
 /* ============================================================
-   TOPBAR (flat)
+   TOPBAR
 ============================================================ */
 .topbar{
   position: sticky;
@@ -244,13 +239,13 @@ body.adminPage{ padding-left: var(--sideW); }
 }
 
 /* ============================================================
-   RESET controles (evita estilos nativos raros)
+   RESET controles
 ============================================================ */
 button, input, select, textarea{ font: inherit; color: inherit; }
 button{ background: transparent; border: 0; padding: 0; }
 
 /* ============================================================
-   BUTTONS (flat + pro)
+   BUTTONS
 ============================================================ */
 .btn{
   border: 1px solid var(--line2);
@@ -284,7 +279,6 @@ button{ background: transparent; border: 0; padding: 0; }
   border-color: rgba(124,58,237,.45);
 }
 
-/* Primary = acciones importantes */
 .btn--primary, .btn.primary{
   background: var(--primary);
   color: var(--primaryText);
@@ -295,13 +289,11 @@ button{ background: transparent; border: 0; padding: 0; }
   border-color: var(--primaryHover);
 }
 
-/* Ghost/lineal */
 .btn--ghost{
   background: transparent;
   border-color: var(--line2);
 }
 
-/* Danger: lineal + texto rojo */
 .btn--danger{
   background: transparent;
   border-color: var(--dangerLine);
@@ -312,7 +304,6 @@ button{ background: transparent; border: 0; padding: 0; }
   border-color: rgba(215,38,61,.55);
 }
 
-/* Tamaño sm */
 .btn.sm{
   padding: 9px 11px;
   min-height: 36px;
@@ -392,7 +383,7 @@ main.container{ padding: 18px 0 44px; }
    TABS (si se usan arriba)
 ============================================================ */
 .tabs{
-  display:block;
+  display:flex;
   gap:10px;
   flex-wrap:wrap;
   margin: 14px 0 16px;
@@ -417,7 +408,7 @@ main.container{ padding: 18px 0 44px; }
 }
 
 /* ============================================================
-   PANEL/CARD: panel = contenedor / card = panel real
+   PANEL/CARD
 ============================================================ */
 .panel{
   background: transparent !important;
@@ -425,7 +416,6 @@ main.container{ padding: 18px 0 44px; }
   padding: 0 !important;
 }
 
-/* grid2 en 2 columnas */
 .grid2{
   display:grid !important;
   grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
@@ -433,7 +423,6 @@ main.container{ padding: 18px 0 44px; }
   align-items:start !important;
 }
 
-/* Card = panel visual */
 .card{
   border: 1px solid var(--line);
   border-radius: var(--radius2);
@@ -442,7 +431,6 @@ main.container{ padding: 18px 0 44px; }
   min-width: 0;
 }
 
-/* Card head */
 .cardHead{
   display:flex;
   align-items:flex-start;
@@ -451,7 +439,6 @@ main.container{ padding: 18px 0 44px; }
   margin-bottom: 12px;
 }
 
-/* List head / toolbar */
 .toolbar, .listHead{
   display:flex;
   gap:10px;
@@ -492,7 +479,6 @@ main.container{ padding: 18px 0 44px; }
   overflow:hidden;
 }
 
-/* Item suele ser <button class="item"> */
 .list .item{
   background: transparent;
   border: 0;
@@ -530,7 +516,6 @@ main.container{ padding: 18px 0 44px; }
   border-left: 3px solid rgba(124,58,237,.55);
 }
 
-/* Pills */
 .pills{
   display:flex;
   gap:8px;
@@ -551,7 +536,7 @@ main.container{ padding: 18px 0 44px; }
 }
 
 /* ============================================================
-   FORMS (spacing pro + labels)
+   FORMS
 ============================================================ */
 .form{ display:block; }
 
@@ -562,14 +547,15 @@ main.container{ padding: 18px 0 44px; }
   margin-bottom: 16px;
 }
 
-/* Grid inputs */
+/* compact = menos margen dentro de mediaStack */
+.field.compact{ margin-bottom: 0; }
+
 .row, .formGrid{
   display:grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px 16px;
 }
 
-/* label */
 .label, label{
   display:block;
   margin:0;
@@ -581,7 +567,6 @@ main.container{ padding: 18px 0 44px; }
   line-height: 1.25;
 }
 
-/* Inputs */
 .input, .select, .textarea,
 input, select, textarea{
   width:100%;
@@ -605,11 +590,10 @@ input:focus, select:focus, textarea:focus{
   background: #fff;
 }
 
-/* textos bajo label (mini/hint/help/sub) */
+/* Descriptivos */
 .field .mini,
 .field .hint,
 .field .sub{
-  margin-top: -4px;
   color: #4f5864;
   font-size: 12px;
   line-height: 1.45;
@@ -617,7 +601,12 @@ input:focus, select:focus, textarea:focus{
   overflow-wrap: anywhere;
 }
 
-/* help (contador + texto) */
+/* mini debajo del input (para medios cargados) */
+.mini--below{
+  margin-top: 6px;
+}
+
+/* help */
 .help{
   display:flex;
   justify-content:space-between;
@@ -637,7 +626,7 @@ input:focus, select:focus, textarea:focus{
 
 /* readonly url look */
 input[readonly], .input[readonly]{ opacity: 1; }
-input[type="url"], .mono, .isUrl{
+.mono, .isUrl, input[type="url"], .input[type="url"]{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   letter-spacing: 0;
 }
@@ -647,7 +636,7 @@ input[type="url"], .input[type="url"]{
   white-space: nowrap;
 }
 
-/* mediaRow en 2 columnas (DEFAULT para otras secciones) */
+/* mediaRow (se usa en otros tabs; en Eventos ya no) */
 .mediaRow{
   display:grid;
   grid-template-columns: minmax(0,1fr) minmax(0,1fr);
@@ -655,13 +644,46 @@ input[type="url"], .input[type="url"]{
   align-items: start;
 }
 
-/* Fechas: split dentro del editor */
+/* Fechas: split */
 #tab-dates .split{
   display:grid;
   grid-template-columns: minmax(0,.95fr) minmax(0,1.05fr);
   gap: 16px;
   align-items: start;
   margin-top: 12px;
+}
+
+/* ============================================================
+   EVENTOS: FIX COLUMNAS REAL (sin nth-child)
+   - .ev-span = full width (1 col visual)
+============================================================ */
+#tab-events #eventForm .formGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+#tab-events #eventForm .formGrid .ev-span{
+  grid-column: 1 / -1;
+}
+
+/* Medios cargados: layout */
+.sectionTitle{
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: .02em;
+  margin: 0;
+}
+.sectionSub{
+  margin-top: 4px;
+}
+
+.mediaStack{
+  display:flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
 /* ============================================================
@@ -818,7 +840,7 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
   background: var(--panel2);
 }
 
-/* === FIX: MODALES OCULTOS NO PUEDEN TAPAR LA UI === */
+/* FIX: modales hidden */
 .modal[hidden],
 #ecnPromoModal[hidden],
 #ecnGalleryModal[hidden]{
@@ -867,48 +889,4 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
   #tab-dates .split{ grid-template-columns: 1fr; }
 
   .container{ width: calc(100% - 28px); }
-}
-
-/* ============================================================
-   FIX EVENTOS (DEPURADO):
-   - FormGrid base 2 columnas
-   - Desde Moneda (7) hasta Alt (10): 1 columna
-   - Estado (11) + Badge (12): 2 columnas
-   - Bloque “Gestionar en Medios” (mediaRow): 1 columna SOLO en Eventos
-============================================================ */
-
-/* Base (explícito, por si otros estilos lo pisan) */
-#tab-events #eventForm .formGrid{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 16px;
-}
-
-/* 1 columna desde Moneda(7) hasta Alt(10) */
-#tab-events #eventForm .formGrid > .field:nth-child(7),
-#tab-events #eventForm .formGrid > .field:nth-child(8),
-#tab-events #eventForm .formGrid > .field:nth-child(9),
-#tab-events #eventForm .formGrid > .field:nth-child(10){
-  grid-column: 1 / -1;
-}
-
-/* CLAVE: dentro de eventos, banners en 1 columna */
-#tab-events .mediaRow{
-  display:grid !important;
-  grid-template-columns: 1fr !important;
-  gap: 14px !important;
-}
-
-/* Última fila: Estado + Badge en 2 columnas */
-#tab-events #eventForm .formGrid > .field:nth-child(11),
-#tab-events #eventForm .formGrid > .field:nth-child(12){
-  grid-column: auto;
-  align-self: start;
-}
-
-/* Mobile: todo 1 columna (ya existe arriba, pero lo dejamos robusto) */
-@media (max-width: 980px){
-  #tab-events #eventForm .formGrid{
-    grid-template-columns: 1fr;
-  }
 }

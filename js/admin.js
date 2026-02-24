@@ -400,8 +400,7 @@
     $("#evDesc")?.addEventListener("input", setDescCount);
 
     // "Gestionar en Medios"
-    $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
-    $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
+ $("#evManageMediaBtn")?.addEventListener("click", () => setTab("media"));
 
     $("#newEventBtn")?.addEventListener("click", async () => {
       setTab("events");
