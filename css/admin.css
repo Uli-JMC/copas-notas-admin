@@ -935,3 +935,136 @@ body.adminLoginPage .page{
   .row, .formGrid{ grid-template-columns: 1fr; }
   .container{ width: calc(100% - 28px); }
 }
+
+/* ============================================================
+   PATCH PRO (2026-02-24b) — SPACING + LIST ITEMS + MEDIA PRO
+   - No toca IDs / No rompe JS
+   - Quita estilos nativos (bloques blancos)
+   - Corrige spacing label/mini/input
+   - Controla textos largos bajo labels
+   - Media: URLs mono + ellipsis + jerarquía
+============================================================ */
+
+/* 1) Reset de controles para evitar estilos nativos (bloques blancos) */
+button, input, select, textarea{
+  font: inherit;
+  color: inherit;
+}
+button{
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* 2) “Item” (evento/medio) PRO: si tu JS usa <button class="item"> */
+.list .item{
+  background: transparent;          /* evita blanco */
+  border: 0;                        /* evita borde nativo */
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+}
+
+/* Si algún item viene como <a class="item"> */
+.list a.item{
+  display: flex;
+  width: 100%;
+}
+
+/* Hover/Active más pro y consistente */
+.item{
+  border-radius: 16px;
+}
+.item:hover{
+  background: rgba(255,255,255,.04);
+}
+.item.active{
+  background: rgba(255,255,255,.06) !important; /* fuerza sobre estilos nativos */
+  border-left: 3px solid rgba(255,255,255,.30);
+}
+
+/* 3) Spacing PRO en forms: label -> mini -> input */
+.field{
+  gap: 10px !important;        /* separa label/mini/input */
+  margin-bottom: 16px !important;
+}
+.label, label{
+  line-height: 1.25;
+}
+
+/* Textos de ayuda bajo labels: que respiren y no se vayan a 2000px */
+.field .mini,
+.field .hint,
+.field .help,
+.field .sub{
+  margin-top: -4px;            /* acerca un poco al label sin “pegarse” al input */
+  color: var(--muted);
+  max-width: 62ch;             /* ✅ evita líneas eternas */
+  line-height: 1.55;
+  overflow-wrap: anywhere;     /* ✅ corta strings largas */
+}
+
+/* Si querés “más pro”: clampa a 2 líneas (descomentalo si te gusta) */
+/*
+.field .mini,
+.field .hint{
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+*/
+
+/* 4) Inputs readonly y URLs: mono + ellipsis */
+input[readonly], .input[readonly]{
+  opacity: 1;
+  color: var(--text);
+}
+input[type="url"], .isUrl, .mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
+}
+input[type="url"], .input[type="url"]{
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* 5) MEDIA TAB: jerarquía más clara (label / acción / ayuda / campo) */
+#tab-media .field{
+  gap: 10px !important;
+}
+#tab-media .mini{
+  max-width: 56ch;
+}
+
+/* Botón “Gestionar en medios” que no se vea pegado al label */
+#tab-media .btn{
+  margin-top: 2px;
+}
+
+/* 6) Lista de medios: thumbnail + meta + acciones más alineado */
+#tab-media #mediaList .item{
+  align-items: center;
+}
+#tab-media #mediaList .itemTitle{
+  font-weight: 900;
+  letter-spacing: .01em;
+}
+#tab-media #mediaList .itemMeta{
+  margin-top: 4px;
+}
+
+/* 7) Si en algún módulo aparece un bloque claro por <input> sin clase */
+input, select, textarea{
+  background: rgba(255,255,255,.02);
+}
+
+/* 8) Evitar que el texto “Editar” quede raro (si viene como link dentro del item) */
+.item a{
+  color: var(--text);
+  text-decoration: none;
+}
+.item a:hover{
+  text-decoration: underline;
+}
