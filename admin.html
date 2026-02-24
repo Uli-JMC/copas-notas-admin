@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="es">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,7 +11,9 @@
 
   <!-- FIX CRÍTICO: si un elemento tiene hidden, NO puede quedar visible por CSS -->
   <style>
-    [hidden]{ display:none !important; }
+    [hidden] {
+      display: none !important;
+    }
   </style>
 </head>
 
@@ -26,8 +29,8 @@
         </a>
 
         <div class="navRight">
-          <a class="btn btn--ghost" href="./index.html" id="viewSiteBtn">VER SITIO</a>
-          <button class="btn btn--ghost" id="logoutBtn" type="button">SALIR</button>
+          <a class="btn btn--ghost" href="https://entrecopasynotas.com" target="_blank" rel="noopener"
+            id="viewSiteBtn">VER SITIO</a> <button class="btn btn--ghost" id="logoutBtn" type="button">SALIR</button>
         </div>
       </div>
     </div>
@@ -138,7 +141,8 @@
 
                       <div class="field">
                         <label class="label" for="evSlug">Slug (URL)</label>
-                        <input class="input" id="evSlug" type="text" maxlength="120" placeholder="ej: cata-italia-vs-usa" />
+                        <input class="input" id="evSlug" type="text" maxlength="120"
+                          placeholder="ej: cata-italia-vs-usa" />
                       </div>
 
                       <div class="field">
@@ -148,7 +152,8 @@
 
                       <div class="field">
                         <label class="label" for="evSchedule">Horario</label>
-                        <input class="input" id="evSchedule" type="text" maxlength="80" placeholder="ej: 7:00 pm a 9:00 pm" />
+                        <input class="input" id="evSchedule" type="text" maxlength="80"
+                          placeholder="ej: 7:00 pm a 9:00 pm" />
                       </div>
 
                       <div class="field">
@@ -182,23 +187,28 @@
                         <div class="mediaRow">
                           <div>
                             <div class="kicker">BANNER (URL) — DESKTOP</div>
-                            <button class="btn btn--ghost" id="evBannerDesktopBtn" type="button">Gestionar en Medios</button>
+                            <button class="btn btn--ghost" id="evBannerDesktopBtn" type="button">Gestionar en
+                              Medios</button>
                             <div class="mini">Solo lectura aquí. Asigná en Medios (slot desktop_event).</div>
-                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)" readonly />
+                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)"
+                              readonly />
                           </div>
 
                           <div>
                             <div class="kicker">BANNER (URL) — MOBILE</div>
-                            <button class="btn btn--ghost" id="evBannerMobileBtn" type="button">Gestionar en Medios</button>
+                            <button class="btn btn--ghost" id="evBannerMobileBtn" type="button">Gestionar en
+                              Medios</button>
                             <div class="mini">Solo lectura aquí. Asigná en Medios (slot mobile_event).</div>
-                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)" readonly />
+                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)"
+                              readonly />
                           </div>
                         </div>
                       </div>
 
                       <div class="field field--full">
                         <label class="label" for="evAlt">Texto alternativo del banner</label>
-                        <input class="input" id="evAlt" type="text" maxlength="140" placeholder="Opcional. Ayuda con accesibilidad/SEO." />
+                        <input class="input" id="evAlt" type="text" maxlength="140"
+                          placeholder="Opcional. Ayuda con accesibilidad/SEO." />
                       </div>
 
                       <div class="field">
@@ -211,7 +221,8 @@
 
                       <div class="field">
                         <label class="label" for="evBadge">Badge</label>
-                        <input class="input" id="evBadge" type="text" maxlength="40" placeholder="ej: Cupos limitados" />
+                        <input class="input" id="evBadge" type="text" maxlength="40"
+                          placeholder="ej: Cupos limitados" />
                       </div>
                     </div>
 
@@ -348,7 +359,8 @@
 
                       <div class="field">
                         <label class="label" for="mediaFolder">Folder</label>
-                        <input class="input" id="mediaFolder" type="text" placeholder="events-img | promos-img | menu-img | misc-img" />
+                        <input class="input" id="mediaFolder" type="text"
+                          placeholder="events-img | promos-img | menu-img | misc-img" />
                       </div>
 
                       <div class="field">
@@ -368,7 +380,8 @@
 
                       <div class="field field--full">
                         <label class="label" for="mediaUrl">URL pública</label>
-                        <input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL..." />
+                        <input class="input" id="mediaUrl" type="text"
+                          placeholder="Se llena al subir o pegá una URL..." />
                       </div>
                     </div>
 
@@ -489,7 +502,8 @@
                 </div>
               </div>
 
-              <div class="modal" id="ecnGalleryModal" hidden aria-hidden="true" role="dialog" aria-label="Editar item de galería">
+              <div class="modal" id="ecnGalleryModal" hidden aria-hidden="true" role="dialog"
+                aria-label="Editar item de galería">
                 <div class="modalBackdrop" data-close="true"></div>
                 <div class="modalCard">
                   <div class="modalHead">
@@ -572,7 +586,8 @@
                 <div class="note" id="ecnNote"></div>
               </div>
 
-              <div class="modal" id="ecnPromoModal" hidden aria-hidden="true" role="dialog" aria-label="Editar promoción">
+              <div class="modal" id="ecnPromoModal" hidden aria-hidden="true" role="dialog"
+                aria-label="Editar promoción">
                 <div class="modalBackdrop" data-close="true"></div>
                 <div class="modalCard">
                   <div class="modalHead">
@@ -691,8 +706,8 @@
       const fmtMB = (bytes) => (bytes / (1024 * 1024)).toFixed(2) + " MB";
 
       const toast = (t, m) => {
-        try { if (window.toast) return window.toast(t, m); } catch (_) {}
-        try { if (window.APP && typeof APP.toast === "function") return APP.toast(t, m); } catch (_) {}
+        try { if (window.toast) return window.toast(t, m); } catch (_) { }
+        try { if (window.APP && typeof APP.toast === "function") return APP.toast(t, m); } catch (_) { }
         alert(t + " — " + m);
       };
 
@@ -717,63 +732,64 @@
   </script>
 
   <script>
-  // ECN_QUICKLINKS_HELPER (2026-02-24) — no toca tu BD ni IDs
-  (function(){
-    const ql = document.getElementById('quickLinks');
-    if(!ql) return;
+    // ECN_QUICKLINKS_HELPER (2026-02-24) — no toca tu BD ni IDs
+    (function () {
+      const ql = document.getElementById('quickLinks');
+      if (!ql) return;
 
-    function clickTab(tab){
-      const btn = document.querySelector('.sideTabs [data-tab="'+tab+'"]') || document.querySelector('.tabs [data-tab="'+tab+'"]');
-      if(btn) btn.click();
-    }
-
-    ql.addEventListener('click', (e)=>{
-      const b = e.target.closest('[data-tab]');
-      if(!b) return;
-      clickTab(b.getAttribute('data-tab'));
-    });
-
-    function activePanel(){
-      const active = document.querySelector('.tab[aria-selected="true"][data-tab]');
-      if(!active) return null;
-      const id = 'tab-' + active.getAttribute('data-tab');
-      return document.getElementById(id);
-    }
-
-    function hasActions(panel){
-      if(!panel) return false;
-      // Si hay botones visibles (acciones), ocultamos quick links
-      const selectors = [
-        '.formActions .btn',
-        '.toolbar .btn',
-        '.tableActions .btn',
-        'button.btn',
-        'a.btn'
-      ];
-      for(const sel of selectors){
-        const el = panel.querySelector(sel);
-        if(el && el.offsetParent !== null) return true;
+      function clickTab(tab) {
+        const btn = document.querySelector('.sideTabs [data-tab="' + tab + '"]') || document.querySelector('.tabs [data-tab="' + tab + '"]');
+        if (btn) btn.click();
       }
-      return false;
-    }
 
-    function refresh(){
-      const panel = activePanel();
-      const show = !hasActions(panel);
-      ql.hidden = !show;
-    }
+      ql.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-tab]');
+        if (!b) return;
+        clickTab(b.getAttribute('data-tab'));
+      });
 
-    document.addEventListener('click', (e)=>{
-      if(e.target.closest('.tab[data-tab], .navBtn[data-tab]')){
-        window.setTimeout(refresh, 0);
+      function activePanel() {
+        const active = document.querySelector('.tab[aria-selected="true"][data-tab]');
+        if (!active) return null;
+        const id = 'tab-' + active.getAttribute('data-tab');
+        return document.getElementById(id);
       }
-    });
 
-    window.addEventListener('load', refresh);
-    window.addEventListener('resize', refresh);
-    window.setInterval(refresh, 800); // robusto sin depender de tus módulos
-  })();
+      function hasActions(panel) {
+        if (!panel) return false;
+        // Si hay botones visibles (acciones), ocultamos quick links
+        const selectors = [
+          '.formActions .btn',
+          '.toolbar .btn',
+          '.tableActions .btn',
+          'button.btn',
+          'a.btn'
+        ];
+        for (const sel of selectors) {
+          const el = panel.querySelector(sel);
+          if (el && el.offsetParent !== null) return true;
+        }
+        return false;
+      }
+
+      function refresh() {
+        const panel = activePanel();
+        const show = !hasActions(panel);
+        ql.hidden = !show;
+      }
+
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('.tab[data-tab], .navBtn[data-tab]')) {
+          window.setTimeout(refresh, 0);
+        }
+      });
+
+      window.addEventListener('load', refresh);
+      window.addEventListener('resize', refresh);
+      window.setInterval(refresh, 800); // robusto sin depender de tus módulos
+    })();
   </script>
 
 </body>
+
 </html>

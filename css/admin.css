@@ -1,43 +1,53 @@
 /* ============================================================
-   admin.css ✅ ENTRE COPAS & NOTAS — TEMPLATE-LIKE (2026-02-24)
-   OBJETIVO (según tu pedido):
-   - ✅ Menu sólido a la izquierda (header a footer) + contenido a la derecha
-   - ✅ Mantener IDs/clases (NO rompe JS / BD)
-   - ✅ Paleta BN: negro, gris, blanco (alto contraste)
-   - ✅ Sin sombras / sin blur / sin gradientes
-   - ✅ Bordes redondeados modernos (pero flat)
-   - ✅ Mejor espaciado entre labels/inputs
-   - ✅ Quick links visibles cuando NO haya botones/acciones
-   - ✅ Módulos alineados (grid consistente)
-   - ✅ Conserva fixes: media tab + modales gallery/promo
+   admin.css ✅ ENTRE COPAS & NOTAS — LIGHT + PURPLE PRO (2026-02-24)
+   OBJETIVO:
+   - Sidebar morado oscuro + texto blanco (hover morado más oscuro)
+   - Fondo gris claro
+   - Texto general gris oscuro
+   - Bordes finos gris
+   - Sin sombras / sin blur / sin gradientes
+   - Primary (acciones importantes): morado claro sólido
+   - Ghost/lineal: borde + texto
+   - Danger: lineal + texto rojo
+   - Descriptivos bajo labels: pequeños y visibles
+   - Panel = contenedor / Card = panel visual (2 columnas)
 ============================================================ */
 
 /* ----------------------------
    TOKENS
 ---------------------------- */
 :root{
-  --bg:#0b0b0b;
-  --panel:#101010;
-  --panel2:#0e0e0e;
+  /* Base */
+  --bg:#f3f4f6;           /* gris claro */
+  --panel:#ffffff;        /* panel blanco */
+  --panel2:#f7f7f9;       /* panel suave */
+  --text:#2b2f36;         /* texto principal gris oscuro */
+  --muted:#5f6772;        /* texto secundario */
+  --muted2:#737c88;       /* labels / meta */
+  --line:#d6d9df;         /* borde fino gris */
+  --line2:#cfd3da;        /* borde un poco más fuerte */
 
-  --text:#f3f3f3;
-  --muted:#bdbdbd;
-  --muted2:#9c9c9c;
+  /* Purple system */
+  --side:#2b104a;         /* morado oscuro sidebar */
+  --side2:#240d3e;        /* hover morado más oscuro */
+  --sideLine:rgba(255,255,255,.18);
 
-  --line:#242424;
-  --line2:#2f2f2f;
+  --primary:#7c3aed;      /* morado claro (acciones importantes) */
+  --primaryHover:#6d28d9;
+  --primaryText:#ffffff;
 
-  --focus:#6ea8ff;
+  --focus: rgba(124,58,237,.28);
+
+  --danger:#d7263d;
+  --dangerLine: rgba(215,38,61,.45);
 
   --max: 1320px;
-
   --radius: 14px;
   --radius2: 18px;
-
   --sideW: 288px;
   --topbarH: 72px;
 
-  --danger:#ff4d6d;
+  --anim: 160ms;
 }
 
 *{ box-sizing:border-box; }
@@ -49,56 +59,58 @@ body{
   min-height:100vh;
   color:var(--text);
   font-family: Helvetica, Arial, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: var(--bg); /* ✅ sin gradientes */
+  background: var(--bg);
 }
 
-/* enlaces */
+/* Enlaces */
 a{ color:inherit; text-decoration:none; }
-::selection{ background: rgba(110,168,255,.25); }
+a:hover{ text-decoration: none; }
+::selection{ background: rgba(124,58,237,.18); }
 
-/* container */
+/* Container */
 .container{
   width: min(var(--max), calc(100% - 40px));
   margin: 0 auto;
 }
 
+/* Accesibilidad */
+.srOnly{
+  position:absolute;
+  width:1px; height:1px;
+  padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0);
+  white-space:nowrap; border:0;
+}
+
 /* ============================================================
    LAYOUT: sidebar fijo izquierda (header a footer)
 ============================================================ */
-body.adminPage{
-  padding-left: var(--sideW);
-}
-
-.adminShell{
-  display:block; /* sidebar ya es fixed */
-}
+body.adminPage{ padding-left: var(--sideW); }
+.adminShell{ display:block; }
 
 /* Sidebar */
 .sidebar{
   position: fixed;
   left: 0; top: 0; bottom: 0;
   width: var(--sideW);
-  background: var(--panel2);
-  border-right: 1px solid var(--line);
+  background: var(--side);
+  border-right: 1px solid rgba(0,0,0,.08);
   padding: 18px 14px;
   overflow: auto;
 }
 
-.sideCard{
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
+/* Sidebar structure */
+.sideCard{ background: transparent; border: 0; padding: 0; }
 
 .sideHead{
   padding: 8px 10px 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--sideLine);
   margin-bottom: 12px;
 }
 
 .kicker{
   margin:0 0 8px;
-  color: var(--muted2);
+  color: rgba(255,255,255,.78);
   font-size: 11px;
   letter-spacing:.18em;
   text-transform: uppercase;
@@ -108,7 +120,7 @@ body.adminPage{
   font-weight: 800;
   letter-spacing:.02em;
   font-size: 14px;
-  color: var(--text);
+  color: #fff;
 }
 
 .sideNav{
@@ -117,34 +129,32 @@ body.adminPage{
   gap: 8px;
 }
 
-/* Botones del menú (usa tus .navBtn y .tab existentes) */
+/* Botones menú */
 .navBtn, .sideTabs .tab{
   width: 100%;
   text-align:left;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--muted);
+  color: #fff;
   padding: 12px 12px;
   border-radius: 14px;
   font-size: 12px;
   letter-spacing:.14em;
   text-transform: uppercase;
   cursor: pointer;
+  transition: background var(--anim) ease, border-color var(--anim) ease;
 }
 
 .navBtn:hover, .sideTabs .tab:hover{
-  background: rgba(255,255,255,.04);
-  border-color: rgba(255,255,255,.07);
-  color: var(--text);
+  background: var(--side2);
+  border-color: rgba(255,255,255,.12);
 }
 
-/* Estado activo (tu JS setea aria-selected + isActive) */
 .tab[aria-selected="true"],
 .navBtn[aria-selected="true"],
 .tab.isActive{
-  background: rgba(255,255,255,.06);
-  border-color: rgba(255,255,255,.14);
-  color: var(--text);
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.18);
 }
 
 /* Sidebar tip */
@@ -152,17 +162,17 @@ body.adminPage{
   margin-top: 14px;
   padding: 12px 12px;
   border-radius: 16px;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.06);
   display:flex;
   gap:10px;
   align-items:flex-start;
 }
 
 .sideChip{
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.05);
-  color: var(--text);
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(255,255,255,.10);
+  color: #fff;
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 11px;
@@ -172,13 +182,13 @@ body.adminPage{
 }
 
 .sideFootText{
-  color: var(--muted);
+  color: rgba(255,255,255,.86);
   font-size: 12.5px;
   line-height: 1.45;
 }
 
 /* ============================================================
-   TOPBAR (flat, sin blur)
+   TOPBAR (flat)
 ============================================================ */
 .topbar{
   position: sticky;
@@ -203,15 +213,16 @@ body.adminPage{
   gap:10px;
   padding: 6px 8px;
   border-radius: 14px;
+  transition: background var(--anim) ease;
 }
-.brand:hover{ background: rgba(255,255,255,.03); }
+.brand:hover{ background: rgba(0,0,0,.03); }
 
 .brand img{
   width:34px; height:34px;
   object-fit:contain;
   border-radius: 10px;
   border: 1px solid var(--line2);
-  background: rgba(255,255,255,.02);
+  background: var(--panel);
   padding: 5px;
 }
 
@@ -228,7 +239,13 @@ body.adminPage{
 }
 
 /* ============================================================
-   BUTTONS (flat)
+   RESET controles (evita estilos nativos raros)
+============================================================ */
+button, input, select, textarea{ font: inherit; color: inherit; }
+button{ background: transparent; border: 0; padding: 0; }
+
+/* ============================================================
+   BUTTONS (flat + pro)
 ============================================================ */
 .btn{
   border: 1px solid var(--line2);
@@ -246,42 +263,51 @@ body.adminPage{
   cursor:pointer;
   user-select:none;
   white-space:nowrap;
+  transition: background var(--anim) ease, border-color var(--anim) ease, color var(--anim) ease, transform var(--anim) ease;
 }
 
 .btn:hover{
-  background: rgba(255,255,255,.04);
-  border-color: rgba(255,255,255,.18);
+  background: rgba(0,0,0,.03);
+  border-color: var(--line);
 }
+
+.btn:active{ transform: translateY(1px); }
 
 .btn:focus-visible{
   outline: none;
-  box-shadow: 0 0 0 3px rgba(110,168,255,.35);
-  border-color: rgba(110,168,255,.55);
+  box-shadow: 0 0 0 3px var(--focus);
+  border-color: rgba(124,58,237,.45);
 }
 
-.btn.primary, .btn--primary{
-  background: #ffffff;
-  color: #0b0b0b;
-  border-color: #ffffff;
+/* Primary = acciones importantes */
+.btn--primary, .btn.primary{
+  background: var(--primary);
+  color: var(--primaryText);
+  border-color: var(--primary);
 }
-.btn.primary:hover, .btn--primary:hover{
-  background: rgba(255,255,255,.92);
-  border-color: rgba(255,255,255,.92);
+.btn--primary:hover, .btn.primary:hover{
+  background: var(--primaryHover);
+  border-color: var(--primaryHover);
 }
 
-.btn.btn--ghost{
+/* Ghost/lineal */
+.btn--ghost{
   background: transparent;
+  border-color: var(--line2);
 }
 
-.btn.btn--danger{
-  border-color: rgba(255,77,109,.45);
-  color: #ffd1da;
+/* Danger: lineal + texto rojo */
+.btn--danger{
+  background: transparent;
+  border-color: var(--dangerLine);
+  color: var(--danger);
 }
-.btn.btn--danger:hover{
-  background: rgba(255,77,109,.10);
-  border-color: rgba(255,77,109,.65);
+.btn--danger:hover{
+  background: rgba(215,38,61,.06);
+  border-color: rgba(215,38,61,.55);
 }
 
+/* Tamaño sm */
 .btn.sm{
   padding: 9px 11px;
   min-height: 36px;
@@ -314,7 +340,11 @@ main.container{ padding: 18px 0 44px; }
 .h2{ margin:0; font-weight:900; font-size: 20px; }
 .h3{ margin:0; font-weight:900; font-size: 16px; }
 
-.mini{ color: var(--muted); font-size: 13px; line-height: 1.5; }
+.mini{
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .muted{ color: var(--muted); }
 .small{ font-size: 12px; color: var(--muted2); }
 .right{ text-align:right; }
@@ -326,7 +356,7 @@ main.container{ padding: 18px 0 44px; }
 }
 
 /* ============================================================
-   QUICK LINKS (solo cuando no hay acciones)
+   QUICK LINKS
 ============================================================ */
 .quickLinks{
   display:flex;
@@ -339,21 +369,22 @@ main.container{ padding: 18px 0 44px; }
 
 .quickLinks .qlBtn{
   border: 1px solid var(--line2);
-  background: rgba(255,255,255,.02);
+  background: var(--panel);
   color: var(--text);
   padding: 10px 12px;
   border-radius: 14px;
   font-size: 13px;
   letter-spacing: .04em;
   cursor:pointer;
+  transition: background var(--anim) ease, border-color var(--anim) ease;
 }
 .quickLinks .qlBtn:hover{
-  background: rgba(255,255,255,.04);
-  border-color: rgba(255,255,255,.18);
+  background: rgba(124,58,237,.06);
+  border-color: rgba(124,58,237,.25);
 }
 
 /* ============================================================
-   TABS (si aún se usan arriba)
+   TABS (si se usan arriba)
 ============================================================ */
 .tabs{
   display:flex;
@@ -364,7 +395,7 @@ main.container{ padding: 18px 0 44px; }
 
 .tab{
   border: 1px solid var(--line2);
-  background: rgba(255,255,255,.02);
+  background: var(--panel);
   color: var(--text);
   padding: 10px 12px;
   border-radius: 14px;
@@ -372,36 +403,41 @@ main.container{ padding: 18px 0 44px; }
   letter-spacing:.16em;
   text-transform: uppercase;
   cursor:pointer;
+  transition: background var(--anim) ease, border-color var(--anim) ease;
 }
 
 .tab:hover{
-  background: rgba(255,255,255,.04);
-  border-color: rgba(255,255,255,.18);
+  background: rgba(124,58,237,.06);
+  border-color: rgba(124,58,237,.25);
 }
 
 /* ============================================================
-   PANELS / CARDS / GRIDS (flat + alineación)
+   PANEL/CARD: panel = contenedor / card = panel real
 ============================================================ */
 .panel{
-  border-radius: var(--radius2);
-  border: 1px solid var(--line);
-  background: var(--panel);
-  padding: 18px;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
 }
 
+/* grid2 en 2 columnas */
 .grid2{
-  display:grid;
-  grid-template-columns: 1.05fr .95fr;
-  gap: 16px;
-  align-items:start;
+  display:grid !important;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+  gap: 18px !important;
+  align-items:start !important;
 }
 
+/* Card = panel visual */
 .card{
+  border: 1px solid var(--line);
+  border-radius: var(--radius2);
   background: var(--panel);
   padding: 16px;
   min-width: 0;
 }
 
+/* Card head */
 .cardHead{
   display:flex;
   align-items:flex-start;
@@ -410,6 +446,7 @@ main.container{ padding: 18px 0 44px; }
   margin-bottom: 12px;
 }
 
+/* List head / toolbar */
 .toolbar, .listHead{
   display:flex;
   gap:10px;
@@ -420,7 +457,7 @@ main.container{ padding: 18px 0 44px; }
   padding: 10px;
   border-radius: 16px;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,.01);
+  background: var(--panel2);
 }
 
 .note{
@@ -433,10 +470,11 @@ main.container{ padding: 18px 0 44px; }
 .empty{
   margin-top: 12px;
   color: var(--muted);
-  border: 1px dashed rgba(255,255,255,.16);
+  border: 1px dashed var(--line2);
   border-radius: 16px;
   padding: 14px;
   line-height: 1.6;
+  background: var(--panel2);
 }
 
 /* ============================================================
@@ -445,22 +483,33 @@ main.container{ padding: 18px 0 44px; }
 .list{
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,.01);
+  background: var(--panel);
   overflow:hidden;
+}
+
+/* Item suele ser <button class="item"> */
+.list .item{
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  color: var(--text);
 }
 
 .item{
   padding: 14px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid var(--line);
   cursor:pointer;
   display:flex;
   gap:10px;
   justify-content:space-between;
   align-items:flex-start;
+  border-radius: 0;
+  transition: background var(--anim) ease;
 }
-
 .item:last-child{ border-bottom:0; }
-.item:hover{ background: rgba(255,255,255,.03); }
+
+.item:hover{ background: rgba(124,58,237,.05); }
 
 .itemTitle{ margin:0; font-weight:900; }
 .itemMeta{
@@ -471,6 +520,12 @@ main.container{ padding: 18px 0 44px; }
   text-transform: uppercase;
 }
 
+.item.active{
+  background: rgba(124,58,237,.08) !important;
+  border-left: 3px solid rgba(124,58,237,.55);
+}
+
+/* Pills */
 .pills{
   display:flex;
   gap:8px;
@@ -480,7 +535,7 @@ main.container{ padding: 18px 0 44px; }
 
 .pill{
   border:1px solid var(--line2);
-  background: rgba(255,255,255,.02);
+  background: var(--panel);
   padding: 7px 10px;
   border-radius: 999px;
   font-size: 11px;
@@ -488,17 +543,6 @@ main.container{ padding: 18px 0 44px; }
   text-transform: uppercase;
   white-space:nowrap;
   color: var(--muted);
-}
-
-.pill.danger{
-  border-color: rgba(255,77,109,.45);
-  background: rgba(255,77,109,.10);
-  color: #ffd1da;
-}
-
-.item.active{
-  background: rgba(255,255,255,.05);
-  border-left: 3px solid rgba(255,255,255,.35);
 }
 
 /* ============================================================
@@ -509,16 +553,18 @@ main.container{ padding: 18px 0 44px; }
 .field{
   display:flex;
   flex-direction:column;
-  gap: 10px;           /* ✅ más aire */
-  margin-bottom: 14px; /* ✅ más aire */
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
+/* Grid inputs */
 .row, .formGrid{
   display:grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px 16px;
 }
 
+/* label */
 .label, label{
   display:block;
   margin:0;
@@ -527,39 +573,90 @@ main.container{ padding: 18px 0 44px; }
   letter-spacing:.16em;
   text-transform: uppercase;
   font-weight: 800;
+  line-height: 1.25;
 }
 
-/* Inputs SIN margin */
+/* Inputs */
 .input, .select, .textarea,
 input, select, textarea{
   width:100%;
   border-radius: 14px;
   border: 1px solid var(--line2);
-  background: rgba(255,255,255,.02);
+  background: var(--panel);
   color: var(--text);
   padding: 12px 12px;
   margin: 0;
   outline:none;
   font-size: 14px;
+  transition: border-color var(--anim) ease, background var(--anim) ease;
 }
 
 .textarea{ resize: vertical; }
 
 .input:focus, .select:focus, .textarea:focus,
 input:focus, select:focus, textarea:focus{
-  border-color: rgba(110,168,255,.55);
-  box-shadow: 0 0 0 3px rgba(110,168,255,.25);
-  background: rgba(255,255,255,.03);
+  border-color: rgba(124,58,237,.55);
+  box-shadow: 0 0 0 3px var(--focus);
+  background: #fff;
 }
 
-.help{ display:flex; justify-content:space-between; gap:10px; margin-top: 6px; }
+/* textos bajo label (mini/hint/help) */
+.field .mini,
+.field .hint,
+.field .sub{
+  margin-top: -4px;
+  color: #4f5864;        /* más visible que el fondo */
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 62ch;
+  overflow-wrap: anywhere;
+}
 
+/* help (contador + texto) */
+.help{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  margin-top: 6px;
+}
+.help .muted{ color: #4f5864; font-size: 12px; }
+
+/* Acciones */
 .formActions{
   margin-top: 14px;
   display:flex;
   gap:10px;
   flex-wrap:wrap;
   align-items:center;
+}
+
+/* readonly url look */
+input[readonly], .input[readonly]{ opacity: 1; }
+input[type="url"], .mono, .isUrl{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
+}
+input[type="url"], .input[type="url"]{
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* mediaRow en 2 columnas */
+.mediaRow{
+  display:grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* Fechas: split dentro del editor */
+#tab-dates .split{
+  display:grid;
+  grid-template-columns: minmax(0,.95fr) minmax(0,1.05fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 12px;
 }
 
 /* ============================================================
@@ -569,7 +666,7 @@ input:focus, select:focus, textarea:focus{
   overflow:auto;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,.01);
+  background: var(--panel);
 }
 
 .table{
@@ -581,7 +678,7 @@ input:focus, select:focus, textarea:focus{
 th,td{
   text-align:left;
   padding: 12px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
@@ -601,7 +698,7 @@ td{
   line-height:1.4;
 }
 
-tbody tr:hover td{ background: rgba(255,255,255,.02); }
+tbody tr:hover td{ background: rgba(124,58,237,.04); }
 
 .tableActions{
   display:flex;
@@ -611,7 +708,7 @@ tbody tr:hover td{ background: rgba(255,255,255,.02); }
 }
 
 /* ============================================================
-   TOASTS (flat)
+   TOASTS (flat + anim)
 ============================================================ */
 .toasts{
   position: fixed;
@@ -632,6 +729,9 @@ tbody tr:hover td{ background: rgba(255,255,255,.02); }
   border: 1px solid var(--line2);
   background: var(--panel);
   padding: 12px 12px;
+  transform: translateY(-6px);
+  opacity: 0;
+  animation: toastIn var(--anim) ease forwards;
 }
 
 .toast .tTitle{
@@ -639,176 +739,35 @@ tbody tr:hover td{ background: rgba(255,255,255,.02); }
   font-size: 11px;
   letter-spacing:.16em;
   text-transform: uppercase;
+  color: var(--muted2);
 }
-
 .toast .tMsg{
   margin:6px 0 0;
-  color: var(--muted);
+  color: var(--text);
   font-size: 13px;
   line-height: 1.45;
 }
-
-/* ============================================================
-   LOGIN PAGE (mismo look)
-============================================================ */
-body.adminLoginPage{
-  background: var(--bg);
-}
-
-body.adminLoginPage .page{
-  min-height: 100vh;
-  display:flex;
-  align-items:center;
-  padding: 26px 0;
-}
-
-.login{
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  min-height: calc(100vh - var(--topbarH));
-}
-
-.loginCard{
-  width: min(520px, 100%);
-  border-radius: 18px;
+.toast .close{
+  margin-top: 10px;
   border: 1px solid var(--line2);
-  background: var(--panel);
-  padding: 18px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor:pointer;
+  background: transparent;
+}
+.toast .close:hover{
+  background: rgba(124,58,237,.06);
+  border-color: rgba(124,58,237,.22);
 }
 
-.loginBrand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin-bottom: 10px;
-}
-
-.loginBrand img{
-  width:44px;
-  height:44px;
-  object-fit:contain;
-  border-radius: 14px;
-  border: 1px solid var(--line2);
-  background: rgba(255,255,255,.02);
-  padding: 6px;
-}
-
-.fine{
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size:12px;
-  line-height:1.55;
-}
-
-.hint{
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
+@keyframes toastIn{
+  to{ transform: translateY(0); opacity: 1; }
 }
 
 /* ============================================================
-   MEDIA TAB — mantenemos FIXS (flat)
+   MODALS (mantener estructura, sin sombras)
 ============================================================ */
-#tab-media .grid2{ align-items: start; }
-#tab-media .field{ min-width: 0; }
-
-#tab-media [data-media-settings="1"]{
-  border-radius: 18px !important;
-  padding: 14px !important;
-  background: rgba(255,255,255,.01) !important;
-  border: 1px solid var(--line) !important;
-}
-
-#tab-media [data-media-settings="1"] label{
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  line-height: 1.2;
-}
-
-#tab-media [data-media-settings="1"] input[type="checkbox"]{
-  width: 18px;
-  height: 18px;
-  margin: 0 !important;
-  flex: 0 0 auto;
-}
-
-#tab-media [data-media-settings="1"] input[type="range"]{
-  width: 180px !important;
-  max-width: 52vw;
-}
-
-@media (max-width: 820px){
-  #tab-media [data-media-settings="1"] > div{
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
-  #tab-media [data-media-settings="1"] input[type="range"]{
-    width: 100% !important;
-    max-width: none;
-  }
-}
-
-#tab-media #mediaResetSettingsBtn{
-  min-height: 40px;
-  padding: 10px 14px;
-}
-
-#tab-media #mediaFile{ padding: 10px 12px; line-height: 1.2; }
-
-#tab-media #mediaForm .formActions{
-  display:flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items:center;
-}
-
-@media (max-width: 820px){
-  #tab-media #mediaForm .formActions{
-    flex-direction: column;
-    align-items: stretch;
-  }
-  #tab-media #mediaForm .formActions .btn{
-    width: 100%;
-  }
-}
-
-#tab-media #mediaPreviewImg{
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.10) !important;
-}
-
-/* Lista media: acciones ordenadas */
-#tab-media #mediaList .pills{
-  display:flex !important;
-  flex-direction: column !important;
-  gap: 10px !important;
-  align-items: stretch !important;
-  min-width: 160px;
-}
-#tab-media #mediaList .pills .btn{ width: 100%; }
-
-@media (max-width: 820px){
-  #tab-media #mediaList .pills{
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    min-width: 0;
-  }
-  #tab-media #mediaList .pills .btn{
-    width: auto;
-    flex: 1 1 auto;
-  }
-}
-
-/* ============================================================
-   GALLERY MODAL (ecn) — conserva tamaños/fixes (flat)
-============================================================ */
-#ecnGalleryModal{
+#ecnGalleryModal, #ecnPromoModal{
   position: fixed;
   inset: 0;
   display: flex;
@@ -818,7 +777,7 @@ body.adminLoginPage .page{
   overflow: hidden !important;
 }
 
-#ecnGalleryModal > *{
+#ecnGalleryModal > *, #ecnPromoModal > *{
   width: min(980px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
   display: flex;
@@ -829,7 +788,8 @@ body.adminLoginPage .page{
   background: var(--panel);
 }
 
-#ecnGalleryModal #ecnGalleryForm{
+#ecnGalleryModal #ecnGalleryForm,
+#ecnPromoModal #ecnPromoForm{
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
@@ -841,7 +801,7 @@ body.adminLoginPage .page{
   height: clamp(260px, 48vh, 400px);
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(255,255,255,.01);
+  background: var(--panel2);
   border: 1px solid var(--line);
 }
 
@@ -850,54 +810,7 @@ body.adminLoginPage .page{
   height: 100%;
   object-fit: contain;
   display: block;
-  background: rgba(255,255,255,.01);
-}
-
-#ecnGalleryModal #ecnGalleryForm > div[style*="position: sticky"]{
-  z-index: 10;
   background: var(--panel2);
-  margin: 0 !important;
-}
-
-/* ============================================================
-   PROMO MODAL (ecn) — size fix (flat)
-============================================================ */
-#ecnPromoModal{
-  position: fixed;
-  inset: 0;
-  padding: 24px 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow: hidden !important;
-}
-
-#ecnPromoModal > *{
-  width: min(920px, calc(100% - 32px));
-  max-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid var(--line2);
-  background: var(--panel);
-}
-
-#ecnPromoModal #ecnPromoForm{
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-}
-
-#ecnPromoModal #ecnPromoForm .row{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-@media (max-width: 820px){
-  #ecnPromoModal #ecnPromoForm .row{ grid-template-columns: 1fr; }
 }
 
 /* === FIX: MODALES OCULTOS NO PUEDEN TAPAR LA UI === */
@@ -909,226 +822,44 @@ body.adminLoginPage .page{
 }
 
 /* ============================================================
+   ANIMACIONES PRO (tabs/panels)
+============================================================ */
+[role="tabpanel"]{
+  animation: panelIn 180ms ease;
+}
+@keyframes panelIn{
+  from{ opacity: 0; transform: translateY(6px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
    RESPONSIVE
 ============================================================ */
 @media (max-width: 1020px){
   body.adminPage{ padding-left: 0; }
+
   .sidebar{
     position: sticky;
     top: 0;
     width: 100%;
     height: auto;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid rgba(0,0,0,.08);
     padding: 12px 12px;
     z-index: 60;
   }
+
   .sideNav{
     flex-direction: row;
     flex-wrap: wrap;
     gap: 8px;
   }
   .navBtn{ width: auto; text-align:center; }
-  .grid2{ grid-template-columns: 1fr; }
+
+  .grid2{ grid-template-columns: 1fr !important; }
   .row, .formGrid{ grid-template-columns: 1fr; }
+  .mediaRow{ grid-template-columns: 1fr; }
+  #tab-dates .split{ grid-template-columns: 1fr; }
+
   .container{ width: calc(100% - 28px); }
-}
-
-/* ============================================================
-   PATCH PRO (2026-02-24b) — SPACING + LIST ITEMS + MEDIA PRO
-   - No toca IDs / No rompe JS
-   - Quita estilos nativos (bloques blancos)
-   - Corrige spacing label/mini/input
-   - Controla textos largos bajo labels
-   - Media: URLs mono + ellipsis + jerarquía
-============================================================ */
-
-/* 1) Reset de controles para evitar estilos nativos (bloques blancos) */
-button, input, select, textarea{
-  font: inherit;
-  color: inherit;
-}
-button{
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-/* 2) “Item” (evento/medio) PRO: si tu JS usa <button class="item"> */
-.list .item{
-  background: transparent;          /* evita blanco */
-  border: 0;                        /* evita borde nativo */
-  width: 100%;
-  text-align: left;
-  color: var(--text);
-}
-
-/* Si algún item viene como <a class="item"> */
-.list a.item{
-  display: flex;
-  width: 100%;
-}
-
-/* Hover/Active más pro y consistente */
-.item{
-  border-radius: 16px;
-}
-.item:hover{
-  background: rgba(255,255,255,.04);
-}
-.item.active{
-  background: rgba(255,255,255,.06) !important; /* fuerza sobre estilos nativos */
-  border-left: 3px solid rgba(255,255,255,.30);
-}
-
-/* 3) Spacing PRO en forms: label -> mini -> input */
-.field{
-  gap: 10px !important;        /* separa label/mini/input */
-  margin-bottom: 16px !important;
-}
-.label, label{
-  line-height: 1.25;
-}
-
-/* Textos de ayuda bajo labels: que respiren y no se vayan a 2000px */
-.field .mini,
-.field .hint,
-.field .help,
-.field .sub{
-  margin-top: -4px;            /* acerca un poco al label sin “pegarse” al input */
-  color: var(--muted);
-  max-width: 62ch;             /* ✅ evita líneas eternas */
-  line-height: 1.55;
-  overflow-wrap: anywhere;     /* ✅ corta strings largas */
-}
-
-/* Si querés “más pro”: clampa a 2 líneas (descomentalo si te gusta) */
-/*
-.field .mini,
-.field .hint{
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-*/
-
-/* 4) Inputs readonly y URLs: mono + ellipsis */
-input[readonly], .input[readonly]{
-  opacity: 1;
-  color: var(--text);
-}
-input[type="url"], .isUrl, .mono{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  letter-spacing: 0;
-}
-input[type="url"], .input[type="url"]{
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-/* 5) MEDIA TAB: jerarquía más clara (label / acción / ayuda / campo) */
-#tab-media .field{
-  gap: 10px !important;
-}
-#tab-media .mini{
-  max-width: 56ch;
-}
-
-/* Botón “Gestionar en medios” que no se vea pegado al label */
-#tab-media .btn{
-  margin-top: 2px;
-}
-
-/* 6) Lista de medios: thumbnail + meta + acciones más alineado */
-#tab-media #mediaList .item{
-  align-items: center;
-}
-#tab-media #mediaList .itemTitle{
-  font-weight: 900;
-  letter-spacing: .01em;
-}
-#tab-media #mediaList .itemMeta{
-  margin-top: 4px;
-}
-
-/* 7) Si en algún módulo aparece un bloque claro por <input> sin clase */
-input, select, textarea{
-  background: rgba(255,255,255,.02);
-}
-
-/* 8) Evitar que el texto “Editar” quede raro (si viene como link dentro del item) */
-.item a{
-  color: var(--text);
-  text-decoration: none;
-}
-.item a:hover{
-  text-decoration: underline;
-}
-
-/* ============================================================
-   LAYOUT PRO: "panel" = contenedor / "card" = 2 paneles reales
-   (Eventos, Fechas, Medios)
-============================================================ */
-
-/* 1) El panel no debe verse como "un mega panel" */
-.panel{
-  background: transparent !important;
-  border: 0 !important;
-  padding: 0 !important;
-}
-
-/* 2) grid2 SIEMPRE en 2 columnas (si hay espacio) */
-.grid2{
-  display: grid !important;
-  grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
-  gap: 18px !important;
-  align-items: start !important;
-}
-
-/* 3) Cada card es el "panel" visual */
-.card{
-  border: 1px solid var(--line) !important;
-  border-radius: var(--radius2) !important;
-  background: var(--panel) !important;
-  padding: 16px !important;
-  min-width: 0 !important;
-}
-
-/* Opcional pro: que ambas columnas se vean parejas */
-#tab-events .grid2 > .card,
-#tab-dates  .grid2 > .card,
-#tab-media  .grid2 > .card{
-  align-self: stretch;
-}
-
-/* 4) FECHAS: dentro del editor, split a 2 columnas (lista | form) */
-#tab-dates .split{
-  display: grid !important;
-  grid-template-columns: minmax(0,.95fr) minmax(0,1.05fr) !important;
-  gap: 16px !important;
-  align-items: start !important;
-  margin-top: 12px;
-}
-
-/* 5) EVENTOS: mediaRow (banner desktop | banner mobile) en 2 columnas */
-.mediaRow{
-  display: grid !important;
-  grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
-  gap: 16px !important;
-  align-items: start !important;
-}
-
-/* 6) Responsive: en pantallas chicas, todo en 1 columna */
-@media (max-width: 980px){
-  .grid2{
-    grid-template-columns: 1fr !important;
-  }
-  #tab-dates .split{
-    grid-template-columns: 1fr !important;
-  }
-  .mediaRow{
-    grid-template-columns: 1fr !important;
-  }
 }
