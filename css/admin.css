@@ -377,7 +377,7 @@ main.container{ padding: 18px 0 44px; }
    TABS (si se usan arriba)
 ============================================================ */
 .tabs{
-  display:flex;
+  display:block;
   gap:10px;
   flex-wrap:wrap;
   margin: 14px 0 16px;
