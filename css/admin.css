@@ -106,7 +106,7 @@ body.adminPage{ padding-left: var(--sideW); }
 
 .kicker{
   margin:0 0 8px;
-  color: rgba(255, 158, 158, 0.78);
+  color: rgba(236, 236, 236, 0.78);
   font-size: 11px;
   letter-spacing:.18em;
   text-transform: uppercase;
@@ -130,7 +130,7 @@ body.adminPage{ padding-left: var(--sideW); }
   text-align:left;
   border: 1px solid transparent;
   background: transparent;
-  color: #b3b3b3;
+  color: #ffffff;
   padding: 12px 12px;
   border-radius: 14px;
   font-size: 12px;
