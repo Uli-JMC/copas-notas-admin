@@ -1,798 +1,131 @@
 "use strict";
-
-/**
- * admin-gallery.js ✅ PRO (DOM REAL) — 2026-02-18 PATCH (depurado)
- * ✅ Sin recargar:
- * - Espera admin:ready (admin-auth.js) o APP.__adminReady
- * - Carga SOLO al abrir tab "gallery" vía evento admin:tab
- * - Bind/Load protegidos (sin duplicados + throttle)
- *
- * Requiere:
- * - #appPanel
- * - #tab-gallery, #galleryTbody, #newGalleryBtn, #refreshGalleryBtn
- * - #search (filtro local)
- */
-
-(function () {
-  // ---------------------------
-  // Helpers DOM
-  // ---------------------------
-  const $ = (sel, root = document) => root.querySelector(sel);
-
-  // Guard: solo corre dentro del admin real
-  if (!$("#appPanel")) return;
-
-  const panel = $("#tab-gallery");
-  const tbody = $("#galleryTbody");
-  const btnNew = $("#newGalleryBtn");
-  const btnRefresh = $("#refreshGalleryBtn");
-
-  // Guard: si no existe el tab, salimos
-  if (!panel || !tbody) return;
-
-  // ---------------------------
-  // Config
-  // ---------------------------
-  const VERSION = "2026-02-18.gallery.depured.1";
-  const TABLE = "gallery_items";
-  const BUCKET = "gallery";
-  const TARGET_DEFAULT = "home";
-  const MAX_MB = 6;
-  const MAX_BYTES = MAX_MB * 1024 * 1024;
-
-  // ---------------------------
-  // Toast (usa el del sistema si existe)
-  // ---------------------------
-  function escapeHtml(str) {
-    return String(str ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function toast(title, msg, timeoutMs = 3200) {
-    try {
-      if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
-    } catch (_) {}
-    try {
-      if (typeof window.toast === "function") return window.toast(title, msg, timeoutMs);
-    } catch (_) {}
-
-    const toastsEl = $("#toasts");
-    if (!toastsEl) return;
-
-    const el = document.createElement("div");
-    el.className = "toast";
-    el.innerHTML = `
-      <div>
-        <p class="tTitle">${escapeHtml(title)}</p>
-        <p class="tMsg">${escapeHtml(msg)}</p>
-      </div>
-      <button class="close" aria-label="Cerrar" type="button">✕</button>
-    `;
-    toastsEl.appendChild(el);
-
-    const kill = () => {
-      el.style.opacity = "0";
-      el.style.transform = "translateY(-6px)";
-      setTimeout(() => el.remove(), 180);
-    };
-    el.querySelector(".close")?.addEventListener("click", kill, { once: true });
-    setTimeout(kill, timeoutMs);
-  }
-
-  // ---------------------------
-  // Utils
-  // ---------------------------
-  const safeStr = (x) => String(x ?? "");
-  const cleanSpaces = (s) => safeStr(s).replace(/\s+/g, " ").trim();
-
-  function looksLikeRLSError(err) {
-    const m = safeStr(err?.message || "").toLowerCase();
-    const c = safeStr(err?.code || "").toLowerCase();
-    return (
-      c === "42501" ||
-      m.includes("42501") ||
-      m.includes("rls") ||
-      m.includes("row level security") ||
-      m.includes("permission") ||
-      m.includes("not allowed") ||
-      m.includes("violates row-level security") ||
-      m.includes("new row violates row-level security")
-    );
-  }
-
-  function fmtShortDate(iso) {
-    try {
-      const d = new Date(safeStr(iso));
-      if (isNaN(d.getTime())) return "—";
-      return d
-        .toLocaleDateString("es-CR", { day: "2-digit", month: "short", year: "numeric" })
-        .replace(".", "");
-    } catch (_) {
-      return "—";
-    }
-  }
-
-  function humanKB(bytes) {
-    const b = Number(bytes || 0);
-    if (!Number.isFinite(b) || b <= 0) return "—";
-    const kb = b / 1024;
-    if (kb < 1024) return `${Math.round(kb)} KB`;
-    const mb = kb / 1024;
-    return `${mb.toFixed(1)} MB`;
-  }
-
-  function normType(v) {
-    const t = safeStr(v).toLowerCase();
-    return t === "cocteles" ? "cocteles" : "maridajes";
-  }
-
-  function normTags(input) {
-    const raw = safeStr(input).replaceAll("\n", " ").replaceAll("\r", " ").trim();
-    if (!raw) return [];
-    const parts = raw
-      .split(/[,; ]+/g)
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .map((t) => (t.startsWith("#") ? t : `#${t}`))
-      .map((t) => t.replace(/#+/g, "#"));
-    return Array.from(new Set(parts)).slice(0, 12);
-  }
-
-  function extFromMime(mime) {
-    const m = safeStr(mime).toLowerCase();
-    if (m.includes("png")) return "png";
-    if (m.includes("webp")) return "webp";
-    if (m.includes("gif")) return "gif";
-    return "jpg";
-  }
-
-  function slugify(s) {
-    return cleanSpaces(s)
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9\-]/g, "")
-      .replace(/\-+/g, "-")
-      .replace(/^\-|\-$/g, "");
-  }
-
-  // ---------------------------
-  // Supabase helpers (APP.supabase OR APP.sb)
-  // ---------------------------
-  function getSB() {
-    if (!window.APP) return null;
-    return window.APP.supabase || window.APP.sb || null;
-  }
-
-  async function ensureSession() {
-    const sb = getSB();
-    if (!sb) {
-      toast(
-        "Supabase",
-        "APP.supabase no existe. Orden: Supabase CDN → supabaseClient.js → admin-auth.js → admin-gallery.js",
-        5200
-      );
-      return null;
-    }
-
-    try {
-      const res = await sb.auth.getSession();
-      const s = res?.data?.session || null;
-      if (!s) {
-        toast("Sesión", "Tu sesión expiró. Volvé a iniciar sesión.", 3600);
-        return null;
-      }
-      return s;
-    } catch (_) {
-      toast("Error", "No se pudo validar sesión con Supabase.", 3200);
-      return null;
-    }
-  }
-
-  function publicUrlFromPath(path) {
-    const sb = getSB();
-    const p = cleanSpaces(path);
-    if (!sb || !p) return "";
-    try {
-      const res = sb.storage.from(BUCKET).getPublicUrl(p);
-      return res?.data?.publicUrl || "";
-    } catch (_) {
-      return "";
-    }
-  }
-
-  // ---------------------------
-  // State
-  // ---------------------------
-  const state = {
-    didBind: false,
-    didBoot: false,
-    didLoadOnce: false,
-    busy: false,
-    items: [],
-    lastLoadAt: 0, // throttle
+(function(){
+  const VERSION="2026-02-25.gallery.supabase.1";
+  const TABLE="gallery_items";
+  const BUCKET="gallery";
+  const $=(s,r=document)=>r.querySelector(s);
+  const log=(...a)=>{try{console.log("[admin-gallery]",...a)}catch(_){}};
+  const warn=(...a)=>{try{console.warn("[admin-gallery]",...a)}catch(_){}};
+  const err=(...a)=>{try{console.error("[admin-gallery]",...a)}catch(_){}};
+  const toast=(t,m)=>{try{if(window.toast) return window.toast(t,m);}catch(_){};try{if(window.APP&&typeof APP.toast==='function') return APP.toast(t,m);}catch(_){};alert(`${t} — ${m}`);};
+  const sb=()=>{try{if(window.APP&&APP.supabase) return APP.supabase;}catch(_){};try{if(window.supabase) return window.supabase;}catch(_){};return null;};
+  const hasSchemaErr=(e)=>String(e?.message||"").includes("schema cache")||String(e?.message||"").includes("Could not find the");
+  const pick=(o,ks,f=null)=>{for(const k of ks){if(o&&o[k]!==undefined&&o[k]!==null) return o[k];}return f;};
+  const esc=(s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  const refs=()=>({
+    tab:$("#tab-gallery"), btnNew:$("#newGalleryBtn"), btnRefresh:$("#refreshGalleryBtn"), tbody:$("#galleryTbody"),
+    modal:$("#ecnGalleryModal"), form:$("#ecnGalleryForm"),
+    id:$("#ecnPromoId"), name:$("#ecnGalName"), file:$("#ecnGalFile"), type:$("#ecnGalType"), tags:$("#ecnGalTags"),
+    previewImg:$("#ecnGalPreviewImg"), btnClose:$("#ecnGalleryClose"), btnReset:$("#ecnGalReset"),
+  });
+  const openM=(r)=>{r.modal.hidden=false;r.modal.setAttribute("aria-hidden","false");document.body.style.overflow="hidden";};
+  const closeM=(r)=>{r.modal.hidden=true;r.modal.setAttribute("aria-hidden","true");document.body.style.overflow="";};
+  const clear=(r)=>{if(r.id)r.id.value=""; if(r.name)r.name.value=""; if(r.type)r.type.value="image"; if(r.tags)r.tags.value="";
+    if(r.file)r.file.value=""; if(r.previewImg)r.previewImg.src="";};
+  const fill=(r,row)=>{
+    const id=pick(row,["id","gallery_id"]); const name=pick(row,["name","title","filename"],"");
+    const type=pick(row,["type","kind"],"image"); const tags=pick(row,["tags"],"");
+    const url=pick(row,["url","public_url","media_url","src"],"");
+    if(r.id)r.id.value=id||""; if(r.name)r.name.value=name||""; if(r.type)r.type.value=String(type||"image").toLowerCase();
+    if(r.tags)r.tags.value=tags||""; if(r.previewImg)r.previewImg.src=url||""; if(r.file)r.file.value="";
   };
-
-  function setBusy(on) {
-    state.busy = !!on;
-    try {
-      if (btnNew) btnNew.disabled = !!on;
-      if (btnRefresh) btnRefresh.disabled = !!on;
-    } catch (_) {}
+  const safeName=(n)=>String(n||"file").trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_.]/g,"");
+  async function upload(client,file,folder){
+    const ext=file.name.includes(".")?file.name.split(".").pop():"bin";
+    const base=safeName(file.name.replace(/\.[^/.]+$/,""));
+    const path=`${folder}/${Date.now()}_${base}.${ext}`;
+    const up=await client.storage.from(BUCKET).upload(path,file,{upsert:true});
+    if(up.error) throw up.error;
+    const pub=client.storage.from(BUCKET).getPublicUrl(path);
+    return {path, publicUrl: pub?.data?.publicUrl||""};
   }
-
-  // ---------------------------
-  // DB ops
-  // ---------------------------
-  function mapDbRow(r) {
-    const row = r || {};
-    const image_path = safeStr(row.image_path || "");
-    const image_url = safeStr(row.image_url || "") || (image_path ? publicUrlFromPath(image_path) : "");
-    return {
-      id: row.id,
-      type: normType(row.type),
-      name: safeStr(row.name || "Foto"),
-      tags: Array.isArray(row.tags) ? row.tags.map((t) => safeStr(t)).slice(0, 12) : [],
-      image_path,
-      image_url,
-      target: safeStr(row.target || TARGET_DEFAULT),
-      created_at: safeStr(row.created_at || ""),
-    };
-  }
-
-  async function fetchItems() {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const { data, error } = await sb
-      .from(TABLE)
-      .select("*")
-      .eq("target", TARGET_DEFAULT)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-    return Array.isArray(data) ? data.map(mapDbRow) : [];
-  }
-
-  async function insertDbRow(payload) {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const { data, error } = await sb.from(TABLE).insert(payload).select("*").single();
-    if (error) throw error;
-    return mapDbRow(data);
-  }
-
-  async function deleteDbRow(id) {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const { data, error } = await sb.from(TABLE).delete().eq("id", id).select("id,image_path").single();
-    if (error) throw error;
-    return data || null;
-  }
-
-  async function uploadToStorage(file, path) {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const { error } = await sb.storage.from(BUCKET).upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
+  async function load(r){
+    const client=sb(); if(!client) return toast("Supabase","No se encontró APP.supabase");
+    const {data,error}=await client.from(TABLE).select("*").order("created_at",{ascending:false});
+    if(error){err("load",error); return toast("Error",error.message||"No se pudo cargar");}
+    r.tbody.innerHTML="";
+    (data||[]).forEach(row=>{
+      const name=String(pick(row,["name","title","filename"],"")||"");
+      const type=String(pick(row,["type","kind"],"")||"");
+      const tags=String(pick(row,["tags"],"")||"");
+      const url=String(pick(row,["url","public_url","media_url","src"],"")||"");
+      const created=pick(row,["created_at"],null);
+      const createdShort=created?new Date(created).toLocaleDateString("es-CR",{day:"2-digit",month:"short",year:"numeric"}):"";
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td style="white-space:nowrap;">${url?`<a class="btn btn--ghost sm" href="${esc(url)}" target="_blank" rel="noopener">VER</a>`:`<span class="muted">—</span>`}</td>
+      <td style="font-weight:900;">${esc(name||"—")}</td>
+      <td>${esc(type||"—")}</td>
+      <td style="max-width:520px;overflow-wrap:anywhere;">${esc(tags||"")}</td>
+      <td class="right"><div class="tableActions">
+        <button class="btn btn--ghost sm" type="button" data-act="copy">COPIAR TAGS</button>
+        <button class="btn btn--danger sm" type="button" data-act="del">ELIMINAR</button>
+      </div>${createdShort?`<div class="small muted" style="margin-top:8px;">${esc(createdShort)}</div>`:""}</td>`;
+      tr.querySelector('[data-act="copy"]').addEventListener("click",()=>copy(tags));
+      tr.querySelector('[data-act="del"]').addEventListener("click",()=>del(row));
+      tr.addEventListener("click",(e)=>{if(e.target.closest("button,a")) return; fill(r,row); openM(r);});
+      r.tbody.appendChild(tr);
     });
-    if (error) throw error;
-    return true;
-  }
-
-  async function deleteStorageObject(path) {
-    const sb = getSB();
-    if (!sb) throw new Error("APP.supabase no existe.");
-
-    const p = cleanSpaces(path);
-    if (!p) return;
-    const { error } = await sb.storage.from(BUCKET).remove([p]);
-    if (error) throw error;
-  }
-
-  // ---------------------------
-  // Render (table)
-  // ---------------------------
-  function renderTable() {
-    const q = cleanSpaces($("#search")?.value || "").toLowerCase();
-
-    const items = (state.items || []).filter((it) => {
-      if (!q) return true;
-      return (
-        safeStr(it.name).toLowerCase().includes(q) ||
-        safeStr(it.type).toLowerCase().includes(q) ||
-        (Array.isArray(it.tags) ? it.tags.join(" ").toLowerCase() : "").includes(q)
-      );
-    });
-
-    tbody.innerHTML = "";
-
-    if (!items.length) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td colspan="6" style="opacity:.85; padding:16px;">
-          ${state.didLoadOnce ? "No hay ítems en la galería. Usá <b>“Nuevo ítem”</b>." : "Cargando…"}
-        </td>`;
-      tbody.appendChild(tr);
-      return;
+    async function copy(tags){
+      const t=String(tags||"").trim();
+      if(!t) return toast("Sin tags","Este item no tiene tags.");
+      try{await navigator.clipboard.writeText(t); toast("Copiado","Tags copiados.");}
+      catch(_){toast("Copiá manual",t);}
     }
-
-    const frag = document.createDocumentFragment();
-
-    items.forEach((it) => {
-      const tr = document.createElement("tr");
-      tr.dataset.id = safeStr(it.id || "");
-
-      const imgUrl = it.image_url || "";
-      const tags = Array.isArray(it.tags) ? it.tags.slice(0, 6).join(" ") : "";
-      const typeLabel = it.type === "cocteles" ? "Cocteles" : "Maridajes";
-
-      tr.innerHTML = `
-        <td>${escapeHtml(typeLabel)}</td>
-        <td>${escapeHtml(it.name || "—")}</td>
-        <td style="max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${escapeHtml(tags || "#sin-tags")}
-        </td>
-        <td>
-          ${imgUrl ? `<a class="btn btn--ghost" href="${escapeHtml(imgUrl)}" target="_blank" rel="noopener">Ver</a>` : "—"}
-        </td>
-        <td>${escapeHtml(fmtShortDate(it.created_at))}</td>
-        <td style="display:flex; gap:8px; justify-content:center;">
-          <button class="btn btn--ghost" type="button" data-action="copy">Copiar tags</button>
-          <button class="btn" type="button" data-action="delete">Eliminar</button>
-        </td>
-      `;
-
-      frag.appendChild(tr);
-    });
-
-    tbody.appendChild(frag);
-  }
-
-  // ---------------------------
-  // Refresh
-  // ---------------------------
-  async function refresh(opts) {
-    const silent = !!opts?.silent;
-
-    if (state.busy) return;
-    setBusy(true);
-
-    try {
-      const s = await ensureSession();
-      if (!s) return;
-
-      state.items = await fetchItems();
-      state.didLoadOnce = true;
-
-      if (!silent) toast("Galería", "Actualizada.", 1200);
-      renderTable();
-    } catch (err) {
-      console.error("[admin-gallery] fetch error:", err);
-      state.items = [];
-      state.didLoadOnce = true;
-      renderTable();
-
-      if (looksLikeRLSError(err)) {
-        toast("RLS BLOQUEANDO", "No hay permiso para leer gallery_items. Policy SELECT para admins.", 5200);
-      } else {
-        toast("Error", "No se pudo cargar la galería. Revisá tabla/policies.", 5200);
-      }
-    } finally {
-      setBusy(false);
+    async function del(row){
+      const client=sb(); if(!client) return;
+      const id=pick(row,["id","gallery_id"]); if(!id) return toast("Error","Item sin id");
+      if(!confirm("¿Eliminar este item de galería?")) return;
+      let res=await client.from(TABLE).delete().eq("id",id);
+      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).delete().eq("gallery_id",id);
+      if(res.error){err("del",res.error); return toast("Error",res.error.message||"No se pudo eliminar");}
+      toast("OK","Item eliminado"); load(r);
     }
   }
-
-  // ---------------------------
-  // Modal Nuevo (depurado)
-  // ---------------------------
-  function lockBodyScroll(on) {
-    const body = document.body;
-    if (!body) return;
-
-    if (on) {
-      if (!body.dataset._prevOverflow) body.dataset._prevOverflow = body.style.overflow || "";
-      body.style.overflow = "hidden";
+  async function save(r){
+    const client=sb(); if(!client) return;
+    const id=(r.id?.value||"").trim();
+    const name=(r.name?.value||"").trim();
+    const type=(r.type?.value||"image").trim().toLowerCase();
+    const tags=(r.tags?.value||"").trim();
+    const file=r.file?.files && r.file.files[0];
+    if(!name && !file) return toast("Falta info","Poné un nombre o subí un archivo.");
+    let url=(r.previewImg?.src||"").trim();
+    let path=null;
+    if(file){
+      try{const up=await upload(client,file,(type==="video")?"videos":"images"); url=up.publicUrl; path=up.path;}
+      catch(e){err("upload",e); return toast("Error",e.message||"No se pudo subir");}
+    }
+    const snake={name,type,tags,url,bucket:BUCKET,path,updated_at:new Date().toISOString()};
+    const camel={name,type,tags,url,bucket:BUCKET,storagePath:path,updated_at:new Date().toISOString()};
+    if(id){
+      let res=await client.from(TABLE).update(snake).eq("id",id).select("*").maybeSingle();
+      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).update(camel).eq("gallery_id",id).select("*").maybeSingle();
+      if(res.error){err("save update",res.error); return toast("Error",res.error.message||"No se pudo actualizar");}
+      toast("OK","Item actualizado");
     } else {
-      body.style.overflow = body.dataset._prevOverflow || "";
-      delete body.dataset._prevOverflow;
+      let res=await client.from(TABLE).insert({...snake,created_at:new Date().toISOString()}).select("*").maybeSingle();
+      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).insert({...camel,created_at:new Date().toISOString()}).select("*").maybeSingle();
+      if(res.error){err("save insert",res.error); return toast("Error",res.error.message||"No se pudo crear");}
+      toast("OK","Item creado");
     }
+    closeM(r); clear(r); load(r);
   }
-
-  function ensureModal() {
-    let m = $("#ecnGalleryModal");
-    if (m) return m;
-
-    m = document.createElement("div");
-    m.id = "ecnGalleryModal";
-
-    m.style.position = "fixed";
-    m.style.inset = "0";
-    m.style.background = "rgba(0,0,0,.65)";
-    m.style.display = "none";
-    m.style.padding = "18px";
-    m.style.zIndex = "9999";
-
-    m.style.alignItems = "flex-start";
-    m.style.justifyContent = "center";
-    m.style.overflowY = "auto";
-    m.style.overflowX = "hidden";
-    m.style.webkitOverflowScrolling = "touch";
-
-    m.innerHTML = `
-      <div id="ecnGalleryCard" style="
-        max-width:720px; width:100%;
-        margin: 18px auto;
-        background: rgba(20,20,20,.96);
-        border:1px solid rgba(255,255,255,.10);
-        border-radius:16px;
-        max-height: calc(100vh - 36px);
-        overflow: auto;
-        box-shadow: 0 18px 60px rgba(0,0,0,.55);
-      ">
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10);">
-          <div>
-            <p style="margin:0; font-weight:700;">Nuevo ítem</p>
-            <p style="margin:4px 0 0; opacity:.8; font-size:.92rem;">Sube una imagen y guardala en galería</p>
-          </div>
-          <button id="ecnGalleryClose" class="btn" type="button">Cerrar</button>
-        </div>
-
-        <form id="ecnGalleryForm" style="
-          padding:14px;
-          display:grid;
-          gap:12px;
-          max-height: calc(100vh - 170px);
-          overflow:auto;
-          -webkit-overflow-scrolling: touch;
-        ">
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <div class="field">
-              <label class="label" for="ecnGalType">Tipo</label>
-              <select class="select" id="ecnGalType" required>
-                <option value="maridajes">Maridajes</option>
-                <option value="cocteles">Cocteles</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="label" for="ecnGalName">Nombre</label>
-              <input class="input" id="ecnGalName" type="text" maxlength="60" placeholder="Ej: Negroni clásico" required />
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label" for="ecnGalTags">Tags (separados por espacio o coma)</label>
-            <input class="input" id="ecnGalTags" type="text" maxlength="140" placeholder="#amargo #citrico #aperitivo" />
-          </div>
-
-          <div class="field">
-            <label class="label" for="ecnGalFile">Imagen (JPG/PNG/WebP)</label>
-            <input class="input" id="ecnGalFile" type="file" accept="image/*" required />
-            <div style="opacity:.8; font-size:.9rem; margin-top:6px;">Máximo ~${MAX_MB}MB</div>
-          </div>
-
-          <div id="ecnGalPreview" style="
-            display:none;
-            border:1px solid rgba(255,255,255,.10);
-            border-radius:12px;
-            overflow:hidden;
-            background: rgba(0,0,0,.25);
-          ">
-            <img id="ecnGalPreviewImg" alt="Preview" style="
-              width:100%;
-              height: min(46vh, 360px);
-              object-fit: contain;
-              display:block;
-              background: rgba(0,0,0,.18);
-            " />
-          </div>
-
-          <div style="
-            display:flex;
-            gap:10px;
-            justify-content:flex-end;
-            position: sticky;
-            bottom: 0;
-            padding-top: 10px;
-            padding-bottom: 10px;
-            background: rgba(20,20,20,.96);
-            border-top: 1px solid rgba(255,255,255,.08);
-          ">
-            <button class="btn" type="button" id="ecnGalReset">Limpiar</button>
-            <button class="btn primary" type="submit" id="ecnGalSubmit">Subir</button>
-          </div>
-        </form>
-      </div>
-    `;
-
-    document.body.appendChild(m);
-
-    const file = m.querySelector("#ecnGalFile");
-    const prevBox = m.querySelector("#ecnGalPreview");
-    const prevImg = m.querySelector("#ecnGalPreviewImg");
-    let prevUrl = "";
-
-    const resetModal = () => {
-      const form = m.querySelector("#ecnGalleryForm");
-      form?.reset();
-
-      if (file) file.value = "";
-
-      if (prevUrl) {
-        try { URL.revokeObjectURL(prevUrl); } catch (_) {}
-      }
-      prevUrl = "";
-
-      if (prevBox) prevBox.style.display = "none";
-      if (prevImg) prevImg.src = "";
-    };
-
-    // ✅ ESC listener: se agrega al abrir y se quita al cerrar
-    let escHandler = null;
-
-    const close = () => {
-      resetModal();
-      m.style.display = "none";
-      lockBodyScroll(false);
-
-      if (escHandler) {
-        window.removeEventListener("keydown", escHandler);
-        escHandler = null;
-      }
-    };
-
-    m.addEventListener("click", (e) => {
-      if (e.target === m) close();
-    });
-
-    m.querySelector("#ecnGalleryClose")?.addEventListener("click", close);
-
-    file?.addEventListener("change", () => {
-      const f = file.files ? file.files[0] : null;
-      if (!f) {
-        if (prevUrl) try { URL.revokeObjectURL(prevUrl); } catch (_) {}
-        prevUrl = "";
-        if (prevBox) prevBox.style.display = "none";
-        if (prevImg) prevImg.src = "";
-        return;
-      }
-      if (!/^image\//.test(f.type)) {
-        toast("Archivo inválido", "Seleccioná una imagen (JPG/PNG/WebP).");
-        file.value = "";
-        return;
-      }
-      if (Number(f.size || 0) > MAX_BYTES) {
-        toast("Muy pesada", `La imagen pesa ${humanKB(f.size)}. Usá una menor a ~${MAX_MB}MB.`);
-        file.value = "";
-        return;
-      }
-      if (prevUrl) try { URL.revokeObjectURL(prevUrl); } catch (_) {}
-      prevUrl = URL.createObjectURL(f);
-      if (prevImg) prevImg.src = prevUrl;
-      if (prevBox) prevBox.style.display = "block";
-    });
-
-    m.querySelector("#ecnGalReset")?.addEventListener("click", () => resetModal());
-
-    m.querySelector("#ecnGalleryForm")?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (state.busy) return;
-
-      const type = normType(m.querySelector("#ecnGalType")?.value || "maridajes");
-      const name = cleanSpaces(m.querySelector("#ecnGalName")?.value || "");
-      const tags = normTags(m.querySelector("#ecnGalTags")?.value || "");
-      const f = file && file.files ? file.files[0] : null;
-
-      if (!name) return toast("Falta nombre", "Poné un nombre para identificar la foto.");
-      if (!f) return toast("Falta imagen", "Seleccioná una imagen antes de subir.");
-
-      setBusy(true);
-      try {
-        const s = await ensureSession();
-        if (!s) return;
-
-        const yyyyMm = new Date().toISOString().slice(0, 7);
-        const ext = extFromMime(f.type);
-        const base = slugify(name) || "foto";
-        const path = `${type}/${yyyyMm}/${base}_${Date.now()}.${ext}`;
-
-        await uploadToStorage(f, path);
-
-        const publicUrl = publicUrlFromPath(path);
-        const payload = {
-          type,
-          name,
-          tags,
-          image_path: path,
-          image_url: publicUrl || null,
-          target: TARGET_DEFAULT,
-        };
-
-        await insertDbRow(payload);
-
-        toast("Listo", "Se agregó el ítem a la galería.", 2000);
-        close();
-        await refresh({ silent: true });
-      } catch (err) {
-        console.error("[admin-gallery] upload/insert error:", err);
-        if (looksLikeRLSError(err)) {
-          toast("RLS", "Bloqueado. Falta policy INSERT en gallery_items y/o policies de Storage.", 5200);
-        } else {
-          toast("Error", "No se pudo subir. Revisá bucket/policies/RLS.", 5200);
-        }
-      } finally {
-        setBusy(false);
-      }
-    });
-
-    // Exponer control interno
-    m._ecnClose = close;
-    m._ecnReset = resetModal;
-
-    // Hook para “open”
-    m._ecnOpen = () => {
-      // reset siempre antes de mostrar
-      try { resetModal(); } catch (_) {}
-
-      lockBodyScroll(true);
-      m.style.display = "flex";
-      m.scrollTop = 0;
-
-      // add ESC
-      if (!escHandler) {
-        escHandler = (e) => {
-          if (e.key === "Escape" && m.style.display !== "none") close();
-        };
-        window.addEventListener("keydown", escHandler);
-      }
-
-      try {
-        m.querySelector("#ecnGalleryCard")?.scrollIntoView({ block: "start" });
-      } catch (_) {}
-    };
-
-    return m;
+  function wire(r){
+    r.btnRefresh.addEventListener("click",()=>load(r));
+    r.btnNew.addEventListener("click",()=>{clear(r);openM(r);});
+    r.btnClose?.addEventListener("click",()=>closeM(r));
+    r.btnReset?.addEventListener("click",()=>clear(r));
+    r.file?.addEventListener("change",()=>{const f=r.file.files&&r.file.files[0]; if(!f) return; const u=URL.createObjectURL(f); if(r.previewImg) r.previewImg.src=u;});
+    r.form.addEventListener("submit",(e)=>{e.preventDefault();save(r);});
+    window.addEventListener("keydown",(e)=>{if(e.key==="Escape" && !r.modal.hidden) closeM(r);});
+    r.modal.addEventListener("click",(e)=>{const t=e.target; if(t && t.getAttribute && t.getAttribute("data-close")==="true") closeM(r);});
   }
-
-  function openNewModal() {
-    const m = ensureModal();
-    m._ecnOpen?.();
+  function init(){
+    const r=refs(); log("boot",{VERSION,TABLE,BUCKET});
+    if(!r.tab) return;
+    const missing=[["#newGalleryBtn",r.btnNew],["#refreshGalleryBtn",r.btnRefresh],["#galleryTbody",r.tbody],["#ecnGalleryModal",r.modal],["#ecnGalleryForm",r.form]].filter(([,el])=>!el).map(([s])=>s);
+    if(missing.length){warn("Faltan nodos en DOM:",missing); return;}
+    wire(r); load(r);
   }
-
-  // ---------------------------
-  // Actions (table)
-  // ---------------------------
-  async function onTableClick(e) {
-    const btn = e.target && e.target.closest ? e.target.closest("[data-action]") : null;
-    if (!btn) return;
-
-    const tr = btn.closest("tr");
-    const id = tr ? safeStr(tr.dataset.id || "") : "";
-    if (!id) return;
-
-    const it = (state.items || []).find((x) => safeStr(x.id) === id);
-    if (!it) return;
-
-    const action = safeStr(btn.dataset.action || "");
-
-    if (action === "copy") {
-      const text = Array.isArray(it.tags) && it.tags.length ? it.tags.join(" ") : "";
-      if (!text) return toast("Sin tags", "Este ítem no tiene tags para copiar.");
-      navigator.clipboard?.writeText(text).then(
-        () => toast("Copiado", "Tags copiados al portapapeles."),
-        () => toast("Copiar", "No pude acceder al portapapeles.")
-      );
-      return;
-    }
-
-    if (action === "delete") {
-      const ok = window.confirm(`Eliminar este ítem?\n\n${it.name || "Sin nombre"}\n\n(Se borra de Supabase)`);
-      if (!ok) return;
-
-      setBusy(true);
-      try {
-        const s = await ensureSession();
-        if (!s) return;
-
-        const deleted = await deleteDbRow(it.id);
-        const p = deleted?.image_path || it.image_path;
-
-        if (p) {
-          try {
-            await deleteStorageObject(p);
-          } catch (e2) {
-            console.warn("[admin-gallery] storage delete fail:", e2);
-          }
-        }
-
-        toast("Eliminado", "Se eliminó correctamente.", 1800);
-        await refresh({ silent: true });
-      } catch (err) {
-        console.error("[admin-gallery] delete error:", err);
-        if (looksLikeRLSError(err)) {
-          toast("RLS", "Bloqueado. Falta policy DELETE en gallery_items y/o Storage.", 5200);
-        } else {
-          toast("Error", "No se pudo eliminar. Revisá policies.", 5200);
-        }
-      } finally {
-        setBusy(false);
-      }
-    }
-  }
-
-  // ---------------------------
-  // Bind / Load
-  // ---------------------------
-  function bindOnce() {
-    if (state.didBind) return;
-    state.didBind = true;
-
-    btnRefresh?.addEventListener("click", () => refresh({ silent: false }));
-    btnNew?.addEventListener("click", openNewModal);
-
-    tbody?.addEventListener("click", onTableClick);
-
-    $("#search")?.addEventListener("input", () => renderTable());
-  }
-
-  async function ensureLoaded(force) {
-    bindOnce();
-
-    const isHidden = !!$("#tab-gallery")?.hidden;
-    if (!force && isHidden) return;
-
-    const now = Date.now();
-    if (!force && now - state.lastLoadAt < 600) return;
-    if (force && now - state.lastLoadAt < 250) return;
-    state.lastLoadAt = now;
-
-    if (state.didLoadOnce && !force) {
-      renderTable();
-      return;
-    }
-
-    await refresh({ silent: true });
-  }
-
-  // ---------------------------
-  // Boot: esperar admin:ready
-  // ---------------------------
-  function boot() {
-    if (state.didBoot) return;
-    state.didBoot = true;
-
-    console.log("[admin-gallery] boot", { VERSION, TABLE, BUCKET });
-
-    const wake = () => {
-      bindOnce();
-
-      window.addEventListener("admin:tab", (e) => {
-        const t = e?.detail?.tab;
-        if (t === "gallery") ensureLoaded(true);
-      });
-
-      try {
-        if ($("#tab-gallery") && $("#tab-gallery").hidden === false) ensureLoaded(true);
-      } catch (_) {}
-    };
-
-    if (window.APP && APP.__adminReady) wake();
-    else window.addEventListener("admin:ready", wake, { once: true });
-  }
-
-  boot();
-
-  // API debug
-  window.ECN_ADMIN_GALLERY = {
-    refresh: () => refresh({ silent: false }),
-    openNewModal,
-    ensureLoaded: () => ensureLoaded(true),
-  };
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
 })();
