@@ -338,6 +338,7 @@ main.container{ padding: 18px 0 44px; }
 .muted{ color: var(--muted); }
 .small{ font-size: 12px; color: var(--muted2); padding-top: 10px;}
 .right{ text-align:right; }
+.center{ text-align:center; }
 
 .pageTools{ min-width: 320px; }
 .search, .input--search{
