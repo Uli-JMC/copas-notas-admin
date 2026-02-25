@@ -344,7 +344,7 @@
           ${imgUrl ? `<a class="btn btn--ghost" href="${escapeHtml(imgUrl)}" target="_blank" rel="noopener">Ver</a>` : "—"}
         </td>
         <td>${escapeHtml(fmtShortDate(it.created_at))}</td>
-        <td style="display:flex; gap:8px; justify-content:flex-end;">
+        <td style="display:flex; gap:8px; justify-content:center;">
           <button class="btn btn--ghost" type="button" data-action="copy">Copiar tags</button>
           <button class="btn" type="button" data-action="delete">Eliminar</button>
         </td>
