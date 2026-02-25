@@ -1005,3 +1005,147 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
   background: rgba(215,38,61,.06);
   border-color: rgba(215,38,61,.55);
 }
+
+/* ============================================================
+   LOGIN (admin-login.html) — usa tokens del admin (light + purple)
+   - Card centrado
+   - Logo + título
+   - Inputs y botón usando .btn y tokens existentes
+   - Sin sombras fuertes, sin gradients, sin blur
+============================================================ */
+
+body.adminLoginPage{
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.page{
+  min-height: calc(100vh - 1px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 28px 0 44px;
+}
+
+.login{
+  width: 100%;
+  display:flex;
+  justify-content:center;
+}
+
+.loginCard{
+  width: min(560px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius2);
+  background: var(--panel);
+  padding: 18px;
+}
+
+.loginBrand{
+  display:flex;
+  align-items:center;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.loginBrand img{
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 14px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  padding: 6px;
+}
+
+.loginBrand .kicker{
+  margin: 0 0 6px;
+  color: var(--muted2);
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.adminLoginPage .h1{
+  font-size: 22px;
+}
+
+.sub{
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+/* Form */
+.loginForm .field{
+  margin-bottom: 14px;
+}
+
+.loginForm label{
+  display:block;
+  margin:0;
+  color: var(--muted2);
+  font-size: 11px;
+  letter-spacing:.16em;
+  text-transform: uppercase;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.loginForm input{
+  width:100%;
+  border-radius: 14px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--text);
+  padding: 12px 12px;
+  margin: 8px 0 0;
+  outline:none;
+  font-size: 14px;
+  transition: border-color var(--anim) ease, background var(--anim) ease;
+}
+
+.loginForm input:focus{
+  border-color: rgba(124,58,237,.55);
+  box-shadow: 0 0 0 3px var(--focus);
+  background: #fff;
+}
+
+/* Botón principal */
+.loginForm .btn{
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* Mensajes finos */
+.fine{
+  margin: 8px 0 0;
+  color: #4f5864;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fine[hidden]{ display:none !important; }
+
+/* Errores */
+.loginForm input[aria-invalid="true"]{
+  border-color: rgba(215,38,61,.55);
+  box-shadow: 0 0 0 3px rgba(215,38,61,.18);
+}
+
+.loginForm input[aria-invalid="true"] + .fine{
+  color: var(--danger);
+}
+
+/* Responsive */
+@media (max-width: 560px){
+  .page{ padding: 18px 0 28px; }
+  .loginCard{ padding: 16px; }
+  .loginBrand{ gap: 12px; }
+  .loginBrand img{ width: 46px; height: 46px; border-radius: 12px; }
+}
