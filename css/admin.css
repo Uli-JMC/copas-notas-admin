@@ -956,3 +956,51 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
   border-top: 1px solid var(--line);
   padding-top: 14px;
 }
+
+/* ============================================================
+   PROMOS — AJUSTES PEDIDOS
+   - Botones alineados (columna)
+   - EDITAR morado sólido
+   - ELIMINAR lineal rojo + texto rojo
+   - Reducir padding de TD/TH en promos (más compacto)
+============================================================ */
+
+#tab-promos .table th,
+#tab-promos .table td{
+  padding: 10px 10px; /* antes 12px */
+}
+
+/* columna ACCIONES: botones en columna, alineados */
+#tab-promos .tableActions{
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+/* mismo ancho para que queden alineados */
+#tab-promos .tableActions .btn{
+  width: 112px;
+  justify-content: center;
+}
+
+/* Asumiendo orden: 1) PAUSAR 2) EDITAR 3) ELIMINAR */
+#tab-promos .tableActions .btn:nth-child(2){
+  background: var(--primary);
+  color: var(--primaryText);
+  border-color: var(--primary);
+}
+#tab-promos .tableActions .btn:nth-child(2):hover{
+  background: var(--primaryHover);
+  border-color: var(--primaryHover);
+}
+
+#tab-promos .tableActions .btn:nth-child(3){
+  background: transparent;
+  border-color: var(--dangerLine);
+  color: var(--danger);
+}
+#tab-promos .tableActions .btn:nth-child(3):hover{
+  background: rgba(215,38,61,.06);
+  border-color: rgba(215,38,61,.55);
+}
