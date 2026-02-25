@@ -919,3 +919,40 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
 
   .container{ width: calc(100% - 28px); }
 }
+
+/* ============================================================
+   FECHAS — DATES EDITOR EN 2 FILAS (NO rompe nada)
+   - Arriba: h3 + meta + lista de fechas
+   - Abajo: form
+============================================================ */
+
+/* 1) Apagar el split SOLO dentro del editor (por si queda en HTML viejo o JS) */
+#tab-dates #datesEditor .split{
+  display: block !important;
+}
+
+/* 2) Nuevo layout 2 filas */
+#tab-dates #datesEditor .datesEditorRows{
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 14px;
+}
+
+/* fila 1: header + lista */
+#tab-dates #datesEditor .datesEditorTop{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+/* opcional: que la lista no haga el card infinito */
+#tab-dates #datesEditor #datesListByEvent{
+  max-height: 260px;
+  overflow: auto;
+}
+
+/* fila 2: form separado visualmente */
+#tab-dates #datesEditor .datesEditorForm{
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}

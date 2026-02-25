@@ -237,7 +237,6 @@
                     <div class="mini">Administrá fechas y cupos por evento.</div>
                   </div>
 
-                  <!-- Header ordenado: pill + título + acciones -->
                   <div class="listHead listHead--dates">
                     <div class="lhLeft">
                       <div class="pill">Eventos</div>
@@ -257,16 +256,22 @@
                   </div>
                 </div>
 
+                <!-- ✅ DATES EDITOR (2 FILAS) -->
                 <div class="card" id="datesEditor" hidden>
-                  <div class="cardHead cardHead--stack">
-                    <h3 class="h3" id="datesEventTitle">Evento</h3>
-                    <div class="mini" id="datesEventMeta">Seleccioná una fecha para editar.</div>
-                  </div>
+                  <div class="datesEditorRows">
 
-                  <div class="split split--dates">
-                    <div class="list" id="datesListByEvent" aria-label="Fechas del evento"></div>
+                    <!-- FILA 1: header + meta + lista (items) -->
+                    <div class="datesEditorTop">
+                      <div class="cardHead cardHead--stack">
+                        <h3 class="h3" id="datesEventTitle">Evento</h3>
+                        <div class="mini" id="datesEventMeta">Seleccioná una fecha para editar.</div>
+                      </div>
 
-                    <form class="form" id="dateForm" novalidate>
+                      <div class="list" id="datesListByEvent" aria-label="Fechas del evento"></div>
+                    </div>
+
+                    <!-- FILA 2: form -->
+                    <form class="form datesEditorForm" id="dateForm" novalidate>
                       <input id="dateId" type="hidden" />
 
                       <div class="field">
@@ -291,6 +296,7 @@
                         <button class="btn btn--ghost" id="dateClearBtn" type="button">LIMPIAR</button>
                       </div>
                     </form>
+
                   </div>
                 </div>
               </div>
