@@ -29,7 +29,7 @@
     if(!r.preview) return;
     const title=(r.title?.value||"").trim(); const desc=(r.desc?.value||"").trim(); const badge=(r.badge?.value||"").trim();
     const img=(r.mediaImg?.value||"").trim(); const ctaLabel=(r.ctaLabel?.value||"").trim(); const ctaHref=(r.ctaHref?.value||"").trim();
-    r.preview.innerHTML=`<div style="border:1px solid var(--line);border-radius:16px;padding:12px;background:var(--panel2);">
+    r.preview.innerHTML=`<div style="border-radius:16px;padding:12px;background:var(--panel2);">
       ${badge?`<div class="pill" style="display:inline-flex;margin-bottom:8px;">${esc(badge)}</div>`:""}
       <div style="font-weight:900;margin-bottom:6px;">${esc(title||"Título")}</div>
       <div class="muted" style="font-size:13px;line-height:1.45;">${esc(desc||"Descripción...")}</div>
@@ -49,7 +49,13 @@
     if(r.descCount)r.descCount.textContent=`${String(desc||"").length}/520`; renderPreview(r);
   };
   const build=(r)=>{
-    const title=(r.title?.value||"").trim(); const description=(r.desc?.value||"").trim(); const kind=(r.kind?.value||"banner").trim().toLowerCase();
+    const title=(r.title?.value||"").trim();
+const description=(r.desc?.value||"").trim();
+
+// kind en BD está restringido por CHECK: ('BANNER','MODAL')
+// UI puede traer: banner | modal | card | toast
+const rawKind=(r.kind?.value||"banner").trim().toUpperCase();
+const kind = (rawKind === "MODAL" || rawKind === "CARD" || rawKind === "TOAST") ? "MODAL" : "BANNER";
     const priority=Number(r.priority?.value||0); const active=(r.active?.value||"true")==="true"; const badge=(r.badge?.value||"").trim();
     const mediaImg=(r.mediaImg?.value||"").trim(); const ctaLabel=(r.ctaLabel?.value||"").trim(); const ctaHref=(r.ctaHref?.value||"").trim();
     return {

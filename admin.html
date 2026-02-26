@@ -11,7 +11,9 @@
 
   <!-- FIX CRÍTICO: si un elemento tiene hidden, NO puede quedar visible por CSS -->
   <style>
-    [hidden] { display: none !important; }
+    [hidden] {
+      display: none !important;
+    }
   </style>
 </head>
 
@@ -140,7 +142,8 @@
 
                       <div class="field">
                         <label class="label" for="evSlug">Slug (URL)</label>
-                        <input class="input" id="evSlug" type="text" maxlength="120" placeholder="ej: cata-italia-vs-usa" />
+                        <input class="input" id="evSlug" type="text" maxlength="120"
+                          placeholder="ej: cata-italia-vs-usa" />
                       </div>
 
                       <div class="field">
@@ -150,7 +153,8 @@
 
                       <div class="field">
                         <label class="label" for="evSchedule">Horario</label>
-                        <input class="input" id="evSchedule" type="text" maxlength="80" placeholder="ej: 7:00 pm a 9:00 pm" />
+                        <input class="input" id="evSchedule" type="text" maxlength="80"
+                          placeholder="ej: 7:00 pm a 9:00 pm" />
                       </div>
 
                       <div class="field">
@@ -187,21 +191,26 @@
                         <div class="mediaRow mediaRow--stack">
                           <div class="mediaBox">
                             <div class="kicker">BANNER (URL) — DESKTOP</div>
-                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)" readonly />
-                            <div class="mini mini--below">Solo lectura aquí. Asigná en Medios (slot <span class="mono">desktop_event</span>).</div>
+                            <input class="input" id="evBannerDesktopUrl" type="url" placeholder="(solo lectura)"
+                              readonly />
+                            <div class="mini mini--below">Solo lectura aquí. Asigná en Medios (slot <span
+                                class="mono">desktop_event</span>).</div>
                           </div>
 
                           <div class="mediaBox">
                             <div class="kicker">BANNER (URL) — MOBILE</div>
-                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)" readonly />
-                            <div class="mini mini--below">Solo lectura aquí. Asigná en Medios (slot <span class="mono">mobile_event</span>).</div>
+                            <input class="input" id="evBannerMobileUrl" type="url" placeholder="(solo lectura)"
+                              readonly />
+                            <div class="mini mini--below">Solo lectura aquí. Asigná en Medios (slot <span
+                                class="mono">mobile_event</span>).</div>
                           </div>
                         </div>
                       </div>
 
                       <div class="field field--full">
                         <label class="label" for="evAlt">Texto alternativo del banner</label>
-                        <input class="input" id="evAlt" type="text" maxlength="140" placeholder="Opcional. Ayuda con accesibilidad/SEO." />
+                        <input class="input" id="evAlt" type="text" maxlength="140"
+                          placeholder="Opcional. Ayuda con accesibilidad/SEO." />
                       </div>
 
                       <div class="field">
@@ -214,7 +223,8 @@
 
                       <div class="field">
                         <label class="label" for="evBadge">Badge</label>
-                        <input class="input" id="evBadge" type="text" maxlength="40" placeholder="ej: Cupos limitados" />
+                        <input class="input" id="evBadge" type="text" maxlength="40"
+                          placeholder="ej: Cupos limitados" />
                       </div>
                     </div>
 
@@ -383,7 +393,8 @@
 
                       <div class="field field--full">
                         <label class="label" for="mediaUrl">URL pública</label>
-                        <input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL..." />
+                        <input class="input" id="mediaUrl" type="text"
+                          placeholder="Se llena al subir o pegá una URL..." />
                       </div>
                     </div>
 
@@ -619,10 +630,9 @@
                       <div class="field">
                         <label class="label" for="ecnKind">Tipo</label>
                         <select class="input" id="ecnKind">
-                          <option value="banner">Banner</option>
-                          <option value="card">Card</option>
-                          <option value="toast">Toast</option>
-                        </select>
+                            <option value="BANNER">Banner</option>
+                            <option value="MODAL">Modal</option>
+                          </select>
                       </div>
 
                       <div class="field">
@@ -808,4 +818,5 @@
   </script>
 
 </body>
+
 </html>
