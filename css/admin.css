@@ -822,21 +822,38 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
 }
 
 /* ============================================================
-   MODALS
+   MODALS — OVERLAY PRO (Promos / Galería)
+   - Backdrop
+   - Card centrada
+   - Scroll interno del contenido
+   - Header fijo (sticky)
 ============================================================ */
+
+/* Overlay */
+.modal,
 #ecnGalleryModal, #ecnPromoModal{
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 24px 0;
-  overflow: hidden !important;
+  padding: 22px;
+  overflow: auto;
+  z-index: 999;
 }
 
-#ecnGalleryModal > *, #ecnPromoModal > *{
-  width: min(980px, calc(100% - 32px));
-  max-height: calc(100vh - 48px);
+/* Backdrop (tu HTML ya lo tiene) */
+.modalBackdrop{
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 20, 26, .38);
+}
+
+/* Card */
+.modalCard{
+  position: relative;
+  width: min(980px, calc(100% - 16px));
+  max-height: calc(100vh - 44px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -845,29 +862,57 @@ tbody tr:hover td{ background: rgba(124,58,237,.04); }
   background: var(--panel);
 }
 
+/* Head */
+.modalHead{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+/* Contenido scrolleable */
 #ecnGalleryModal #ecnGalleryForm,
 #ecnPromoModal #ecnPromoForm{
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  padding: 14px;
 }
 
-#ecnGalleryModal #ecnGalPreview{
+/* Preview genérica (promos + galería) */
+.preview{
   width: 100%;
-  height: clamp(260px, 48vh, 400px);
   border-radius: 14px;
   overflow: hidden;
   background: var(--panel2);
   border: 1px solid var(--line);
+  min-height: 220px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 
+/* Galería preview */
+#ecnGalleryModal #ecnGalPreview{
+  height: clamp(260px, 48vh, 400px);
+}
 #ecnGalleryModal #ecnGalPreviewImg{
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
   background: var(--panel2);
+}
+#mediaPreviewImg,
+#ecnGalPreviewImg{
+  max-width: 100%;
 }
 
 /* Modales ocultos no tapan UI */
