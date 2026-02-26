@@ -52,14 +52,22 @@
       const created=pick(row,["created_at"],null);
       const createdShort=created?new Date(created).toLocaleDateString("es-CR",{day:"2-digit",month:"short",year:"numeric"}):"";
       const tr=document.createElement("tr");
-      tr.innerHTML=`<td style="white-space:nowrap;">${url?`<a class="btn btn--ghost sm" href="${esc(url)}" target="_blank" rel="noopener">VER</a>`:`<span class="muted">—</span>`}</td>
-      <td style="font-weight:900;">${esc(name||"—")}</td>
-      <td>${esc(type||"—")}</td>
-      <td style="max-width:520px;overflow-wrap:anywhere;">${esc(tags||"")}</td>
-      <td class="right"><div class="tableActions">
+      tr.innerHTML = `      <td style="white-space:nowrap;">${url
+        ? `<a class="btn btn--ghost sm" href="${url}" target="_blank" rel="noopener">VER</a>`
+        : "—"
+      }</td>
+
+      <td style="font-weight:800;">${esc(name) || "—"}</td>
+      <td>${esc(type) || "—"}</td>
+      <td style="white-space:nowrap;">${createdShort || "—"}</td>
+      <td style="max-width:420px; overflow:hidden; text-overflow:ellipsis;">${esc(tags) || "—"}</td>
+
+      <td class="center">
+        <div class="tableActions">
         <button class="btn btn--ghost sm" type="button" data-act="copy">COPIAR TAGS</button>
         <button class="btn btn--danger sm" type="button" data-act="del">ELIMINAR</button>
-      </div>${createdShort?`<div class="small muted" style="margin-top:8px;">${esc(createdShort)}</div>`:""}</td>`;
+      </div>
+      </td>`;
       tr.querySelector('[data-act="copy"]').addEventListener("click",()=>copy(tags));
       tr.querySelector('[data-act="del"]').addEventListener("click",()=>del(row));
       tr.addEventListener("click",(e)=>{if(e.target.closest("button,a")) return; fill(r,row); openM(r);});
