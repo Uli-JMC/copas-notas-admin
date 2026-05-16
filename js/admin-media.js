@@ -39,7 +39,7 @@
   if (window.__ecnMediaMounted === true) return;
   window.__ecnMediaMounted = true;
 
-  const VERSION = "2026-05-16.media.assigned-actions.1";
+  const VERSION = "2026-05-16.media.assigned-actions.1.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
@@ -84,6 +84,15 @@
   // ---------------------------
   // Utils
   // ---------------------------
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   const clean = (s) => String(s ?? "").trim();
   const cleanSpaces = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
   const normFolder = (s) =>
