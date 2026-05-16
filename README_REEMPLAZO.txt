@@ -1,38 +1,24 @@
 ECN Admin replacements v2026-02-26
 
-Archivos incluidos para reemplazar 1:1:
+Reemplazar en el proyecto:
 - admin.html
-- js/admin-auth.js
 - js/admin.js
-- js/admin-registrations.js
-- js/admin-media.js
 - js/admin-gallery.js
 - js/admin-promos.js
 
-Cambios clave:
-1. Opción B consolidada:
-   - admin-auth.js controla ingreso, permisos, redirecciones y logout.
-   - admin.js espera admin:ready y muestra #appPanel.
+Estos archivos están alineados a la BD real validada:
+- events requiere title/type/month_key NOT NULL.
+- events.duration_hours es text.
+- gallery_items.type acepta solo cocteles/maridajes.
+- promos.kind acepta solo BANNER/MODAL.
+- media_bindings usa UNIQUE(scope,scope_id,slot) y onConflict exacto.
 
-2. Eventos:
-   - admin.js emite admin:tab en window y document.
-   - updateEvent reintenta sin slug/badge/active si tu tabla events no tiene esas columnas.
+Después de reemplazar:
+1. Hard refresh: Cmd + Shift + R.
+2. Abrir admin.html.
+3. Validar consola:
+   window.APP?.__adminReady
+4. Probar tabs: Eventos, Medios, Galería, Promos.
 
-3. Inscripciones:
-   - Render alineado al HTML: Evento, Fecha, Nombre, Email, Teléfono, Marketing, Creado.
-
-4. Media:
-   - Se conserva tu admin-media.js actual.
-
-5. Galería:
-   - Se elimina ID duplicado.
-   - admin.html usa #ecnGalleryId para galería.
-   - admin-gallery.js usa #ecnGalleryId.
-   - Carga después de admin:ready y al abrir tab Galería.
-
-6. Promos:
-   - Carga después de admin:ready y al abrir tab Promos.
-
-Verificación:
-- Todos los JS pasan node --check.
-- admin.html queda sin IDs duplicados.
+Importante:
+Si las imágenes no se ven en el evento actual, verificar que media_bindings.scope_id apunte al ID real del evento actual.

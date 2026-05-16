@@ -1,154 +1,309 @@
 "use strict";
-(function(){
-  const VERSION="2026-02-25.promos.supabase.1";
-  const TABLE="promos";
-  const $=(s,r=document)=>r.querySelector(s);
-  const log=(...a)=>{try{console.log("[admin-promos]",...a)}catch(_){}};
-  const warn=(...a)=>{try{console.warn("[admin-promos]",...a)}catch(_){}};
-  const err=(...a)=>{try{console.error("[admin-promos]",...a)}catch(_){}};
-  const toast=(t,m)=>{try{if(window.toast) return window.toast(t,m);}catch(_){};try{if(window.APP&&typeof APP.toast==='function') return APP.toast(t,m);}catch(_){};alert(`${t} — ${m}`);};
-  const sb=()=>{try{if(window.APP&&APP.supabase) return APP.supabase;}catch(_){};try{if(window.supabase) return window.supabase;}catch(_){};return null;};
-  const hasSchemaErr=(e)=>String(e?.message||"").includes("schema cache")||String(e?.message||"").includes("Could not find the");
-  const pick=(o,ks,f=null)=>{for(const k of ks){if(o&&o[k]!==undefined&&o[k]!==null) return o[k];}return f;};
-  const normBool=(v)=>{if(typeof v==='boolean') return v; if(v==='true'||v==='t'||v==='1'||v===1) return true; if(v==='false'||v==='f'||v==='0'||v===0) return false; return !!v;};
-  const esc=(s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
-  const refs=()=>({
-    tab:$("#tab-promos"), btnNew:$("#newPromoBtn"), btnRefresh:$("#refreshPromosBtn"), tbody:$("#promosTbody"),
-    modal:$("#ecnPromoModal"), form:$("#ecnPromoForm"),
-    id:$("#ecnPromoId"), title:$("#ecnTitle"), desc:$("#ecnDesc"), kind:$("#ecnKind"), priority:$("#ecnPriority"),
-    active:$("#ecnActive"), badge:$("#ecnBadge"), mediaImg:$("#ecnMediaImg"), ctaLabel:$("#ecnCtaLabel"), ctaHref:$("#ecnCtaHref"),
-    preview:$("#ecnPromoPreview"), descCount:$("#ecnDescCount"), btnClose:$("#ecnPromoClose"), btnReset:$("#ecnPromoReset"),
-    note:$("#ecnNote"),
-  });
-  const openM=(r)=>{r.modal.hidden=false;r.modal.setAttribute("aria-hidden","false");document.body.style.overflow="hidden";};
-  const closeM=(r)=>{r.modal.hidden=true;r.modal.setAttribute("aria-hidden","true");document.body.style.overflow="";};
-  const clear=(r)=>{if(r.id)r.id.value=""; if(r.title)r.title.value=""; if(r.desc)r.desc.value=""; if(r.kind)r.kind.value="banner";
-    if(r.priority)r.priority.value="0"; if(r.active)r.active.value="true"; if(r.badge)r.badge.value=""; if(r.mediaImg)r.mediaImg.value="";
-    if(r.ctaLabel)r.ctaLabel.value=""; if(r.ctaHref)r.ctaHref.value=""; if(r.preview)r.preview.innerHTML=""; if(r.descCount)r.descCount.textContent="0/520";};
-  const renderPreview=(r)=>{
-    if(!r.preview) return;
-    const title=(r.title?.value||"").trim(); const desc=(r.desc?.value||"").trim(); const badge=(r.badge?.value||"").trim();
-    const img=(r.mediaImg?.value||"").trim(); const ctaLabel=(r.ctaLabel?.value||"").trim(); const ctaHref=(r.ctaHref?.value||"").trim();
-    r.preview.innerHTML=`<div style="border-radius:16px;padding:12px;background:var(--panel2);">
-      ${badge?`<div class="pill" style="display:inline-flex;margin-bottom:8px;">${esc(badge)}</div>`:""}
-      <div style="font-weight:900;margin-bottom:6px;">${esc(title||"Título")}</div>
-      <div class="muted" style="font-size:13px;line-height:1.45;">${esc(desc||"Descripción...")}</div>
-      ${img?`<div style="margin-top:10px;"><img src="${esc(img)}" alt="" style="max-width:100%;border-radius:14px;border:1px solid var(--line);background:#fff;" /></div>`:""}
-      ${ctaLabel?`<div style="margin-top:10px;"><a class="btn btn--ghost sm" href="${esc(ctaHref||"#")}" target="_blank" rel="noopener">${esc(ctaLabel)}</a></div>`:""}
-    </div>`;
-  };
-  const fill=(r,row)=>{
-    const id=pick(row,["id","promo_id"]); const title=pick(row,["title","name"]); const desc=pick(row,["description","desc","message"]);
-    const kind=pick(row,["kind","type","promo_type"],"banner"); const pr=pick(row,["priority","prio"],0);
-    const active=normBool(pick(row,["active","is_active"],true)); const badge=pick(row,["badge"],"");
-    const img=pick(row,["media_img","mediaImg","image_url","img_url"],""); const ctaL=pick(row,["cta_label","ctaLabel"],"");
-    const ctaH=pick(row,["cta_href","ctaHref"],"");
-    if(r.id)r.id.value=id||""; if(r.title)r.title.value=title||""; if(r.desc)r.desc.value=desc||""; if(r.kind)r.kind.value=String(kind||"banner").toLowerCase();
-    if(r.priority)r.priority.value=String(pr??0); if(r.active)r.active.value=active?"true":"false"; if(r.badge)r.badge.value=badge||"";
-    if(r.mediaImg)r.mediaImg.value=img||""; if(r.ctaLabel)r.ctaLabel.value=ctaL||""; if(r.ctaHref)r.ctaHref.value=ctaH||"";
-    if(r.descCount)r.descCount.textContent=`${String(desc||"").length}/520`; renderPreview(r);
-  };
-  const build=(r)=>{
-    const title=(r.title?.value||"").trim();
-const description=(r.desc?.value||"").trim();
 
-// kind en BD está restringido por CHECK: ('BANNER','MODAL')
-// UI puede traer: banner | modal | card | toast
-const rawKind=(r.kind?.value||"banner").trim().toUpperCase();
-const kind = (rawKind === "MODAL" || rawKind === "CARD" || rawKind === "TOAST") ? "MODAL" : "BANNER";
-    const priority=Number(r.priority?.value||0); const active=(r.active?.value||"true")==="true"; const badge=(r.badge?.value||"").trim();
-    const mediaImg=(r.mediaImg?.value||"").trim(); const ctaLabel=(r.ctaLabel?.value||"").trim(); const ctaHref=(r.ctaHref?.value||"").trim();
+/**
+ * admin-promos.js — ECN PRO, BD aligned
+ * - promos.kind real: BANNER | MODAL
+ * - espera admin:ready y carga lazy al abrir tab promos
+ */
+(function () {
+  if (window.__ecnPromosMounted === true) return;
+  window.__ecnPromosMounted = true;
+
+  const VERSION = "2026-02-26.promos.bd-aligned.1";
+  const TABLE = "promos";
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const safe = (v) => String(v ?? "");
+  const clean = (v) => safe(v).replace(/\s+/g, " ").trim();
+
+  const S = { didBoot: false, didBind: false, didLoadOnce: false, loading: false, rows: [], editing: null };
+
+  function getSB() { return window.APP && (APP.supabase || APP.sb) ? (APP.supabase || APP.sb) : null; }
+
+  function escapeHtml(str) {
+    return safe(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function toast(title, msg, ms = 3200) {
+    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, ms); } catch (_) {}
+    try { if (typeof window.toast === "function") return window.toast(title, msg, ms); } catch (_) {}
+    console.log("[promos]", title, msg);
+  }
+
+  function dom() {
     return {
-      snake:{title,description,kind,priority:Number.isFinite(priority)?priority:0,active,badge,media_img:mediaImg,cta_label:ctaLabel,cta_href:ctaHref,updated_at:new Date().toISOString()},
-      camel:{title,desc:description,type:kind,priority:Number.isFinite(priority)?priority:0,active,badge,mediaImg,ctaLabel,ctaHref,updated_at:new Date().toISOString()}
+      panel: $("#tab-promos"),
+      tbody: $("#promosTbody"),
+      note: $("#ecnNote"),
+      refreshBtn: $("#refreshPromosBtn"),
+      newBtn: $("#newPromoBtn"),
+      modal: $("#ecnPromoModal"),
+      closeBtn: $("#ecnPromoClose"),
+      form: $("#ecnPromoForm"),
+      id: $("#ecnPromoId"),
+      title: $("#ecnTitle"),
+      desc: $("#ecnDesc"),
+      descCount: $("#ecnDescCount"),
+      kind: $("#ecnKind"),
+      priority: $("#ecnPriority"),
+      active: $("#ecnActive"),
+      badge: $("#ecnBadge"),
+      mediaImg: $("#ecnMediaImg"),
+      ctaLabel: $("#ecnCtaLabel"),
+      ctaHref: $("#ecnCtaHref"),
+      preview: $("#ecnPromoPreview"),
+      resetBtn: $("#ecnPromoReset"),
     };
-  };
-  async function load(r){
-    const client=sb(); if(!client) return toast("Supabase","No se encontró APP.supabase");
-    const {data,error}=await client.from(TABLE).select("*").order("priority",{ascending:false}).order("updated_at",{ascending:false,nullsFirst:false});
-    if(error){err("load",error); return toast("Error",error.message||"No se pudo cargar");}
-    r.tbody.innerHTML="";
-    (data||[]).forEach(row=>{
-      const kind=String(pick(row,["kind","type","promo_type"],"")||"").toUpperCase();
-      const title=String(pick(row,["title","name"],"")||"");
-      const desc=String(pick(row,["description","desc","message"],"")||"");
-      const badge=String(pick(row,["badge"],"")||"");
-      const prio=pick(row,["priority","prio"],"");
-      const active=normBool(pick(row,["active","is_active"],false));
-      const created=pick(row,["created_at"],null);
-      const createdShort=created?new Date(created).toLocaleDateString("es-CR",{day:"2-digit",month:"short",year:"numeric"}):"";
-      const tr=document.createElement("tr");
-      tr.innerHTML=`<td style="white-space:nowrap;font-weight:900;">${esc(kind||"-")}</td>
-      <td><div style="font-weight:900;">${esc(title||"-")}</div>
-        <div style="margin-top:4px;color:var(--muted2);">${esc(active?"ACTIVA":"INACTIVA")}${prio!==""?` · prio ${esc(prio)}`:""}${badge?` · ${esc(badge)}`:""}</div>
-        ${desc?`<div style="margin-top:8px;color:var(--muted);line-height:1.45;">${esc(desc)}</div>`:""}
-      </td>
-      <td style="white-space:nowrap;">${esc(pick(row,["target","scope","placement"],"home")||"home")}</td>
-      <td style="white-space:nowrap;">${esc(createdShort||"")}</td>
-      <td class="right"><div class="tableActions">
-        <button class="btn btn--ghost sm" type="button" data-act="toggle">${active?"PAUSAR":"ACTIVAR"}</button>
-        <button class="btn btn--ghost sm" type="button" data-act="edit">EDITAR</button>
-        <button class="btn btn--danger sm" type="button" data-act="del">ELIMINAR</button>
-      </div></td>`;
-      tr.querySelector('[data-act="toggle"]').addEventListener("click",()=>toggle(row));
-      tr.querySelector('[data-act="edit"]').addEventListener("click",()=>{fill(r,row);openM(r);});
-      tr.querySelector('[data-act="del"]').addEventListener("click",()=>del(row));
-      r.tbody.appendChild(tr);
+  }
+
+  function setNote(msg) { const d = dom(); if (d.note) d.note.textContent = clean(msg || ""); }
+
+  function parseIntSafe(v, def = 0) {
+    const n = Number.parseInt(String(v ?? ""), 10);
+    return Number.isFinite(n) ? n : def;
+  }
+
+  function setDescCount() {
+    const d = dom();
+    if (!d.desc || !d.descCount) return;
+    d.descCount.textContent = `${safe(d.desc.value).length}/520`;
+  }
+
+  function renderPreviewFromForm() {
+    const d = dom();
+    if (!d.preview) return;
+    const title = clean(d.title?.value || "Promoción");
+    const desc = clean(d.desc?.value || "");
+    const badge = clean(d.badge?.value || "");
+    const img = clean(d.mediaImg?.value || "");
+    const cta = clean(d.ctaLabel?.value || "");
+    const kind = clean(d.kind?.value || "BANNER");
+
+    d.preview.innerHTML = `
+      <div style="border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:14px; background:rgba(0,0,0,.18);">
+        ${img ? `<img src="${escapeHtml(img)}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:12px;margin-bottom:10px;">` : ""}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <span class="pill">${escapeHtml(kind)}</span>
+          ${badge ? `<span class="pill">${escapeHtml(badge)}</span>` : ""}
+        </div>
+        <div style="font-weight:900; font-size:18px;">${escapeHtml(title)}</div>
+        ${desc ? `<div style="opacity:.75; margin-top:6px;">${escapeHtml(desc)}</div>` : ""}
+        ${cta ? `<div style="margin-top:10px;"><span class="btn sm">${escapeHtml(cta)}</span></div>` : ""}
+      </div>
+    `;
+  }
+
+  function openModal(row) {
+    const d = dom();
+    S.editing = row || null;
+    if (!d.modal || !d.form) return;
+
+    d.form.reset();
+    if (d.id) d.id.value = row?.id || "";
+    if (d.title) d.title.value = row?.title || "";
+    if (d.desc) d.desc.value = row?.description || "";
+    if (d.kind) d.kind.value = row?.kind || "BANNER";
+    if (d.priority) d.priority.value = row?.priority ?? 0;
+    if (d.active) d.active.value = row?.active === false ? "false" : "true";
+    if (d.badge) d.badge.value = row?.badge || "";
+    if (d.mediaImg) d.mediaImg.value = row?.media_img || "";
+    if (d.ctaLabel) d.ctaLabel.value = row?.cta_label || "";
+    if (d.ctaHref) d.ctaHref.value = row?.cta_href || "";
+    setDescCount();
+    renderPreviewFromForm();
+
+    d.modal.hidden = false;
+    d.modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeModal() {
+    const d = dom();
+    if (!d.modal) return;
+    d.modal.hidden = true;
+    d.modal.setAttribute("aria-hidden", "true");
+    S.editing = null;
+  }
+
+  function render() {
+    const d = dom();
+    if (!d.tbody) return;
+
+    if (!S.rows.length) {
+      d.tbody.innerHTML = `<tr><td colspan="5" style="opacity:.75; padding:14px;">No hay promociones.</td></tr>`;
+      return;
+    }
+
+    d.tbody.innerHTML = S.rows.map((r) => `
+      <tr data-id="${escapeHtml(r.id)}">
+        <td>
+          <div style="font-weight:800;">${escapeHtml(r.title || "—")}</div>
+          ${r.badge ? `<div style="opacity:.65;font-size:12px;">${escapeHtml(r.badge)}</div>` : ""}
+        </td>
+        <td>${escapeHtml(r.kind || "—")}</td>
+        <td>${escapeHtml(r.priority ?? 0)}</td>
+        <td>${r.active ? "Sí" : "No"}</td>
+        <td class="right">
+          <div class="tableActions">
+            <button class="btn sm" type="button" data-edit="${escapeHtml(r.id)}">Editar</button>
+            <button class="btn sm" type="button" data-delete="${escapeHtml(r.id)}">Eliminar</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+
+    d.tbody.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const row = S.rows.find((x) => x.id === btn.dataset.edit);
+        if (row) openModal(row);
+      });
     });
-    async function toggle(row){
-      const client=sb(); if(!client) return;
-      const id=pick(row,["id","promo_id"]); if(!id) return toast("Error","Promo sin id");
-      const newVal=!normBool(pick(row,["active","is_active"],false));
-      let res=await client.from(TABLE).update({active:newVal,updated_at:new Date().toISOString()}).eq("id",id).select("*").maybeSingle();
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).update({active:newVal,updated_at:new Date().toISOString()}).eq("promo_id",id).select("*").maybeSingle();
-      if(res.error){err("toggle",res.error);return toast("Error",res.error.message||"No se pudo actualizar");}
-      toast("OK",newVal?"Promo activada":"Promo pausada"); load(r);
+
+    d.tbody.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => deleteRow(btn.dataset.delete));
+    });
+  }
+
+  async function fetchRows() {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no está listo.");
+    const { data, error } = await sb
+      .from(TABLE)
+      .select("id,active,kind,target,priority,badge,title,description,note,cta_label,cta_href,media_img,dismiss_days,start_at,end_at,created_at,updated_at")
+      .order("priority", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    S.rows = Array.isArray(data) ? data : [];
+  }
+
+  async function refresh() {
+    if (S.loading) return;
+    S.loading = true;
+    setNote("Cargando promociones…");
+    try {
+      await fetchRows();
+      render();
+      setNote("");
+      S.didLoadOnce = true;
+    } catch (e) {
+      console.warn(e);
+      setNote("No se pudieron cargar las promociones.");
+      toast("Promos", e.message || String(e), 5200);
+    } finally {
+      S.loading = false;
     }
-    async function del(row){
-      const client=sb(); if(!client) return;
-      const id=pick(row,["id","promo_id"]); if(!id) return toast("Error","Promo sin id");
-      if(!confirm("¿Eliminar esta promo?")) return;
-      let res=await client.from(TABLE).delete().eq("id",id);
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).delete().eq("promo_id",id);
-      if(res.error){err("del",res.error);return toast("Error",res.error.message||"No se pudo eliminar");}
-      toast("OK","Promo eliminada"); load(r);
+  }
+
+  function readPayload() {
+    const d = dom();
+    return {
+      active: clean(d.active?.value || "true") === "true",
+      kind: clean(d.kind?.value || "BANNER") || "BANNER",
+      target: "home",
+      priority: parseIntSafe(d.priority?.value, 0),
+      badge: clean(d.badge?.value || "") || null,
+      title: clean(d.title?.value || "") || "Promoción",
+      description: clean(d.desc?.value || "") || null,
+      cta_label: clean(d.ctaLabel?.value || "") || null,
+      cta_href: clean(d.ctaHref?.value || "") || null,
+      media_img: clean(d.mediaImg?.value || "") || null,
+      dismiss_days: 7,
+    };
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    const d = dom();
+    const sb = getSB();
+    if (!sb) return toast("Supabase", "No está listo.");
+
+    const id = clean(d.id?.value || "");
+    const payload = readPayload();
+
+    if (!["BANNER", "MODAL"].includes(payload.kind)) {
+      toast("Promos", "El tipo debe ser BANNER o MODAL.");
+      return;
+    }
+
+    try {
+      if (id) {
+        const { error } = await sb.from(TABLE).update(payload).eq("id", id);
+        if (error) throw error;
+        toast("Promos", "Promoción actualizada.");
+      } else {
+        const { error } = await sb.from(TABLE).insert(payload);
+        if (error) throw error;
+        toast("Promos", "Promoción creada.");
+      }
+      closeModal();
+      await refresh();
+    } catch (err) {
+      console.warn(err);
+      toast("Error", err.message || String(err), 5200);
     }
   }
-  async function save(r){
-    const client=sb(); if(!client) return;
-    const id=(r.id?.value||"").trim();
-    const {snake,camel}=build(r);
-    if(!snake.title) return toast("Falta título","Escribí un título para la promo.");
-    if(id){
-      let res=await client.from(TABLE).update(snake).eq("id",id).select("*").maybeSingle();
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).update(camel).eq("promo_id",id).select("*").maybeSingle();
-      if(res.error){err("save update",res.error);return toast("Error",res.error.message||"No se pudo actualizar");}
-      toast("OK","Promo actualizada");
-    } else {
-      let res=await client.from(TABLE).insert({...snake,created_at:new Date().toISOString()}).select("*").maybeSingle();
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).insert({...camel,created_at:new Date().toISOString()}).select("*").maybeSingle();
-      if(res.error){err("save insert",res.error);return toast("Error",res.error.message||"No se pudo crear");}
-      toast("OK","Promo creada");
+
+  async function deleteRow(id) {
+    const sb = getSB();
+    if (!id || !sb) return;
+    if (!confirm("¿Eliminar esta promoción?")) return;
+    try {
+      const { error } = await sb.from(TABLE).delete().eq("id", id);
+      if (error) throw error;
+      toast("Promos", "Promoción eliminada.");
+      await refresh();
+    } catch (err) {
+      console.warn(err);
+      toast("Error", err.message || String(err), 5200);
     }
-    closeM(r); clear(r); load(r);
   }
-  function wire(r){
-    r.btnRefresh.addEventListener("click",()=>load(r));
-    r.btnNew.addEventListener("click",()=>{clear(r);renderPreview(r);openM(r);});
-    r.btnClose?.addEventListener("click",()=>closeM(r));
-    r.btnReset?.addEventListener("click",()=>{clear(r);renderPreview(r);});
-    r.desc?.addEventListener("input",()=>{if(r.descCount) r.descCount.textContent=`${(r.desc.value||"").length}/520`; renderPreview(r);});
-    [r.title,r.badge,r.mediaImg,r.ctaLabel,r.ctaHref,r.kind,r.active,r.priority].forEach(el=>{el?.addEventListener("input",()=>renderPreview(r));el?.addEventListener("change",()=>renderPreview(r));});
-    r.form.addEventListener("submit",(e)=>{e.preventDefault();save(r);});
-    window.addEventListener("keydown",(e)=>{if(e.key==="Escape" && !r.modal.hidden) closeM(r);});
-    r.modal.addEventListener("click",(e)=>{const t=e.target; if(t && t.getAttribute && t.getAttribute("data-close")==="true") closeM(r);});
+
+  function bindOnce() {
+    if (S.didBind) return;
+    S.didBind = true;
+    const d = dom();
+    if (!d.tbody) return;
+
+    d.refreshBtn?.addEventListener("click", refresh);
+    d.newBtn?.addEventListener("click", () => openModal(null));
+    d.closeBtn?.addEventListener("click", closeModal);
+    d.modal?.querySelector(".modalBackdrop")?.addEventListener("click", closeModal);
+    d.form?.addEventListener("submit", save);
+    d.resetBtn?.addEventListener("click", () => openModal(S.editing));
+
+    [d.title, d.desc, d.kind, d.badge, d.mediaImg, d.ctaLabel].forEach((el) => {
+      el?.addEventListener("input", () => { setDescCount(); renderPreviewFromForm(); });
+      el?.addEventListener("change", () => { setDescCount(); renderPreviewFromForm(); });
+    });
   }
-  function init(){
-    const r=refs(); log("boot",{VERSION,TABLE});
-    if(!r.tab) return;
-    const missing=[["#newPromoBtn",r.btnNew],["#refreshPromosBtn",r.btnRefresh],["#promosTbody",r.tbody],["#ecnPromoModal",r.modal],["#ecnPromoForm",r.form]].filter(([,el])=>!el).map(([s])=>s);
-    if(missing.length){warn("Faltan nodos en DOM:",missing); return;}
-    wire(r); load(r);
+
+  async function ensureLoaded(force) {
+    bindOnce();
+    const panel = dom().panel;
+    if (!panel || panel.hidden) return;
+    if (S.didLoadOnce && !force) return render();
+    await refresh();
   }
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
+
+  function boot() {
+    if (S.didBoot) return;
+    S.didBoot = true;
+    console.log("[admin-promos] boot", { VERSION, TABLE });
+    bindOnce();
+    ensureLoaded(false);
+  }
+
+  function onTab(e) { if (e?.detail?.tab === "promos") ensureLoaded(true); }
+
+  if (window.APP && APP.__adminReady) boot();
+  else {
+    window.addEventListener("admin:ready", boot, { once: true });
+    document.addEventListener("admin:ready", boot, { once: true });
+  }
+  window.addEventListener("admin:tab", onTab);
+  document.addEventListener("admin:tab", onTab);
 })();

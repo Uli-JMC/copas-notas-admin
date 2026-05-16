@@ -2,40 +2,45 @@
 
 /**
  * admin.js — Entre Copas & Notas ✅ PRO (Eventos + Tabs) — Opción B
- *
- * Opción B:
- * - admin-auth.js valida sesión/permisos y emite "admin:ready"
- * - admin.js controla UI/gate del panel (hidden) y arranca módulos/tabs
- *
- * Eficiencia:
- * - NO vuelve a validar sesión si ya llegó admin:ready
- * - Boot único, anti doble montaje
- * - admin:tab se dispara en window + document
+ * - admin-auth.js valida ingreso/permisos y emite admin:ready
+ * - admin.js muestra #appPanel, controla tabs y CRUD de events
+ * - Alineado a BD real:
+ *   events.title/type/month_key son NOT NULL
+ *   events.duration_hours es text
+ *   events.active existe y es boolean NOT NULL default false
+ * - Media en Eventos es solo lectura desde v_media_bindings_latest
  */
-
 (function () {
-  // ------------------------------------------------------------
-  // Guard anti doble montaje
-  // ------------------------------------------------------------
   if (window.__ecnAdminMounted === true) return;
   window.__ecnAdminMounted = true;
 
-  const VERSION = "2026-02-22.admin.B.pro.2";
-
-  // ------------------------------------------------------------
-  // DOM helpers
-  // ------------------------------------------------------------
+  const VERSION = "2026-02-26.admin.bd-aligned.1";
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const appPanel = $("#appPanel");
+  const authGate = $("#authGate");
   if (!appPanel) return;
 
-  console.log("[admin] loaded", { VERSION });
+  const EVENTS_TABLE = "events";
+  const VIEW_BINDINGS_LATEST = "v_media_bindings_latest";
+  const EVENT_SLOTS_READONLY = ["desktop_event", "mobile_event"];
 
-  // ------------------------------------------------------------
-  // Toast
-  // ------------------------------------------------------------
+  const MONTHS = [
+    "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+    "JULIO", "AGOSTO", "SETIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+  ];
+
+  const state = {
+    didBoot: false,
+    didBindTabs: false,
+    didBindEditor: false,
+    activeTab: "events",
+    query: "",
+    events: [],
+    selectedEventId: null,
+  };
+
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -49,6 +54,7 @@
     try {
       if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, timeoutMs);
     } catch (_) {}
+
     const toastsEl = $("#toasts");
     if (!toastsEl) return;
 
@@ -72,16 +78,15 @@
     setTimeout(kill, timeoutMs);
   }
 
-  // ------------------------------------------------------------
-  // Utils
-  // ------------------------------------------------------------
-  const cleanSpaces = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
   const safeStr = (x) => String(x ?? "");
-  const safeNum = (x, def = null) => {
-    if (x === null || x === undefined || x === "") return def;
-    const n = Number(x);
-    return Number.isFinite(n) ? n : def;
-  };
+  const cleanSpaces = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+
+  function parseDecimalOrNull(v) {
+    const raw = String(v ?? "").trim().replace(",", ".");
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
 
   function looksLikeRLSError(err) {
     const m = safeStr(err?.message || "").toLowerCase();
@@ -93,59 +98,22 @@
       m.includes("row level security") ||
       m.includes("permission") ||
       m.includes("not allowed") ||
-      m.includes("violates row-level security") ||
-      m.includes("new row violates row-level security")
+      m.includes("violates row-level security")
     );
   }
 
-  // ------------------------------------------------------------
-  // Supabase (solo para CRUD y lecturas)
-  // ------------------------------------------------------------
   function getSB() {
     if (!window.APP) return null;
-    return window.APP.supabase || window.APP.sb || null;
+    return APP.supabase || APP.sb || null;
   }
 
-  // ------------------------------------------------------------
-  // Config DB
-  // ------------------------------------------------------------
-  const EVENTS_TABLE = "events";
-  const VIEW_BINDINGS_LATEST = "v_media_bindings_latest";
-
-  // slots readonly usados por TU HTML actual
-  const EVENT_SLOTS_READONLY = ["desktop_event", "mobile_event"];
-
-  // ------------------------------------------------------------
-  // State
-  // ------------------------------------------------------------
-  const state = {
-    activeTab: "events",
-    didBindTabs: false,
-    didBindEditor: false,
-    didBoot: false,
-    query: "",
-    events: [],
-    selectedEventId: null,
-  };
-
-  // ------------------------------------------------------------
-  // Gate UI (Opción B)
-  // ------------------------------------------------------------
   function showPanel() {
-    try { appPanel.hidden = false; } catch (_) {}
+    if (authGate) authGate.hidden = true;
+    appPanel.hidden = false;
   }
 
   function hidePanel() {
-    // si querés, podés ocultarlo mientras espera auth
-    // (no redirige: eso lo hace admin-auth)
-    try { appPanel.hidden = true; } catch (_) {}
-  }
-
-  // ------------------------------------------------------------
-  // Tabs
-  // ------------------------------------------------------------
-  function hideAllTabs() {
-    $$('[role="tabpanel"]', appPanel).forEach((p) => (p.hidden = true));
+    appPanel.hidden = true;
   }
 
   function dispatchAdminTab(tab) {
@@ -153,13 +121,17 @@
     try { document.dispatchEvent(new CustomEvent("admin:tab", { detail: { tab } })); } catch (_) {}
   }
 
+  function hideAllTabs() {
+    $$('[role="tabpanel"]', appPanel).forEach((p) => (p.hidden = true));
+  }
+
   function setTab(tabName) {
     state.activeTab = tabName || "events";
 
-    $$(".tab", appPanel).forEach((t) => {
-      const on = t.dataset.tab === state.activeTab;
-      t.setAttribute("aria-selected", on ? "true" : "false");
-      t.classList.toggle("isActive", on);
+    $$(".tab", appPanel).forEach((btn) => {
+      const on = btn.dataset.tab === state.activeTab;
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+      btn.classList.toggle("isActive", on);
     });
 
     hideAllTabs();
@@ -180,30 +152,26 @@
     $("#search")?.addEventListener("input", (e) => {
       state.query = cleanSpaces(e.target.value || "");
       renderEventList();
-      // regs/media/etc escuchan #search o admin:tab en sus propios módulos
     });
   }
 
-  // ------------------------------------------------------------
-  // Events mapping + CRUD
-  // ------------------------------------------------------------
   function mapEventRow(row) {
     const ev = row || {};
     return {
       id: ev.id,
       title: safeStr(ev.title || ""),
-      type: safeStr(ev.type || ""),
-      month_key: safeStr(ev.month_key || ""),
+      type: safeStr(ev.type || "Cata de vino"),
+      month_key: safeStr(ev.month_key || "ENERO"),
       description: safeStr(ev.description || ""),
       location: safeStr(ev.location || ""),
       time_range: safeStr(ev.time_range || ""),
-      duration_hours: ev.duration_hours,
+      duration_hours: ev.duration_hours == null ? "" : String(ev.duration_hours),
       price_amount: ev.price_amount,
       price_currency: safeStr(ev.price_currency || "CRC"),
       more_img_alt: safeStr(ev.more_img_alt || ""),
-      slug: safeStr(ev.slug || ""),
+      active: typeof ev.active === "boolean" ? ev.active : false,
       badge: safeStr(ev.badge || ""),
-      active: typeof ev.active === "boolean" ? ev.active : null,
+      slug: safeStr(ev.slug || ""),
       created_at: safeStr(ev.created_at || ""),
       updated_at: safeStr(ev.updated_at || ""),
     };
@@ -217,18 +185,23 @@
     state.events = Array.isArray(data) ? data.map(mapEventRow) : [];
   }
 
-  function eventRequiredDefaults() {
-    return {
-      type: "Cata de vino",
-      month_key: "ENERO",
-    };
-  }
-
   async function insertEvent(payload) {
     const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
     const safePayload = {
-      ...eventRequiredDefaults(),
-      ...(payload || {}),
+      title: cleanSpaces(payload.title || "Nuevo evento") || "Nuevo evento",
+      type: cleanSpaces(payload.type || "Cata de vino") || "Cata de vino",
+      month_key: cleanSpaces(payload.month_key || "ENERO") || "ENERO",
+      description: payload.description ?? "",
+      location: payload.location ?? "",
+      time_range: payload.time_range ?? "",
+      duration_hours: payload.duration_hours == null ? null : String(payload.duration_hours),
+      price_amount: payload.price_amount ?? null,
+      price_currency: payload.price_currency || "CRC",
+      more_img_alt: payload.more_img_alt ?? "",
+      active: typeof payload.active === "boolean" ? payload.active : false,
+      badge: payload.badge ?? null,
+      slug: payload.slug || null,
     };
     const { data, error } = await sb.from(EVENTS_TABLE).insert(safePayload).select("*").single();
     if (error) throw error;
@@ -237,6 +210,7 @@
 
   async function updateEvent(id, payload) {
     const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
     const { data, error } = await sb.from(EVENTS_TABLE).update(payload).eq("id", id).select("*").single();
     if (error) throw error;
     return mapEventRow(data);
@@ -244,17 +218,14 @@
 
   async function deleteEvent(id) {
     const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
     const { error } = await sb.from(EVENTS_TABLE).delete().eq("id", id);
     if (error) throw error;
   }
 
-  // ------------------------------------------------------------
-  // Media readonly desde v_media_bindings_latest
-  // ------------------------------------------------------------
   async function fetchEventSlotUrlsLatest(eventId) {
     const sb = getSB();
     if (!sb) throw new Error("APP.supabase no existe.");
-
     const eid = safeStr(eventId || "").trim();
     if (!eid) return {};
 
@@ -276,9 +247,6 @@
     return map;
   }
 
-  // ------------------------------------------------------------
-  // Render list (Eventos)
-  // ------------------------------------------------------------
   function renderEventList() {
     const list = $("#eventList");
     if (!list) return;
@@ -307,8 +275,9 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "item";
+      if (ev.id === state.selectedEventId) btn.classList.add("active");
       btn.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:12px;">
+        <div style="display:flex; justify-content:space-between; gap:12px; width:100%;">
           <div style="min-width:0;">
             <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(ev.title)}</div>
             <div style="opacity:.72; font-size:13px;">${escapeHtml(ev.type)} · ${escapeHtml(ev.month_key)}</div>
@@ -322,9 +291,6 @@
     list.appendChild(frag);
   }
 
-  // ------------------------------------------------------------
-  // Editor (alineado a tu admin.html PRO)
-  // ------------------------------------------------------------
   function setEditorVisible(on) {
     const form = $("#eventForm");
     if (form) form.hidden = !on;
@@ -334,13 +300,22 @@
     const desc = $("#evDesc");
     const count = $("#evDescCount");
     if (!desc || !count) return;
-    const len = safeStr(desc.value || "").length;
-    count.textContent = `${len}/520`;
+    count.textContent = `${safeStr(desc.value || "").length}/520`;
+  }
+
+  function ensureMonthSelectOptions() {
+    const el = $("#evMonth");
+    if (!el || el.options.length) return;
+    el.innerHTML = MONTHS.map((m) => `<option value="${m}">${m}</option>`).join("");
   }
 
   function fillEditor(ev) {
+    ensureMonthSelectOptions();
+
     $("#evId") && ($("#evId").value = ev.id || "");
     $("#evTitle") && ($("#evTitle").value = ev.title || "");
+    $("#evType") && ($("#evType").value = ev.type || "Cata de vino");
+    $("#evMonth") && ($("#evMonth").value = ev.month_key || "ENERO");
     $("#evDesc") && ($("#evDesc").value = ev.description || "");
     setDescCount();
 
@@ -349,13 +324,11 @@
     $("#evDurationHours") && ($("#evDurationHours").value = ev.duration_hours ?? "");
     $("#evPriceAmount") && ($("#evPriceAmount").value = ev.price_amount ?? "");
     $("#evCurrency") && ($("#evCurrency").value = ev.price_currency || "CRC");
-
     $("#evSlug") && ($("#evSlug").value = ev.slug || "");
     $("#evBadge") && ($("#evBadge").value = ev.badge || "");
-    if ($("#evActive") && typeof ev.active === "boolean") $("#evActive").value = ev.active ? "true" : "false";
+    $("#evActive") && ($("#evActive").value = ev.active ? "true" : "false");
     $("#evAlt") && ($("#evAlt").value = ev.more_img_alt || "");
 
-    // media readonly
     $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
     $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
   }
@@ -367,60 +340,52 @@
     state.selectedEventId = ev.id;
     setEditorVisible(true);
     fillEditor(ev);
+    renderEventList();
 
     try {
       const map = await fetchEventSlotUrlsLatest(ev.id);
       $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = map.desktop_event || "");
       $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = map.mobile_event || "");
     } catch (e) {
-      console.warn(e);
+      console.warn("[admin] media readonly", e);
     }
   }
 
   function readEditorPayload() {
     const current = (state.events || []).find((x) => x.id === state.selectedEventId) || {};
-    const defaults = eventRequiredDefaults();
-    const payload = {
-      title: cleanSpaces($("#evTitle")?.value || ""),
-      type: cleanSpaces(current.type || defaults.type),
-      month_key: cleanSpaces(current.month_key || defaults.month_key),
+    const duration = cleanSpaces($("#evDurationHours")?.value ?? "");
+    const slug = cleanSpaces($("#evSlug")?.value || "");
+    const badge = cleanSpaces($("#evBadge")?.value || "");
+    const activeStr = cleanSpaces($("#evActive")?.value || "false");
+
+    return {
+      title: cleanSpaces($("#evTitle")?.value || "") || "Nuevo evento",
+      type: cleanSpaces($("#evType")?.value || current.type || "Cata de vino") || "Cata de vino",
+      month_key: cleanSpaces($("#evMonth")?.value || current.month_key || "ENERO") || "ENERO",
       description: cleanSpaces($("#evDesc")?.value || ""),
       location: cleanSpaces($("#evPlace")?.value || ""),
       time_range: cleanSpaces($("#evSchedule")?.value || ""),
-      duration_hours: safeNum($("#evDurationHours")?.value ?? null, null),
-      price_amount: safeNum($("#evPriceAmount")?.value ?? null, null),
-      price_currency: cleanSpaces($("#evCurrency")?.value || "CRC"),
+      duration_hours: duration || null,
+      price_amount: parseDecimalOrNull($("#evPriceAmount")?.value ?? ""),
+      price_currency: cleanSpaces($("#evCurrency")?.value || "CRC") || "CRC",
       more_img_alt: cleanSpaces($("#evAlt")?.value || ""),
+      active: activeStr === "true",
+      badge: badge || null,
+      slug: slug || null,
     };
-
-    const slug = cleanSpaces($("#evSlug")?.value || "");
-    if (slug) payload.slug = slug;
-
-    const badge = cleanSpaces($("#evBadge")?.value || "");
-    if (badge) payload.badge = badge;
-
-    const activeStr = cleanSpaces($("#evActive")?.value || "");
-    if (activeStr === "true" || activeStr === "false") payload.active = activeStr === "true";
-
-    return payload;
   }
 
-  // ------------------------------------------------------------
-  // Bind editor actions
-  // ------------------------------------------------------------
   function bindEditorOnce() {
     if (state.didBindEditor) return;
     state.didBindEditor = true;
 
+    ensureMonthSelectOptions();
     $("#evDesc")?.addEventListener("input", setDescCount);
-
-    // "Gestionar en Medios"
- $("#evManageMediaBtn")?.addEventListener("click", () => setTab("media"));
+    $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
+    $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
 
     $("#newEventBtn")?.addEventListener("click", async () => {
       setTab("events");
-      setEditorVisible(true);
-
       const draft = {
         title: "Nuevo evento",
         type: "Cata de vino",
@@ -432,6 +397,9 @@
         price_amount: null,
         price_currency: "CRC",
         more_img_alt: "",
+        active: false,
+        badge: null,
+        slug: null,
       };
 
       try {
@@ -443,33 +411,34 @@
         toast("Evento", "Creado. Completá el editor y guardá.", 2200);
       } catch (e) {
         console.warn(e);
-        toast("Error", looksLikeRLSError(e) ? "RLS bloquea crear eventos." : (e.message || String(e)));
+        toast("Error", looksLikeRLSError(e) ? "RLS bloquea crear eventos." : (e.message || String(e)), 5200);
       }
     });
 
     $("#eventForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const id = cleanSpaces($("#evId")?.value || "");
-      if (!id) return;
+      if (!id) return toast("Evento", "Seleccioná o creá un evento primero.");
 
       try {
         toast("Guardando", "Actualizando evento…", 900);
         const payload = readEditorPayload();
         const updated = await updateEvent(id, payload);
         state.events = state.events.map((x) => (x.id === id ? updated : x));
+        state.selectedEventId = id;
         renderEventList();
+        await openEvent(id);
         toast("Guardado", "Evento actualizado.", 1800);
       } catch (err) {
         console.warn(err);
-        toast("Error", looksLikeRLSError(err) ? "RLS bloquea editar eventos." : (err.message || String(err)));
+        toast("Error", looksLikeRLSError(err) ? "RLS bloquea editar eventos." : (err.message || String(err)), 5200);
       }
     });
 
     $("#deleteEventBtn")?.addEventListener("click", async () => {
       const id = cleanSpaces($("#evId")?.value || "");
       if (!id) return;
-      const ok = confirm("¿Eliminar este evento?");
-      if (!ok) return;
+      if (!confirm("¿Eliminar este evento?")) return;
 
       try {
         toast("Eliminando", "Procesando…", 900);
@@ -481,58 +450,41 @@
         toast("Eliminado", "Evento eliminado.", 1800);
       } catch (err) {
         console.warn(err);
-        toast("Error", looksLikeRLSError(err) ? "RLS bloquea eliminar eventos." : (err.message || String(err)));
+        toast("Error", looksLikeRLSError(err) ? "RLS bloquea eliminar eventos." : (err.message || String(err)), 5200);
       }
     });
   }
 
-  // ------------------------------------------------------------
-  // Boot (solo cuando admin-auth diga READY)
-  // ------------------------------------------------------------
   async function bootAfterReady(detail) {
     if (state.didBoot) return;
     state.didBoot = true;
 
-    console.log("[admin] bootAfterReady", { VERSION, detail });
-
+    console.log("[admin] boot", { VERSION, detail });
     showPanel();
     bindTabsOnce();
     bindEditorOnce();
     setTab("events");
 
-    // seguridad: si no hay supabase (debería existir), avisamos
-    const sb = getSB();
-    if (!sb) {
-      toast("Supabase", "APP.supabase no existe. Revisá el orden de scripts.", 5200);
-      return;
-    }
-
     try {
       await fetchEvents();
       renderEventList();
+      if (state.events[0]?.id) await openEvent(state.events[0].id);
     } catch (e) {
       console.warn(e);
-      toast("Error", looksLikeRLSError(e) ? "RLS bloquea lectura de eventos." : (e.message || String(e)));
+      toast("Error", looksLikeRLSError(e) ? "RLS bloquea lectura de eventos." : (e.message || String(e)), 5200);
     }
   }
 
-  // ------------------------------------------------------------
-  // Esperar admin:ready (window y document por compat)
-  // ------------------------------------------------------------
   function waitForReady() {
-    // opcional: ocultar panel mientras auth valida
     hidePanel();
 
     if (window.APP && APP.__adminReady === true) {
-      // ya listo
       bootAfterReady({ alreadyReady: true });
       return;
     }
 
     const handler = (e) => {
-      // e.detail viene del auth
       bootAfterReady(e?.detail || null);
-      // limpiamos listeners (por si disparan en ambos)
       try { window.removeEventListener("admin:ready", handler); } catch (_) {}
       try { document.removeEventListener("admin:ready", handler); } catch (_) {}
     };

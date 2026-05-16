@@ -1,139 +1,301 @@
 "use strict";
-(function(){
-  const VERSION="2026-02-25.gallery.supabase.1";
-  const TABLE="gallery_items";
-  const BUCKET="gallery";
-  const $=(s,r=document)=>r.querySelector(s);
-  const log=(...a)=>{try{console.log("[admin-gallery]",...a)}catch(_){}};
-  const warn=(...a)=>{try{console.warn("[admin-gallery]",...a)}catch(_){}};
-  const err=(...a)=>{try{console.error("[admin-gallery]",...a)}catch(_){}};
-  const toast=(t,m)=>{try{if(window.toast) return window.toast(t,m);}catch(_){};try{if(window.APP&&typeof APP.toast==='function') return APP.toast(t,m);}catch(_){};alert(`${t} — ${m}`);};
-  const sb=()=>{try{if(window.APP&&APP.supabase) return APP.supabase;}catch(_){};try{if(window.supabase) return window.supabase;}catch(_){};return null;};
-  const hasSchemaErr=(e)=>String(e?.message||"").includes("schema cache")||String(e?.message||"").includes("Could not find the");
-  const pick=(o,ks,f=null)=>{for(const k of ks){if(o&&o[k]!==undefined&&o[k]!==null) return o[k];}return f;};
-  const esc=(s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
-  const refs=()=>({
-    tab:$("#tab-gallery"), btnNew:$("#newGalleryBtn"), btnRefresh:$("#refreshGalleryBtn"), tbody:$("#galleryTbody"),
-    modal:$("#ecnGalleryModal"), form:$("#ecnGalleryForm"),
-    id:$("#ecnPromoId"), name:$("#ecnGalName"), file:$("#ecnGalFile"), type:$("#ecnGalType"), tags:$("#ecnGalTags"),
-    previewImg:$("#ecnGalPreviewImg"), btnClose:$("#ecnGalleryClose"), btnReset:$("#ecnGalReset"),
-  });
-  const openM=(r)=>{r.modal.hidden=false;r.modal.setAttribute("aria-hidden","false");document.body.style.overflow="hidden";};
-  const closeM=(r)=>{r.modal.hidden=true;r.modal.setAttribute("aria-hidden","true");document.body.style.overflow="";};
-  const clear=(r)=>{if(r.id)r.id.value=""; if(r.name)r.name.value=""; if(r.type)r.type.value="image"; if(r.tags)r.tags.value="";
-    if(r.file)r.file.value=""; if(r.previewImg)r.previewImg.src="";};
-  const fill=(r,row)=>{
-    const id=pick(row,["id","gallery_id"]); const name=pick(row,["name","title","filename"],"");
-    const type=pick(row,["type","kind"],"image"); const tags=pick(row,["tags"],"");
-    const url=pick(row,["url","public_url","media_url","src"],"");
-    if(r.id)r.id.value=id||""; if(r.name)r.name.value=name||""; if(r.type)r.type.value=String(type||"image").toLowerCase();
-    if(r.tags)r.tags.value=tags||""; if(r.previewImg)r.previewImg.src=url||""; if(r.file)r.file.value="";
-  };
-  const safeName=(n)=>String(n||"file").trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_.]/g,"");
-  async function upload(client,file,folder){
-    const ext=file.name.includes(".")?file.name.split(".").pop():"bin";
-    const base=safeName(file.name.replace(/\.[^/.]+$/,""));
-    const path=`${folder}/${Date.now()}_${base}.${ext}`;
-    const up=await client.storage.from(BUCKET).upload(path,file,{upsert:true});
-    if(up.error) throw up.error;
-    const pub=client.storage.from(BUCKET).getPublicUrl(path);
-    return {path, publicUrl: pub?.data?.publicUrl||""};
+
+/**
+ * admin-gallery.js — ECN PRO, BD aligned
+ * - gallery_items.type real: cocteles | maridajes
+ * - espera admin:ready y carga lazy al abrir tab gallery
+ * - IDs: ecnGalleryId (no usa ecnPromoId)
+ */
+(function () {
+  if (window.__ecnGalleryMounted === true) return;
+  window.__ecnGalleryMounted = true;
+
+  const VERSION = "2026-02-26.gallery.bd-aligned.1";
+  const TABLE = "gallery_items";
+  const BUCKET = "gallery";
+  const FALLBACK_BUCKET = "media";
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const safe = (v) => String(v ?? "");
+  const clean = (v) => safe(v).replace(/\s+/g, " ").trim();
+
+  const S = { didBoot: false, didBind: false, didLoadOnce: false, loading: false, editing: null, rows: [] };
+
+  function getSB() { return window.APP && (APP.supabase || APP.sb) ? (APP.supabase || APP.sb) : null; }
+
+  function escapeHtml(str) {
+    return safe(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   }
-  async function load(r){
-    const client=sb(); if(!client) return toast("Supabase","No se encontró APP.supabase");
-    const {data,error}=await client.from(TABLE).select("*").order("created_at",{ascending:false});
-    if(error){err("load",error); return toast("Error",error.message||"No se pudo cargar");}
-    r.tbody.innerHTML="";
-    (data||[]).forEach(row=>{
-      const name=String(pick(row,["name","title","filename"],"")||"");
-      const type=String(pick(row,["type","kind"],"")||"");
-      const tags=String(pick(row,["tags"],"")||"");
-      const url=String(pick(row,["url","public_url","media_url","src"],"")||"");
-      const created=pick(row,["created_at"],null);
-      const createdShort=created?new Date(created).toLocaleDateString("es-CR",{day:"2-digit",month:"short",year:"numeric"}):"";
-      const tr=document.createElement("tr");
-      tr.innerHTML = `      <td style="white-space:nowrap;">${url
-        ? `<a class="btn btn--ghost sm" href="${url}" target="_blank" rel="noopener">VER</a>`
-        : "—"
-      }</td>
 
-      <td style="font-weight:800;">${esc(name) || "—"}</td>
-      <td>${esc(type) || "—"}</td>
-      <td style="white-space:nowrap;">${createdShort || "—"}</td>
-      <td style="max-width:420px; overflow:hidden; text-overflow:ellipsis;">${esc(tags) || "—"}</td>
+  function toast(title, msg, ms = 3200) {
+    try { if (window.APP && typeof APP.toast === "function") return APP.toast(title, msg, ms); } catch (_) {}
+    try { if (typeof window.toast === "function") return window.toast(title, msg, ms); } catch (_) {}
+    console.log("[gallery]", title, msg);
+  }
 
-      <td class="center">
-        <div class="tableActions">
-        <button class="btn btn--ghost sm" type="button" data-act="copy">COPIAR TAGS</button>
-        <button class="btn btn--danger sm" type="button" data-act="del">ELIMINAR</button>
-      </div>
-      </td>`;
-      tr.querySelector('[data-act="copy"]').addEventListener("click",()=>copy(tags));
-      tr.querySelector('[data-act="del"]').addEventListener("click",()=>del(row));
-      tr.addEventListener("click",(e)=>{if(e.target.closest("button,a")) return; fill(r,row); openM(r);});
-      r.tbody.appendChild(tr);
+  function parseTags(raw) {
+    return clean(raw)
+      .split(",")
+      .map((x) => clean(x))
+      .filter(Boolean);
+  }
+
+  function tagsToText(tags) {
+    return Array.isArray(tags) ? tags.join(", ") : "";
+  }
+
+  function slugify(s) {
+    return clean(s)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "gallery-item";
+  }
+
+  function dom() {
+    return {
+      panel: $("#tab-gallery"),
+      tbody: $("#galleryTbody"),
+      refreshBtn: $("#refreshGalleryBtn"),
+      newBtn: $("#newGalleryBtn"),
+      modal: $("#ecnGalleryModal"),
+      closeBtn: $("#ecnGalleryClose"),
+      form: $("#ecnGalleryForm"),
+      id: $("#ecnGalleryId"),
+      file: $("#ecnGalFile"),
+      type: $("#ecnGalType"),
+      tags: $("#ecnGalTags"),
+      name: $("#ecnGalName"),
+      previewImg: $("#ecnGalPreviewImg"),
+      resetBtn: $("#ecnGalReset"),
+    };
+  }
+
+  function openModal(row) {
+    const d = dom();
+    S.editing = row || null;
+    if (!d.modal || !d.form) return;
+
+    d.form.reset();
+    if (d.id) d.id.value = row?.id || "";
+    if (d.name) d.name.value = row?.name || "";
+    if (d.type) d.type.value = row?.type || "cocteles";
+    if (d.tags) d.tags.value = tagsToText(row?.tags || []);
+    if (d.previewImg) d.previewImg.src = row?.image_url || "";
+
+    d.modal.hidden = false;
+    d.modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeModal() {
+    const d = dom();
+    if (!d.modal) return;
+    d.modal.hidden = true;
+    d.modal.setAttribute("aria-hidden", "true");
+    S.editing = null;
+  }
+
+  function render() {
+    const d = dom();
+    if (!d.tbody) return;
+
+    if (!S.rows.length) {
+      d.tbody.innerHTML = `<tr><td colspan="5" style="opacity:.75; padding:14px;">No hay items de galería.</td></tr>`;
+      return;
+    }
+
+    d.tbody.innerHTML = S.rows.map((r) => {
+      const tags = Array.isArray(r.tags) && r.tags.length ? r.tags.join(", ") : "—";
+      const url = r.image_url || "";
+      return `
+        <tr data-id="${escapeHtml(r.id)}">
+          <td>${url ? `<img src="${escapeHtml(url)}" alt="" style="width:72px;height:52px;object-fit:cover;border-radius:10px;">` : "—"}</td>
+          <td>${escapeHtml(r.name || "—")}</td>
+          <td>${escapeHtml(r.type || "—")}</td>
+          <td>${escapeHtml(tags)}</td>
+          <td class="right">
+            <div class="tableActions">
+              <button class="btn sm" type="button" data-edit="${escapeHtml(r.id)}">Editar</button>
+              <button class="btn sm" type="button" data-delete="${escapeHtml(r.id)}">Eliminar</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join("");
+
+    d.tbody.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const row = S.rows.find((x) => x.id === btn.dataset.edit);
+        if (row) openModal(row);
+      });
     });
-    async function copy(tags){
-      const t=String(tags||"").trim();
-      if(!t) return toast("Sin tags","Este item no tiene tags.");
-      try{await navigator.clipboard.writeText(t); toast("Copiado","Tags copiados.");}
-      catch(_){toast("Copiá manual",t);}
-    }
-    async function del(row){
-      const client=sb(); if(!client) return;
-      const id=pick(row,["id","gallery_id"]); if(!id) return toast("Error","Item sin id");
-      if(!confirm("¿Eliminar este item de galería?")) return;
-      let res=await client.from(TABLE).delete().eq("id",id);
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).delete().eq("gallery_id",id);
-      if(res.error){err("del",res.error); return toast("Error",res.error.message||"No se pudo eliminar");}
-      toast("OK","Item eliminado"); load(r);
+
+    d.tbody.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => deleteRow(btn.dataset.delete));
+    });
+  }
+
+  async function fetchRows() {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no está listo.");
+    const { data, error } = await sb
+      .from(TABLE)
+      .select("id,type,name,tags,image_path,image_url,target,sort_order,created_at,updated_at")
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    S.rows = Array.isArray(data) ? data : [];
+  }
+
+  async function refresh() {
+    if (S.loading) return;
+    S.loading = true;
+    try {
+      await fetchRows();
+      render();
+      S.didLoadOnce = true;
+    } catch (e) {
+      console.warn(e);
+      toast("Galería", e.message || String(e), 5200);
+    } finally {
+      S.loading = false;
     }
   }
-  async function save(r){
-    const client=sb(); if(!client) return;
-    const id=(r.id?.value||"").trim();
-    const name=(r.name?.value||"").trim();
-    const type=(r.type?.value||"image").trim().toLowerCase();
-    const tags=(r.tags?.value||"").trim();
-    const file=r.file?.files && r.file.files[0];
-    if(!name && !file) return toast("Falta info","Poné un nombre o subí un archivo.");
-    let url=(r.previewImg?.src||"").trim();
-    let path=null;
-    if(file){
-      try{const up=await upload(client,file,(type==="video")?"videos":"images"); url=up.publicUrl; path=up.path;}
-      catch(e){err("upload",e); return toast("Error",e.message||"No se pudo subir");}
+
+  async function uploadFile(file, type) {
+    const sb = getSB();
+    const ext = (file.name.match(/\.([a-z0-9]+)$/i)?.[1] || "jpg").toLowerCase();
+    const base = slugify(file.name.replace(/\.[^.]+$/, ""));
+    const path = `${type}/${base}-${Date.now()}.${ext}`;
+
+    let bucket = BUCKET;
+    let res = await sb.storage.from(bucket).upload(path, file, { cacheControl: "3600", upsert: false });
+    if (res.error) {
+      bucket = FALLBACK_BUCKET;
+      res = await sb.storage.from(bucket).upload(`gallery-img/${path}`, file, { cacheControl: "3600", upsert: false });
+      if (res.error) throw res.error;
+      const publicUrl = sb.storage.from(bucket).getPublicUrl(`gallery-img/${path}`)?.data?.publicUrl || "";
+      return { image_path: `gallery-img/${path}`, image_url: publicUrl };
     }
-    const snake={name,type,tags,url,bucket:BUCKET,path,updated_at:new Date().toISOString()};
-    const camel={name,type,tags,url,bucket:BUCKET,storagePath:path,updated_at:new Date().toISOString()};
-    if(id){
-      let res=await client.from(TABLE).update(snake).eq("id",id).select("*").maybeSingle();
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).update(camel).eq("gallery_id",id).select("*").maybeSingle();
-      if(res.error){err("save update",res.error); return toast("Error",res.error.message||"No se pudo actualizar");}
-      toast("OK","Item actualizado");
-    } else {
-      let res=await client.from(TABLE).insert({...snake,created_at:new Date().toISOString()}).select("*").maybeSingle();
-      if(res.error&&hasSchemaErr(res.error)) res=await client.from(TABLE).insert({...camel,created_at:new Date().toISOString()}).select("*").maybeSingle();
-      if(res.error){err("save insert",res.error); return toast("Error",res.error.message||"No se pudo crear");}
-      toast("OK","Item creado");
+
+    const publicUrl = sb.storage.from(bucket).getPublicUrl(path)?.data?.publicUrl || "";
+    return { image_path: path, image_url: publicUrl };
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    const d = dom();
+    const sb = getSB();
+    if (!sb) return toast("Supabase", "No está listo.");
+
+    const id = clean(d.id?.value || "");
+    const type = clean(d.type?.value || "cocteles") || "cocteles";
+    const tags = parseTags(d.tags?.value || "");
+    const file = d.file?.files?.[0] || null;
+    const current = id ? S.rows.find((x) => x.id === id) : null;
+
+    let media = current ? { image_path: current.image_path, image_url: current.image_url } : { image_path: "", image_url: "" };
+    if (file) media = await uploadFile(file, type);
+
+    if (!media.image_path) {
+      toast("Galería", "Seleccioná una imagen para crear el item.");
+      return;
     }
-    closeM(r); clear(r); load(r);
+
+    const fallbackName = file ? file.name.replace(/\.[^.]+$/, "") : current?.name || "Galería";
+    const payload = {
+      type,
+      name: clean(d.name?.value || fallbackName) || fallbackName,
+      tags,
+      image_path: media.image_path,
+      image_url: media.image_url || null,
+      target: "home",
+    };
+
+    try {
+      if (id) {
+        const { error } = await sb.from(TABLE).update(payload).eq("id", id);
+        if (error) throw error;
+        toast("Galería", "Item actualizado.");
+      } else {
+        const { error } = await sb.from(TABLE).insert(payload);
+        if (error) throw error;
+        toast("Galería", "Item creado.");
+      }
+      closeModal();
+      await refresh();
+    } catch (err) {
+      console.warn(err);
+      toast("Error", err.message || String(err), 5200);
+    }
   }
-  function wire(r){
-    r.btnRefresh.addEventListener("click",()=>load(r));
-    r.btnNew.addEventListener("click",()=>{clear(r);openM(r);});
-    r.btnClose?.addEventListener("click",()=>closeM(r));
-    r.btnReset?.addEventListener("click",()=>clear(r));
-    r.file?.addEventListener("change",()=>{const f=r.file.files&&r.file.files[0]; if(!f) return; const u=URL.createObjectURL(f); if(r.previewImg) r.previewImg.src=u;});
-    r.form.addEventListener("submit",(e)=>{e.preventDefault();save(r);});
-    window.addEventListener("keydown",(e)=>{if(e.key==="Escape" && !r.modal.hidden) closeM(r);});
-    r.modal.addEventListener("click",(e)=>{const t=e.target; if(t && t.getAttribute && t.getAttribute("data-close")==="true") closeM(r);});
+
+  async function deleteRow(id) {
+    const sb = getSB();
+    if (!id || !sb) return;
+    if (!confirm("¿Eliminar este item de galería?")) return;
+    try {
+      const { error } = await sb.from(TABLE).delete().eq("id", id);
+      if (error) throw error;
+      toast("Galería", "Item eliminado.");
+      await refresh();
+    } catch (err) {
+      console.warn(err);
+      toast("Error", err.message || String(err), 5200);
+    }
   }
-  function init(){
-    const r=refs(); log("boot",{VERSION,TABLE,BUCKET});
-    if(!r.tab) return;
-    const missing=[["#newGalleryBtn",r.btnNew],["#refreshGalleryBtn",r.btnRefresh],["#galleryTbody",r.tbody],["#ecnGalleryModal",r.modal],["#ecnGalleryForm",r.form]].filter(([,el])=>!el).map(([s])=>s);
-    if(missing.length){warn("Faltan nodos en DOM:",missing); return;}
-    wire(r); load(r);
+
+  function bindOnce() {
+    if (S.didBind) return;
+    S.didBind = true;
+    const d = dom();
+    if (!d.tbody) return;
+
+    d.refreshBtn?.addEventListener("click", refresh);
+    d.newBtn?.addEventListener("click", () => openModal(null));
+    d.closeBtn?.addEventListener("click", closeModal);
+    d.modal?.querySelector(".modalBackdrop")?.addEventListener("click", closeModal);
+    d.form?.addEventListener("submit", save);
+    d.resetBtn?.addEventListener("click", () => openModal(S.editing));
+    d.file?.addEventListener("change", () => {
+      const f = d.file.files?.[0];
+      if (!f || !d.previewImg) return;
+      d.previewImg.src = URL.createObjectURL(f);
+      if (d.name && !d.name.value) d.name.value = f.name.replace(/\.[^.]+$/, "");
+    });
   }
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
+
+  async function ensureLoaded(force) {
+    bindOnce();
+    const panel = dom().panel;
+    if (!panel || panel.hidden) return;
+    if (S.didLoadOnce && !force) return render();
+    await refresh();
+  }
+
+  function boot() {
+    if (S.didBoot) return;
+    S.didBoot = true;
+    console.log("[admin-gallery] boot", { VERSION, TABLE });
+    bindOnce();
+    ensureLoaded(false);
+  }
+
+  function onTab(e) {
+    if (e?.detail?.tab === "gallery") ensureLoaded(true);
+  }
+
+  if (window.APP && APP.__adminReady) boot();
+  else {
+    window.addEventListener("admin:ready", boot, { once: true });
+    document.addEventListener("admin:ready", boot, { once: true });
+  }
+  window.addEventListener("admin:tab", onTab);
+  document.addEventListener("admin:tab", onTab);
 })();
