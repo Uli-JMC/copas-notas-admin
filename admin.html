@@ -312,8 +312,26 @@
                             <option value="true">Publicado</option>
                           </select>
                         </div>
-                        <div class="eventPublishNote">
-                          Antes de publicar, revisá que tenga fecha, cupos y medios asignados.
+                        <div class="eventPublishNote eventPublishNote--phase3">
+                          <div class="readinessMiniStatus" id="eventReadinessMiniStatus">Validación pendiente</div>
+                          <div class="readinessMiniText" id="eventReadinessMiniText">El checklist se actualiza al seleccionar o editar un evento.</div>
+                        </div>
+                      </div>
+
+                      <div class="eventReadinessCard" id="eventReadinessCard" aria-live="polite">
+                        <div class="eventReadinessHead">
+                          <div>
+                            <div class="kicker">CHECKLIST</div>
+                            <h5>Estado para publicar</h5>
+                          </div>
+                          <span class="eventReadinessBadge" id="eventReadinessBadge">Pendiente</span>
+                        </div>
+                        <ul class="eventReadinessList" id="eventReadinessList">
+                          <li>Seleccioná un evento para validar.</li>
+                        </ul>
+                        <div class="eventReadinessActions">
+                          <button class="btn btn--ghost" id="validateEventBtn" type="button">Validar ahora</button>
+                          <span class="eventSaveStatus" id="eventSaveStatus">Sin cambios</span>
                         </div>
                       </div>
                     </section>

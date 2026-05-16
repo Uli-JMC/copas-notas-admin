@@ -14,7 +14,7 @@
   if (window.__ecnAdminMounted === true) return;
   window.__ecnAdminMounted = true;
 
-  const VERSION = "2026-05-16.admin.events-phase1.1";
+  const VERSION = "2026-05-16.admin.events-phase3.1";
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -24,6 +24,7 @@
 
   const EVENTS_TABLE = "events";
   const VIEW_BINDINGS_LATEST = "v_media_bindings_latest";
+  const EVENT_DATES_TABLE = "event_dates";
   const EVENT_SLOTS_READONLY = ["desktop_event", "mobile_event"];
 
   const MONTHS = [
@@ -39,6 +40,9 @@
     query: "",
     events: [],
     selectedEventId: null,
+    selectedEventDates: [],
+    selectedEventMediaMap: {},
+    lastReadiness: null,
   };
 
   function escapeHtml(str) {
@@ -247,6 +251,108 @@
     return map;
   }
 
+
+  async function fetchEventDatesForEvent(eventId) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no existe.");
+    const eid = safeStr(eventId || "").trim();
+    if (!eid) return [];
+
+    const { data, error } = await sb
+      .from(EVENT_DATES_TABLE)
+      .select("id, label, start_at, ends_at, seats_total, seats_available, created_at")
+      .eq("event_id", eid)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  }
+
+  function setSaveStatus(text, mode) {
+    const el = $("#eventSaveStatus");
+    if (!el) return;
+    el.textContent = text || "Sin cambios";
+    el.dataset.mode = mode || "neutral";
+  }
+
+  function firstEventDateText() {
+    const d = (state.selectedEventDates || [])[0];
+    if (!d) return "";
+    return cleanSpaces(d.label || d.start_at || "");
+  }
+
+  function calculateEventReadiness(payloadOverride) {
+    const payload = payloadOverride || readEditorPayload();
+    const desktop = cleanSpaces($("#evBannerDesktopUrl")?.value || state.selectedEventMediaMap?.desktop_event || "");
+    const mobile = cleanSpaces($("#evBannerMobileUrl")?.value || state.selectedEventMediaMap?.mobile_event || "");
+    const dates = Array.isArray(state.selectedEventDates) ? state.selectedEventDates : [];
+    const hasDateRecord = dates.length > 0;
+    const firstDate = dates[0] || null;
+    const seatsOk = !firstDate || (Number(firstDate.seats_total || 0) >= 0 && Number(firstDate.seats_available || 0) >= 0);
+
+    const checks = [
+      { key: "title", label: "Título definido", ok: !!cleanSpaces(payload.title || "") },
+      { key: "typeMonth", label: "Tipo y mes definidos", ok: !!cleanSpaces(payload.type || "") && !!cleanSpaces(payload.month_key || "") },
+      { key: "description", label: "Descripción agregada", ok: !!cleanSpaces(payload.description || "") },
+      { key: "place", label: "Lugar definido", ok: !!cleanSpaces(payload.location || "") },
+      { key: "schedule", label: hasDateRecord ? `Fecha conectada: ${firstEventDateText() || "configurada"}` : "Horario visible definido", ok: hasDateRecord || !!cleanSpaces(payload.time_range || "") },
+      { key: "seats", label: hasDateRecord ? "Cupos configurados" : "Fecha/cupos en módulo Fechas pendiente", ok: hasDateRecord && seatsOk },
+      { key: "desktop", label: "Banner desktop asignado", ok: !!desktop },
+      { key: "mobile", label: "Banner mobile asignado", ok: !!mobile },
+    ];
+
+    const missing = checks.filter((x) => !x.ok);
+    return {
+      ok: missing.length === 0,
+      checks,
+      missing,
+      score: checks.length - missing.length,
+      total: checks.length,
+    };
+  }
+
+  function renderEventReadiness(readiness) {
+    const r = readiness || calculateEventReadiness();
+    state.lastReadiness = r;
+
+    const badge = $("#eventReadinessBadge");
+    const list = $("#eventReadinessList");
+    const miniStatus = $("#eventReadinessMiniStatus");
+    const miniText = $("#eventReadinessMiniText");
+
+    if (badge) {
+      badge.textContent = r.ok ? "Listo para publicar" : `${r.score}/${r.total} listo`;
+      badge.dataset.ready = r.ok ? "true" : "false";
+    }
+
+    if (miniStatus) {
+      miniStatus.textContent = r.ok ? "Listo para publicar" : "Publicación incompleta";
+      miniStatus.dataset.ready = r.ok ? "true" : "false";
+    }
+
+    if (miniText) {
+      miniText.textContent = r.ok
+        ? "El evento cumple con los puntos principales."
+        : `Faltan ${r.missing.length} punto(s) antes de publicar.`;
+    }
+
+    if (list) {
+      list.innerHTML = r.checks.map((item) => `
+        <li class="${item.ok ? "isOk" : "isMissing"}">
+          <span>${item.ok ? "✓" : "!"}</span>
+          <strong>${escapeHtml(item.label)}</strong>
+        </li>
+      `).join("");
+    }
+
+    return r;
+  }
+
+  function refreshReadinessSoon() {
+    try { renderEventReadiness(); } catch (_) {}
+  }
+
   function renderEventList() {
     const list = $("#eventList");
     if (!list) return;
@@ -374,6 +480,7 @@
       mobilePill.textContent = mobile ? "Mobile asignado" : "Mobile pendiente";
       mobilePill.classList.toggle("isReady", !!mobile);
     }
+    refreshReadinessSoon();
   }
 
   function openCreateEventModal() {
@@ -429,6 +536,9 @@
 
     $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
     $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
+    state.selectedEventMediaMap = {};
+    state.selectedEventDates = [];
+    setSaveStatus("Sin cambios", "neutral");
     updateEventStatusUi();
     updateEventMediaSummary();
   }
@@ -443,12 +553,22 @@
     renderEventList();
 
     try {
-      const map = await fetchEventSlotUrlsLatest(ev.id);
+      const [map, dates] = await Promise.all([
+        fetchEventSlotUrlsLatest(ev.id),
+        fetchEventDatesForEvent(ev.id).catch((err) => {
+          console.warn("[admin] dates readiness", err);
+          return [];
+        }),
+      ]);
+      state.selectedEventMediaMap = map || {};
+      state.selectedEventDates = dates || [];
       $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = map.desktop_event || "");
       $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = map.mobile_event || "");
       updateEventMediaSummary();
+      renderEventReadiness();
     } catch (e) {
       console.warn("[admin] media readonly", e);
+      renderEventReadiness();
     }
   }
 
@@ -481,11 +601,21 @@
     state.didBindEditor = true;
 
     ensureMonthSelectOptions();
-    $("#evDesc")?.addEventListener("input", setDescCount);
-    $("#evActive")?.addEventListener("change", updateEventStatusUi);
-    $("#evDateUi")?.addEventListener("change", syncMonthFromDateUi);
-    $("#evStartTimeUi")?.addEventListener("change", syncScheduleFromTimeUi);
-    $("#evEndTimeUi")?.addEventListener("change", syncScheduleFromTimeUi);
+    $("#evDesc")?.addEventListener("input", () => { setDescCount(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
+    $("#evActive")?.addEventListener("change", () => { updateEventStatusUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
+    ["#evTitle", "#evType", "#evMonth", "#evPlace", "#evSchedule", "#evDurationHours", "#evPriceAmount", "#evCurrency", "#evSlug", "#evBadge", "#evAlt"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener("input", () => { setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
+      el.addEventListener("change", () => { setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
+    });
+    $("#validateEventBtn")?.addEventListener("click", () => {
+      const r = renderEventReadiness();
+      toast(r.ok ? "Validación OK" : "Faltan datos", r.ok ? "El evento está listo para publicarse." : `Faltan ${r.missing.length} punto(s) para publicar.`, 2600);
+    });
+    $("#evDateUi")?.addEventListener("change", () => { syncMonthFromDateUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
+    $("#evStartTimeUi")?.addEventListener("change", () => { syncScheduleFromTimeUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
+    $("#evEndTimeUi")?.addEventListener("change", () => { syncScheduleFromTimeUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
     $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
     $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
 
@@ -565,16 +695,24 @@
       if (!id) return toast("Evento", "Seleccioná o creá un evento primero.");
 
       try {
-        toast("Guardando", "Actualizando evento…", 900);
         const payload = readEditorPayload();
+        const readiness = renderEventReadiness(calculateEventReadiness(payload));
+        if (payload.active && !readiness.ok) {
+          toast("No se puede publicar", `Faltan ${readiness.missing.length} punto(s) del checklist. Guardá como borrador o completá los datos.`, 5200);
+          return;
+        }
+        setSaveStatus("Guardando…", "saving");
+        toast("Guardando", "Actualizando evento…", 900);
         const updated = await updateEvent(id, payload);
         state.events = state.events.map((x) => (x.id === id ? updated : x));
         state.selectedEventId = id;
         renderEventList();
         await openEvent(id);
-        toast("Guardado", "Evento actualizado.", 1800);
+        setSaveStatus("Sincronizado", "saved");
+        toast("Guardado", payload.active ? "Evento publicado y actualizado." : "Evento guardado como borrador/actualizado.", 1800);
       } catch (err) {
         console.warn(err);
+        setSaveStatus("Error al guardar", "error");
         toast("Error", looksLikeRLSError(err) ? "RLS bloquea editar eventos." : (err.message || String(err)), 5200);
       }
     });
