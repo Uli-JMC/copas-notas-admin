@@ -1,6 +1,6 @@
 "use strict";
 (function(){
-  const VERSION="2026-02-26.promos.ready.lazy.1";
+  const VERSION="2026-02-25.promos.supabase.1";
   const TABLE="promos";
   const $=(s,r=document)=>r.querySelector(s);
   const log=(...a)=>{try{console.log("[admin-promos]",...a)}catch(_){}};
@@ -143,25 +143,12 @@ const kind = (rawKind === "MODAL" || rawKind === "CARD" || rawKind === "TOAST") 
     window.addEventListener("keydown",(e)=>{if(e.key==="Escape" && !r.modal.hidden) closeM(r);});
     r.modal.addEventListener("click",(e)=>{const t=e.target; if(t && t.getAttribute && t.getAttribute("data-close")==="true") closeM(r);});
   }
-  let didInit=false;
   function init(){
-    if(didInit) return;
-    didInit=true;
     const r=refs(); log("boot",{VERSION,TABLE});
     if(!r.tab) return;
-    const missing=[["#newPromoBtn",r.btnNew],["#refreshPromosBtn",r.btnRefresh],["#promosTbody",r.tbody],["#ecnPromoModal",r.modal],["#ecnPromoForm",r.form],["#ecnPromoId",r.id]].filter(([,el])=>!el).map(([s])=>s);
+    const missing=[["#newPromoBtn",r.btnNew],["#refreshPromosBtn",r.btnRefresh],["#promosTbody",r.tbody],["#ecnPromoModal",r.modal],["#ecnPromoForm",r.form]].filter(([,el])=>!el).map(([s])=>s);
     if(missing.length){warn("Faltan nodos en DOM:",missing); return;}
-    wire(r);
-    if(r.tab.hidden===false) load(r);
-    const onTab=(e)=>{if(e?.detail?.tab==="promos") load(r);};
-    window.addEventListener("admin:tab",onTab);
-    document.addEventListener("admin:tab",onTab);
+    wire(r); load(r);
   }
-  function bootWhenReady(){
-    if(window.APP&&APP.__adminReady) return init();
-    const once=()=>init();
-    window.addEventListener("admin:ready",once,{once:true});
-    document.addEventListener("admin:ready",once,{once:true});
-  }
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bootWhenReady,{once:true}); else bootWhenReady();
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
 })();

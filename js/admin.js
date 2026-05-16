@@ -217,9 +217,20 @@
     state.events = Array.isArray(data) ? data.map(mapEventRow) : [];
   }
 
+  function eventRequiredDefaults() {
+    return {
+      type: "Cata de vino",
+      month_key: "ENERO",
+    };
+  }
+
   async function insertEvent(payload) {
     const sb = getSB();
-    const { data, error } = await sb.from(EVENTS_TABLE).insert(payload).select("*").single();
+    const safePayload = {
+      ...eventRequiredDefaults(),
+      ...(payload || {}),
+    };
+    const { data, error } = await sb.from(EVENTS_TABLE).insert(safePayload).select("*").single();
     if (error) throw error;
     return mapEventRow(data);
   }
@@ -367,8 +378,12 @@
   }
 
   function readEditorPayload() {
+    const current = (state.events || []).find((x) => x.id === state.selectedEventId) || {};
+    const defaults = eventRequiredDefaults();
     const payload = {
       title: cleanSpaces($("#evTitle")?.value || ""),
+      type: cleanSpaces(current.type || defaults.type),
+      month_key: cleanSpaces(current.month_key || defaults.month_key),
       description: cleanSpaces($("#evDesc")?.value || ""),
       location: cleanSpaces($("#evPlace")?.value || ""),
       time_range: cleanSpaces($("#evSchedule")?.value || ""),
@@ -408,6 +423,8 @@
 
       const draft = {
         title: "Nuevo evento",
+        type: "Cata de vino",
+        month_key: "ENERO",
         description: "",
         location: "",
         time_range: "",
