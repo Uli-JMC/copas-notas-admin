@@ -39,7 +39,7 @@
   if (window.__ecnMediaMounted === true) return;
   window.__ecnMediaMounted = true;
 
-  const VERSION = "2026-02-22.media.clean.1";
+  const VERSION = "2026-05-16.media.assigned-actions.1";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
@@ -120,17 +120,20 @@
 
   // Slots
   const EVENT_SLOTS = [
-    { value: "slide_img", label: "Home Slider · Imagen (slide_img)" },
-    { value: "slide_video", label: "Home Slider · Video (slide_video)" },
-    { value: "desktop_event", label: "Evento · Desktop (desktop_event)" },
-    { value: "mobile_event", label: "Evento · Mobile (mobile_event)" },
-    { value: "event_more", label: "Evento · Ver más (event_more)" },
+    { value: "slide_img", label: "Home Slider · Imagen (slide_img)", help: "Imagen principal del slider público." },
+    { value: "slide_video", label: "Home Slider · Video (slide_video)", help: "Video del slider público." },
+    { value: "desktop_event", label: "Evento · Desktop (desktop_event)", help: "Banner grande para escritorio en la página del evento." },
+    { value: "mobile_event", label: "Evento · Mobile (mobile_event)", help: "Banner vertical/adaptado para celular." },
+    { value: "event_more", label: "Evento · Ver más (event_more)", help: "Imagen secundaria para la sección Ver más." },
   ];
 
   const MENU_SLOTS = [
-    { value: "icon", label: "Menú · Icono (icon)" },
-    { value: "image", label: "Menú · Imagen (image)" },
+    { value: "icon", label: "Menú · Icono (icon)", help: "Icono pequeño del ítem de menú." },
+    { value: "image", label: "Menú · Imagen (image)", help: "Imagen principal del ítem de menú." },
   ];
+
+  const SLOT_LABELS = Object.fromEntries([...EVENT_SLOTS, ...MENU_SLOTS].map((s) => [s.value, s.label]));
+  const SLOT_HELP = Object.fromEntries([...EVENT_SLOTS, ...MENU_SLOTS].map((s) => [s.value, s.help || s.label]));
 
   // ---------------------------
   // DOM (solo se usa cuando el tab media existe)
@@ -325,13 +328,23 @@
   async function fetchBindingsLatest(sb, { scope, scope_id }) {
     const { data, error } = await sb
       .from(VIEW_LATEST)
-      .select("slot, public_url, path, media_id, binding_updated_at, media_updated_at")
+      .select("slot, binding_id, public_url, path, media_id, folder, name, mime, bytes, binding_updated_at, media_updated_at")
       .eq("scope", scope)
       .eq("scope_id", String(scope_id))
       .order("slot", { ascending: true });
 
     if (error) throw error;
     return Array.isArray(data) ? data : [];
+  }
+
+  async function deleteBinding(sb, { scope, scope_id, slot }) {
+    const { error } = await sb
+      .from(BINDINGS_TABLE)
+      .delete()
+      .eq("scope", scope)
+      .eq("scope_id", String(scope_id))
+      .eq("slot", slot);
+    if (error) throw error;
   }
 
   async function fetchEvents(sb) {
@@ -600,6 +613,23 @@
     }
   }
 
+  function setPreviewFromAssigned(dom, r) {
+    const asset = {
+      id: r.media_id,
+      folder: r.folder || "",
+      name: r.name || r.slot || "Asignado",
+      path: r.path || "",
+      public_url: r.public_url || r.path || "",
+      mime: r.mime || "",
+      bytes: r.bytes || null,
+    };
+    S.selected = asset;
+    if (dom.urlEl) dom.urlEl.value = clean(asset.public_url || "");
+    setPreview(dom, asset);
+    setNote(dom.noteEl, `Vista previa: ${SLOT_LABELS[r.slot] || r.slot}.`);
+    try { dom.previewWrap?.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) {}
+  }
+
   function renderAssigned(dom, rows) {
     if (!dom.assignedList) return;
     dom.assignedList.innerHTML = "";
@@ -612,30 +642,59 @@
       return;
     }
 
+    const frag = document.createDocumentFragment();
     rows.forEach((r) => {
-      const row = document.createElement("div");
-      row.className = "item";
+      const row = document.createElement("article");
+      row.className = "mediaAssignedItem";
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.setAttribute("aria-label", `Ver preview de ${SLOT_LABELS[r.slot] || r.slot}`);
+      row.dataset.slot = clean(r.slot || "");
+
       const u = clean(r.public_url || r.path || "");
       const updated = formatDate(r.binding_updated_at || r.media_updated_at);
+      const slotLabel = SLOT_LABELS[r.slot] || clean(r.slot || "Slot");
+      const slotHelp = SLOT_HELP[r.slot] || "Recurso asignado.";
+      const filename = clean(r.name || (u.split("/").pop() || "Medio asignado"));
+      const isVideo = /video\//i.test(clean(r.mime || "")) || /\.(mp4|webm|mov)$/i.test(u);
 
       row.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
-          <div style="min-width:0;">
-            <div style="font-weight:900; letter-spacing:.12em; text-transform:uppercase;">
-              ${clean(r.slot)}
-            </div>
-            <div style="opacity:.75; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${u || "—"}
-            </div>
-            <div style="opacity:.55; font-size:12px;">
-              actualizado: ${updated}
-            </div>
+        <div class="mediaAssignedThumb" aria-hidden="true">
+          ${u && !isVideo ? `<img src="${u}" alt="">` : `<span>${isVideo ? "▶" : "IMG"}</span>`}
+        </div>
+        <div class="mediaAssignedBody">
+          <div class="mediaAssignedTop">
+            <strong>${escapeHtml(slotLabel)}</strong>
+            <span>${escapeHtml(clean(r.slot || ""))}</span>
           </div>
-          <button class="btn sm" type="button" data-copy="${u}">Copiar</button>
+          <p class="mediaAssignedHelp">${escapeHtml(slotHelp)}</p>
+          <p class="mediaAssignedName">${escapeHtml(filename)}</p>
+          <p class="mediaAssignedUrl">${escapeHtml(u || "—")}</p>
+          <p class="mediaAssignedDate">Actualizado: ${escapeHtml(updated)}</p>
+        </div>
+        <div class="mediaAssignedActions">
+          <button class="btn sm" type="button" data-preview="1">Preview</button>
+          <button class="btn sm" type="button" data-copy="${escapeHtml(u)}">Copiar</button>
+          <button class="btn sm btn--danger" type="button" data-remove="1">Quitar</button>
         </div>
       `;
 
-      row.querySelector("[data-copy]")?.addEventListener("click", () => {
+      const preview = () => setPreviewFromAssigned(dom, r);
+      row.addEventListener("click", preview);
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          preview();
+        }
+      });
+
+      row.querySelector("[data-preview]")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        preview();
+      });
+
+      row.querySelector("[data-copy]")?.addEventListener("click", (e) => {
+        e.stopPropagation();
         const text = clean(u);
         if (!text) return;
         navigator.clipboard.writeText(text).then(
@@ -644,8 +703,15 @@
         );
       });
 
-      dom.assignedList.appendChild(row);
+      row.querySelector("[data-remove]")?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await removeAssigned(dom, r);
+      });
+
+      frag.appendChild(row);
     });
+
+    dom.assignedList.appendChild(frag);
   }
 
   function getScopeAndTarget(dom) {
@@ -671,6 +737,36 @@
     try {
       const rows = await fetchBindingsLatest(sb, { scope, scope_id });
       renderAssigned(dom, rows);
+    } catch (e) {
+      console.warn(e);
+      toast("Error", e.message || String(e), 4200);
+    }
+  }
+
+  async function removeAssigned(dom, row) {
+    const { scope, scope_id } = getScopeAndTarget(dom);
+    const slot = clean(row?.slot || "");
+    if (!scope_id || !slot) return toast("Asignación", "No pude identificar la asignación.", 2600);
+
+    const ok = confirm(`¿Quitar la asignación ${SLOT_LABELS[slot] || slot}?
+
+Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
+    if (!ok) return;
+
+    const sb = getSB();
+    if (!sb) return toast("Supabase", "No está listo.", 3200);
+    const session = await ensureSession(sb);
+    if (!session) return;
+
+    try {
+      await deleteBinding(sb, { scope, scope_id, slot });
+      if (S.selected?.id && String(S.selected.id) === String(row.media_id)) {
+        S.selected = null;
+        if (dom.urlEl) dom.urlEl.value = "";
+        setPreview(dom, null);
+      }
+      toast("Asignación", "Se quitó el slot. El archivo sigue disponible en Medios.", 2200);
+      await viewAssigned(dom);
     } catch (e) {
       console.warn(e);
       toast("Error", e.message || String(e), 4200);
