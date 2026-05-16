@@ -39,7 +39,7 @@
   if (window.__ecnMediaMounted === true) return;
   window.__ecnMediaMounted = true;
 
-  const VERSION = "2026-05-16.media.folder-picker.existing-assets.1.0";
+  const VERSION = "2026-05-16.media.ux-phase2.workflow.1.0";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
@@ -224,6 +224,30 @@
     assetFilter: "",
   };
 
+
+  // ---------------------------
+  // UX Fase 2: flujo Subir / Biblioteca / Asignar
+  // ---------------------------
+  function setMediaMode(mode) {
+    const safeMode = ["upload", "library", "assign"].includes(mode) ? mode : "library";
+    const panel = document.getElementById("tab-media");
+    if (panel) panel.dataset.mediaMode = safeMode;
+
+    document.querySelectorAll("[data-media-mode]").forEach((btn) => {
+      const on = btn.dataset.mediaMode === safeMode;
+      btn.classList.toggle("isActive", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  function bindMediaModeButtons() {
+    document.querySelectorAll("[data-media-mode]").forEach((btn) => {
+      if (btn.dataset.ecnModeWired === "1") return;
+      btn.dataset.ecnModeWired = "1";
+      btn.addEventListener("click", () => setMediaMode(btn.dataset.mediaMode || "library"));
+    });
+  }
+
   function withLock(fn) {
     return async function (...args) {
       if (S.loading) return;
@@ -348,6 +372,7 @@
         const select = document.getElementById("mediaFolderSelect");
         if (select) select.value = "";
         await refreshList(dom, { silent: false });
+        setMediaMode("library");
       });
     }
 
@@ -600,6 +625,7 @@
         if (urlEl) urlEl.value = clean(a.public_url || "");
         setPreview(dom, a);
         setNote(dom.noteEl, "Seleccionado. Podés copiar URL o asignar.");
+        setMediaMode("assign");
         renderList(dom); // refresca active class sin recargar data
       });
 
@@ -773,6 +799,7 @@
     if (dom.urlEl) dom.urlEl.value = clean(asset.public_url || "");
     setPreview(dom, asset);
     setNote(dom.noteEl, `Vista previa: ${SLOT_LABELS[r.slot] || r.slot}.`);
+    setMediaMode("assign");
     try { dom.previewWrap?.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (_) {}
   }
 
@@ -879,6 +906,8 @@
     if (!sb) return toast("Supabase", "No está listo.", 3200);
     const session = await ensureSession(sb);
     if (!session) return;
+
+    setMediaMode("assign");
 
     try {
       const rows = await fetchBindingsLatest(sb, { scope, scope_id });
@@ -988,6 +1017,9 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     // si el HTML no está completo, salimos sin romper
     if (!dom.form || !dom.fileEl || !dom.bucketEl || !dom.folderEl || !dom.urlEl || !dom.listEl) return;
 
+    bindMediaModeButtons();
+    setMediaMode("library");
+
     // permitir pegar URL
     try { dom.urlEl.readOnly = false; } catch (_) {}
 
@@ -1085,6 +1117,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
         dom.urlEl.value = clean(asset.public_url || "");
         setPreview(dom, asset);
         setNote(dom.noteEl, "Subido. Ahora podés asignar.");
+        setMediaMode("assign");
         await refreshFolders(dom);
         await refreshList(dom, { silent: true });
       } catch (e2) {
@@ -1095,7 +1128,16 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     });
 
     // Asignación
-    dom.scopeTypeEl?.addEventListener("change", () => syncScopeUI(dom));
+    dom.scopeTypeEl?.addEventListener("change", async () => {
+      syncScopeUI(dom);
+      if (dom.assignedList) dom.assignedList.innerHTML = "";
+    });
+    dom.eventSel?.addEventListener("change", () => {
+      if (clean(dom.eventSel?.value || "")) viewAssigned(dom);
+    });
+    dom.menuSel?.addEventListener("change", () => {
+      if (clean(dom.menuSel?.value || "")) viewAssigned(dom);
+    });
     dom.btnAssign?.addEventListener("click", () => assignNow(dom));
     dom.btnViewAssigned?.addEventListener("click", () => viewAssigned(dom));
 

@@ -419,31 +419,152 @@
               </div>
             </section>
 
-            <section class="panel" id="tab-media" role="tabpanel" hidden>
-              <div class="grid2">
-                <div class="card">
-                  <div class="cardHead"><h3 class="h3">Medios</h3><div class="mini">Subí imágenes/videos, generá URL pública y asigná slots.</div></div>
+            <section class="panel mediaPanelPro" id="tab-media" role="tabpanel" hidden data-media-mode="library">
+              <div class="mediaHeroPro">
+                <div>
+                  <div class="kicker">BIBLIOTECA VISUAL</div>
+                  <h3 class="h3">Medios</h3>
+                  <div class="mini">Subí, reutilizá y asigná imágenes o videos sin perder el contexto del evento.</div>
+                </div>
+                <div class="mediaModeTabs" aria-label="Flujo de medios">
+                  <button class="mediaModeBtn" type="button" data-media-mode="upload">1. Subir</button>
+                  <button class="mediaModeBtn" type="button" data-media-mode="library">2. Biblioteca</button>
+                  <button class="mediaModeBtn" type="button" data-media-mode="assign">3. Asignar</button>
+                </div>
+              </div>
+
+              <div class="mediaWorkflowGrid">
+                <!-- SUBIR -->
+                <section class="card mediaPane mediaPaneUpload" data-media-pane="upload" aria-label="Subir nuevo medio">
+                  <div class="cardHead">
+                    <h3 class="h3">Subir nuevo</h3>
+                    <div class="mini">Elegí bucket, folder y archivo. Al subir queda listo para asignar.</div>
+                  </div>
+
                   <form class="form" id="mediaForm" data-max-mb="25">
                     <input type="hidden" id="mediaId" />
                     <div class="formGrid">
-                      <div class="field"><label class="label" for="mediaBucket">Bucket</label><select class="input" id="mediaBucket"><option value="media">media (imágenes)</option><option value="video">video (videos)</option></select></div>
-                      <div class="field"><label class="label" for="mediaFolder">Folder</label><input class="input" id="mediaFolder" type="text" placeholder="events-img | promos-img | menu-img | misc-img" /></div>
-                      <div class="field"><label class="label" for="mediaName">Nombre</label><input class="input" id="mediaName" type="text" placeholder="Ej: hero-febrero" /></div>
-                      <div class="field"><label class="label" for="mediaTags">Tags</label><input class="input" id="mediaTags" type="text" placeholder="#vino #maridaje" /></div>
-                      <div class="field field--full"><label class="label" for="mediaFile">Archivo</label><input class="input" id="mediaFile" type="file" /></div>
-                      <div class="field field--full"><label class="label" for="mediaUrl">URL pública</label><input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL..." /></div>
+                      <div class="field">
+                        <label class="label" for="mediaBucket">Bucket</label>
+                        <select class="input" id="mediaBucket">
+                          <option value="media">media (imágenes)</option>
+                          <option value="video">video (videos)</option>
+                        </select>
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaFolder">Folder</label>
+                        <input class="input" id="mediaFolder" type="text" placeholder="events-img | promos-img | menu-img | misc-img" />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaName">Nombre</label>
+                        <input class="input" id="mediaName" type="text" placeholder="Ej: hero-febrero" />
+                      </div>
+
+                      <div class="field">
+                        <label class="label" for="mediaTags">Tags</label>
+                        <input class="input" id="mediaTags" type="text" placeholder="#vino #maridaje" />
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaFile">Archivo</label>
+                        <input class="input" id="mediaFile" type="file" />
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaUrl">URL pública</label>
+                        <input class="input" id="mediaUrl" type="text" placeholder="Se llena al subir o pegá una URL existente..." />
+                      </div>
                     </div>
-                    <div class="formActions" style="justify-content:flex-start;"><button class="btn btn--primary" id="mediaUploadBtn" type="submit">SUBIR</button><button class="btn btn--ghost" id="mediaCopyBtn" type="button">COPIAR URL</button><button class="btn btn--ghost" id="mediaResetBtn" type="button">LIMPIAR</button><button class="btn btn--danger" id="deleteMediaBtn" type="button">ELIMINAR</button></div>
+
+                    <div class="formActions mediaActionsRow">
+                      <button class="btn btn--primary" id="mediaUploadBtn" type="submit">SUBIR</button>
+                      <button class="btn btn--ghost" id="mediaCopyBtn" type="button">COPIAR URL</button>
+                      <button class="btn btn--ghost" id="mediaResetBtn" type="button">LIMPIAR</button>
+                      <button class="btn btn--danger" id="deleteMediaBtn" type="button">ELIMINAR</button>
+                    </div>
                     <div class="note" id="mediaNote" aria-live="polite"></div>
                   </form>
-                  <div class="card" style="margin-top:14px;"><div class="cardHead"><h3 class="h3">Lista</h3><div class="mini">Seleccioná un medio para previsualizar y asignar.</div></div><div class="actions" style="margin-bottom:10px;"><button class="btn btn--ghost" id="mediaRefreshBtn" type="button">Refrescar lista</button></div><div class="list" id="mediaList" aria-label="Lista de medios"></div></div>
-                </div>
-                <div class="card">
-                  <div class="cardHead"><h3 class="h3" id="mediaTitle">Preview</h3><div class="mini">Vista previa del medio seleccionado.</div></div>
-                  <div id="mediaPreviewEmpty" class="muted">No hay medio seleccionado.</div>
-                  <div id="mediaPreview" hidden><div class="preview"><img id="mediaPreviewImg" alt="" /></div><div class="note" id="mediaPreviewMeta"></div></div>
-                  <div class="card" style="margin-top:14px;"><div class="cardHead"><h3 class="h3">Asignar</h3><div class="mini">Asigná el medio a un evento/menú y su slot.</div></div><div class="formGrid"><div class="field"><label class="label" for="mediaScopeType">Tipo</label><select class="input" id="mediaScopeType"><option value="event">Evento</option><option value="menu_item">Menú</option></select></div><div class="field" id="mediaScopeEventWrap"><label class="label" for="mediaEventSelect">Evento</label><select class="input" id="mediaEventSelect"><option value="">Seleccionar evento…</option></select></div><div class="field" id="mediaScopeMenuWrap" hidden><label class="label" for="mediaMenuSelect">Ítem de menú</label><select class="input" id="mediaMenuSelect"><option value="">Seleccionar ítem…</option></select></div><div class="field field--full"><label class="label" for="mediaSlotSelect">Slot</label><select class="input" id="mediaSlotSelect"></select></div></div><div class="formActions" style="justify-content:flex-start;"><button class="btn btn--primary" id="mediaAssignBtn" type="button">ASIGNAR</button><button class="btn btn--ghost" id="mediaViewAssignedBtn" type="button">VER ASIGNADOS</button></div><div class="list" id="mediaAssignedList" aria-label="Asignados"></div></div>
-                </div>
+                </section>
+
+                <!-- BIBLIOTECA -->
+                <section class="card mediaPane mediaPaneLibrary" data-media-pane="library" aria-label="Biblioteca de medios existentes">
+                  <div class="cardHead">
+                    <h3 class="h3">Biblioteca</h3>
+                    <div class="mini">Buscá archivos ya subidos y seleccioná uno para previsualizarlo o asignarlo.</div>
+                  </div>
+                  <div class="mediaLibraryTop">
+                    <button class="btn btn--ghost" id="mediaRefreshBtn" type="button">Refrescar lista</button>
+                    <span class="mediaTinyHint">Tip: usá “Ver todos” para reutilizar archivos de cualquier folder del bucket.</span>
+                  </div>
+                  <div class="list mediaAssetList" id="mediaList" aria-label="Lista de medios"></div>
+                </section>
+
+                <!-- ASIGNAR -->
+                <section class="card mediaPane mediaPaneAssign" data-media-pane="assign" aria-label="Asignar medio seleccionado">
+                  <div class="cardHead">
+                    <h3 class="h3" id="mediaTitle">Preview y asignación</h3>
+                    <div class="mini">Validá el archivo seleccionado y asignalo al lugar correcto.</div>
+                  </div>
+
+                  <div class="mediaPreviewBox">
+                    <div id="mediaPreviewEmpty" class="muted">No hay medio seleccionado. Elegí uno desde Biblioteca o subí uno nuevo.</div>
+                    <div id="mediaPreview" hidden>
+                      <div class="preview"><img id="mediaPreviewImg" alt="" /></div>
+                      <div class="note" id="mediaPreviewMeta"></div>
+                    </div>
+                  </div>
+
+                  <div class="mediaAssignBox">
+                    <div class="cardHead cardHead--compact">
+                      <h3 class="h3">Asignar a</h3>
+                      <div class="mini">No borra archivos; solo cambia el slot asignado.</div>
+                    </div>
+
+                    <div class="formGrid">
+                      <div class="field">
+                        <label class="label" for="mediaScopeType">Tipo</label>
+                        <select class="input" id="mediaScopeType">
+                          <option value="event">Evento</option>
+                          <option value="menu_item">Menú</option>
+                        </select>
+                      </div>
+
+                      <div class="field" id="mediaScopeEventWrap">
+                        <label class="label" for="mediaEventSelect">Evento</label>
+                        <select class="input" id="mediaEventSelect">
+                          <option value="">Seleccionar evento…</option>
+                        </select>
+                      </div>
+
+                      <div class="field" id="mediaScopeMenuWrap" hidden>
+                        <label class="label" for="mediaMenuSelect">Ítem de menú</label>
+                        <select class="input" id="mediaMenuSelect">
+                          <option value="">Seleccionar ítem…</option>
+                        </select>
+                      </div>
+
+                      <div class="field field--full">
+                        <label class="label" for="mediaSlotSelect">Dónde va</label>
+                        <select class="input" id="mediaSlotSelect"></select>
+                      </div>
+                    </div>
+
+                    <div class="formActions mediaActionsRow">
+                      <button class="btn btn--primary" id="mediaAssignBtn" type="button">ASIGNAR</button>
+                      <button class="btn btn--ghost" id="mediaViewAssignedBtn" type="button">VER ASIGNADOS</button>
+                    </div>
+
+                    <div class="mediaAssignedHeader">
+                      <div>
+                        <strong>Asignados actuales</strong>
+                        <span>Click en un item para verlo en Preview. Usá Quitar para liberar el slot.</span>
+                      </div>
+                    </div>
+                    <div class="list mediaAssignedList" id="mediaAssignedList" aria-label="Asignados"></div>
+                  </div>
+                </section>
               </div>
             </section>
 
