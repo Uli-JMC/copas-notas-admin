@@ -1,6 +1,6 @@
 "use strict";
 (function(){
-  const VERSION="2026-02-25.gallery.supabase.1";
+  const VERSION="2026-02-26.gallery.ready.lazy.1";
   const TABLE="gallery_items";
   const BUCKET="gallery";
   const $=(s,r=document)=>r.querySelector(s);
@@ -15,7 +15,7 @@
   const refs=()=>({
     tab:$("#tab-gallery"), btnNew:$("#newGalleryBtn"), btnRefresh:$("#refreshGalleryBtn"), tbody:$("#galleryTbody"),
     modal:$("#ecnGalleryModal"), form:$("#ecnGalleryForm"),
-    id:$("#ecnPromoId"), name:$("#ecnGalName"), file:$("#ecnGalFile"), type:$("#ecnGalType"), tags:$("#ecnGalTags"),
+    id:$("#ecnGalleryId"), name:$("#ecnGalName"), file:$("#ecnGalFile"), type:$("#ecnGalType"), tags:$("#ecnGalTags"),
     previewImg:$("#ecnGalPreviewImg"), btnClose:$("#ecnGalleryClose"), btnReset:$("#ecnGalReset"),
   });
   const openM=(r)=>{r.modal.hidden=false;r.modal.setAttribute("aria-hidden","false");document.body.style.overflow="hidden";};
@@ -128,12 +128,25 @@
     window.addEventListener("keydown",(e)=>{if(e.key==="Escape" && !r.modal.hidden) closeM(r);});
     r.modal.addEventListener("click",(e)=>{const t=e.target; if(t && t.getAttribute && t.getAttribute("data-close")==="true") closeM(r);});
   }
+  let didInit=false;
   function init(){
+    if(didInit) return;
+    didInit=true;
     const r=refs(); log("boot",{VERSION,TABLE,BUCKET});
     if(!r.tab) return;
-    const missing=[["#newGalleryBtn",r.btnNew],["#refreshGalleryBtn",r.btnRefresh],["#galleryTbody",r.tbody],["#ecnGalleryModal",r.modal],["#ecnGalleryForm",r.form]].filter(([,el])=>!el).map(([s])=>s);
+    const missing=[["#newGalleryBtn",r.btnNew],["#refreshGalleryBtn",r.btnRefresh],["#galleryTbody",r.tbody],["#ecnGalleryModal",r.modal],["#ecnGalleryForm",r.form],["#ecnGalleryId",r.id]].filter(([,el])=>!el).map(([s])=>s);
     if(missing.length){warn("Faltan nodos en DOM:",missing); return;}
-    wire(r); load(r);
+    wire(r);
+    if(r.tab.hidden===false) load(r);
+    const onTab=(e)=>{if(e?.detail?.tab==="gallery") load(r);};
+    window.addEventListener("admin:tab",onTab);
+    document.addEventListener("admin:tab",onTab);
   }
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
+  function bootWhenReady(){
+    if(window.APP&&APP.__adminReady) return init();
+    const once=()=>init();
+    window.addEventListener("admin:ready",once,{once:true});
+    document.addEventListener("admin:ready",once,{once:true});
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bootWhenReady,{once:true}); else bootWhenReady();
 })();

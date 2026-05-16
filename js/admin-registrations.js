@@ -13,7 +13,7 @@
 
    ✅ FIX CRÍTICO (2026-02-22):
    - Escucha admin:tab en window + document (compat total)
-   - Alinea columnas con tu thead: Fecha | Evento | Nombre | Email | Teléfono | Estado | Creado
+   - Alinea columnas con tu thead: Evento | Fecha | Nombre | Email | Teléfono | Marketing | Creado
 ============================================================ */
 (function () {
   "use strict";
@@ -347,8 +347,8 @@
           const created = fmtDate(r.createdAt);
           return `
           <tr data-id="${escapeHtml(r.id)}">
-            <td>${escapeHtml(r.dateLabel || "—")}</td>
             <td>${escapeHtml(r.eventTitle || "—")}</td>
+            <td>${escapeHtml(r.dateLabel || "—")}</td>
             <td>${escapeHtml(r.name)}</td>
             <td>${escapeHtml(r.email)}</td>
             <td>${escapeHtml(r.phone || "—")}</td>
@@ -387,8 +387,8 @@
         const created = fmtDate(r.createdAt);
         return `
           <tr data-id="${escapeHtml(r.id)}">
-            <td>${escapeHtml(r.dateLabel || "—")}</td>
             <td>${escapeHtml(r.eventTitle || "—")}</td>
+            <td>${escapeHtml(r.dateLabel || "—")}</td>
             <td>${escapeHtml(r.name)}</td>
             <td>${escapeHtml(r.email)}</td>
             <td>${escapeHtml(r.phone || "—")}</td>
