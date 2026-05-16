@@ -467,6 +467,26 @@
     return data;
   }
 
+
+  async function updateAssetRow(sb, assetId, payload) {
+    const safePayload = {
+      folder: payload.folder,
+      name: payload.name,
+      path: payload.path,
+      public_url: payload.public_url ?? null,
+      mime: payload.mime ?? null,
+      bytes: payload.bytes ?? null,
+    };
+    const { data, error } = await sb
+      .from(ASSETS_TABLE)
+      .update(safePayload)
+      .eq("id", assetId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
   async function upsertBinding(sb, { scope, scope_id, slot, media_id, note = null }) {
     const payload = { scope, scope_id, slot, media_id, note };
     const { error } = await sb.from(BINDINGS_TABLE).upsert(payload, { onConflict: "scope,scope_id,slot" });
@@ -541,6 +561,43 @@
     return { bucket, path, public_url: pub };
   }
 
+
+  async function replaceAssetFile(dom, asset, file) {
+    const sb = getSB();
+    if (!sb) throw new Error("APP.supabase no está listo.");
+    const session = await ensureSession(sb);
+    if (!session) return null;
+    if (!asset?.id) throw new Error("Seleccioná un medio primero.");
+    if (!file) throw new Error("Seleccioná el archivo de reemplazo.");
+
+    const oldPath = clean(asset.path || "");
+    const bucket = guessBucketFromAsset(asset) || getBucket(dom);
+    const folder = normFolder(asset.folder || getFolderValue(dom) || (bucket === "video" ? "events-video" : "events-img"));
+    const name = clean(asset.name || dom.nameEl?.value || file.name.replace(/\.[^.]+$/, "")) || "asset";
+
+    const up = await uploadToStorage(sb, file, bucket, folder, name);
+    const updated = await updateAssetRow(sb, asset.id, {
+      folder,
+      name,
+      path: up.path,
+      public_url: up.public_url || null,
+      mime: clean(file.type || "") || null,
+      bytes: file.size || null,
+    });
+
+    // Después de actualizar la fila, intentamos eliminar el archivo anterior del bucket.
+    if (oldPath && oldPath !== up.path && !isHttpUrl(oldPath)) {
+      await removeFromStorageAnyBucket(sb, oldPath).catch(() => {});
+    }
+
+    S.selected = updated;
+    if (dom.urlEl) dom.urlEl.value = clean(updated.public_url || "");
+    setPreview(dom, updated);
+    await refreshFolders(dom);
+    await refreshList(dom, { silent: true });
+    return updated;
+  }
+
   // ✅ delete storage sin depender del bucket actual: intenta ambos buckets
   async function removeFromStorageAnyBucket(sb, path) {
     const p = clean(path);
@@ -565,6 +622,107 @@
       console.warn(e);
       // No bloquea medios: si falla, el input manual sigue funcionando.
     }
+  }
+
+
+  function ensureMediaUpdateModal(dom) {
+    let modal = document.getElementById("mediaUpdateModal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.className = "modal mediaUpdateModal";
+    modal.id = "mediaUpdateModal";
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-label", "Actualizar medio");
+    modal.innerHTML = `
+      <div class="modalBackdrop" data-close="mediaUpdate"></div>
+      <div class="modalCard modalCard--small mediaUpdateCard">
+        <div class="modalHead">
+          <div>
+            <div class="kicker">ACTUALIZAR MEDIO</div>
+            <div class="h3">Reemplazar archivo</div>
+            <div class="mini">Mantiene el mismo registro y sus asignaciones. Solo cambia el archivo en Storage.</div>
+          </div>
+          <button class="btn btn--ghost" id="mediaUpdateClose" type="button" aria-label="Cerrar">✕</button>
+        </div>
+        <form class="form" id="mediaUpdateForm" novalidate>
+          <div class="mediaUpdateCurrent" id="mediaUpdateCurrent"></div>
+          <div class="field">
+            <label class="label" for="mediaUpdateFile">Nuevo archivo</label>
+            <input class="input" id="mediaUpdateFile" type="file" />
+            <div class="mini">Se sube al mismo bucket/folder del medio seleccionado.</div>
+          </div>
+          <div class="formActions formActions--right">
+            <button class="btn btn--ghost" id="mediaUpdateCancel" type="button">Cancelar</button>
+            <button class="btn btn--primary" type="submit">Actualizar imagen</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const close = () => {
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      const input = modal.querySelector("#mediaUpdateFile");
+      if (input) input.value = "";
+    };
+    modal.querySelector("#mediaUpdateClose")?.addEventListener("click", close);
+    modal.querySelector("#mediaUpdateCancel")?.addEventListener("click", close);
+    modal.querySelector("[data-close='mediaUpdate']")?.addEventListener("click", close);
+
+    modal.querySelector("#mediaUpdateForm")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = modal.querySelector("#mediaUpdateFile");
+      const file = input?.files && input.files[0];
+      if (!file) return toast("Archivo", "Seleccioná el nuevo archivo.", 2400);
+      const asset = S.selected;
+      if (!asset?.id) return toast("Medio", "Seleccioná un medio primero.", 2400);
+      try {
+        toast("Actualizando", "Subiendo reemplazo…", 1200);
+        const updated = await replaceAssetFile(dom, asset, file);
+        if (updated) {
+          close();
+          toast("Medio actualizado", "El archivo fue reemplazado y conserva sus asignaciones.", 2600);
+          await viewAssigned(dom).catch(() => {});
+        }
+      } catch (err) {
+        console.warn(err);
+        toast("Error", err.message || String(err), 5200);
+      }
+    });
+
+    return modal;
+  }
+
+  function openMediaUpdateModal(dom, asset) {
+    if (!asset?.id) return toast("Actualizar", "Seleccioná un medio primero.", 2400);
+    S.selected = asset;
+    if (dom.urlEl) dom.urlEl.value = clean(asset.public_url || "");
+    setPreview(dom, asset);
+
+    const modal = ensureMediaUpdateModal(dom);
+    const current = modal.querySelector("#mediaUpdateCurrent");
+    const file = modal.querySelector("#mediaUpdateFile");
+    if (file) file.setAttribute("accept", ACCEPTS[guessBucketFromAsset(asset)] || "image/*,video/*");
+    if (current) {
+      const u = clean(asset.public_url || asset.path || "");
+      current.innerHTML = `
+        <div class="mediaUpdatePreview">
+          ${u && !/\.(mp4|webm|mov)(\?|$)/i.test(u) ? `<img src="${escapeHtml(u)}" alt="">` : `<span>Archivo seleccionado</span>`}
+        </div>
+        <div>
+          <strong>${escapeHtml(clean(asset.name || "Medio"))}</strong>
+          <p>${escapeHtml(clean(asset.folder || "—"))}</p>
+          <small>${escapeHtml(u || "Sin URL")}</small>
+        </div>
+      `;
+    }
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    setTimeout(() => file?.focus(), 0);
   }
 
   // ---------------------------
@@ -595,11 +753,11 @@
 
     const frag = document.createDocumentFragment();
     assets.forEach((a) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "item";
-      item.style.textAlign = "left";
-      item.style.width = "100%";
+      const item = document.createElement("article");
+      item.className = "mediaAssetItem";
+      item.tabIndex = 0;
+      item.setAttribute("role", "button");
+      item.setAttribute("aria-label", `Seleccionar ${clean(a.name || a.path || "medio")}`);
       item.dataset.id = a.id;
 
       if (S.selected?.id && a.id === S.selected.id) item.classList.add("active");
@@ -607,26 +765,60 @@
       const url = clean(a.public_url || "");
       const name = clean(a.name || a.path || "Asset");
       const meta = clean(a.folder || "");
+      const isVideo = /video\//i.test(clean(a.mime || "")) || /\.(mp4|webm|mov)(\?|$)/i.test(url || clean(a.path || ""));
 
       item.innerHTML = `
-        <div style="display:flex; gap:12px; align-items:center;">
-          <div style="width:54px; height:40px; border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,.10); background:rgba(0,0,0,.25); flex:0 0 auto;">
-            ${url ? `<img src="${url}" alt="" style="width:100%; height:100%; object-fit:cover;">` : ""}
-          </div>
-          <div style="min-width:0;">
-            <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(name)}</div>
-            <div style="opacity:.72; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(meta)}</div>
-          </div>
+        <div class="mediaAssetThumb" aria-hidden="true">
+          ${url && !isVideo ? `<img src="${escapeHtml(url)}" alt="">` : `<span>${isVideo ? "▶" : "IMG"}</span>`}
+        </div>
+        <div class="mediaAssetBody">
+          <strong>${escapeHtml(name)}</strong>
+          <span>${escapeHtml(meta || "Sin folder")}</span>
+          <small>${escapeHtml(clean(a.mime || ""))}</small>
+        </div>
+        <div class="mediaAssetActions">
+          <button class="btn sm" type="button" data-use="1">Usar</button>
+          <button class="btn sm" type="button" data-update="1">Actualizar</button>
+          <button class="btn sm btn--danger" type="button" data-delete="1">Eliminar</button>
         </div>
       `;
 
-      item.addEventListener("click", () => {
+      const selectAsset = () => {
         S.selected = a;
         if (urlEl) urlEl.value = clean(a.public_url || "");
         setPreview(dom, a);
-        setNote(dom.noteEl, "Seleccionado. Podés copiar URL o asignar.");
+        setNote(dom.noteEl, "Seleccionado. Podés asignarlo, actualizarlo o eliminarlo.");
         setMediaMode("assign");
-        renderList(dom); // refresca active class sin recargar data
+        renderList(dom);
+      };
+
+      item.addEventListener("click", selectAsset);
+      item.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectAsset();
+        }
+      });
+
+      item.querySelector("[data-use]")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectAsset();
+      });
+
+      item.querySelector("[data-update]")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        S.selected = a;
+        if (urlEl) urlEl.value = clean(a.public_url || "");
+        setPreview(dom, a);
+        openMediaUpdateModal(dom, a);
+      });
+
+      item.querySelector("[data-delete]")?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        S.selected = a;
+        if (urlEl) urlEl.value = clean(a.public_url || "");
+        setPreview(dom, a);
+        await deleteSelected(dom);
       });
 
       frag.appendChild(item);
@@ -978,7 +1170,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     const asset = S.selected;
     if (!asset?.id) return toast("Eliminar", "Seleccioná un medio primero.", 2400);
 
-    const ok = confirm("¿Eliminar este medio? Si está asignado en algún lado, va a dejar de verse.");
+    const ok = confirm("¿Eliminar este medio de la biblioteca y del bucket?\n\nTambién se quitarán sus asignaciones porque media_bindings depende de este archivo. Esta acción no se puede deshacer.");
     if (!ok) return;
 
     const sb = getSB();
@@ -999,7 +1191,9 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
       if (dom.urlEl) dom.urlEl.value = "";
       setPreview(dom, null);
       setNote(dom.noteEl, "Eliminado.");
+      await refreshFolders(dom);
       await refreshList(dom, { silent: true });
+      await viewAssigned(dom).catch(() => {});
     } catch (e) {
       console.warn(e);
       toast("Error", e.message || String(e), 4200);

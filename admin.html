@@ -164,45 +164,37 @@
                       </div>
                     </section>
 
-                    <section class="editorSection editorSection--date">
+                    <section class="editorSection editorSection--date eventDatesOverviewSection">
                       <div class="editorSectionHead">
                         <div>
                           <h4>2. Fecha, hora y lugar</h4>
-                          <p>Usá los selectores visuales para generar el horario y el mes sin escribirlo manualmente.</p>
+                          <p>Las fechas, horas y cupos se administran desde el módulo Fechas. Aquí ves el resumen conectado al evento.</p>
+                        </div>
+                        <button class="btn btn--ghost sm" id="eventManageDatesBtn" type="button">Administrar fechas</button>
+                      </div>
+
+                      <div class="eventDatesOverview" id="eventDatesSummary" aria-live="polite">
+                        <div class="eventDatesEmpty">
+                          <strong>Sin fechas configuradas</strong>
+                          <span>Entrá a Fechas para agregar fecha, hora y cupos.</span>
                         </div>
                       </div>
 
-                      <div class="formGrid formGrid--event">
-                        <div class="field">
-                          <label class="label" for="evDateUi">Fecha del evento</label>
-                          <input class="input" id="evDateUi" type="date" />
-                          <div class="mini">Al elegir fecha se actualiza el mes del evento.</div>
-                        </div>
-
-                        <div class="field">
-                          <label class="label" for="evStartTimeUi">Hora inicio</label>
-                          <input class="input" id="evStartTimeUi" type="time" />
-                        </div>
-
-                        <div class="field">
-                          <label class="label" for="evEndTimeUi">Hora final</label>
-                          <input class="input" id="evEndTimeUi" type="time" />
-                        </div>
-
-                        <div class="field">
-                          <label class="label" for="evDurationHours">Duración</label>
-                          <input class="input" id="evDurationHours" type="text" maxlength="40" placeholder="ej: 2 horas" />
-                        </div>
-
+                      <div class="formGrid formGrid--event eventLocationGrid">
                         <div class="field field--full">
                           <label class="label" for="evPlace">Lugar</label>
                           <input class="input" id="evPlace" type="text" maxlength="120" placeholder="Ej: Andiamo Là · Tres Ríos" />
                         </div>
 
-                        <div class="field field--full">
+                        <div class="field">
                           <label class="label" for="evSchedule">Horario visible</label>
                           <input class="input" id="evSchedule" type="text" maxlength="80" placeholder="ej: 7:00 pm a 9:00 pm" />
-                          <div class="mini">Se puede editar manualmente si necesitás un texto especial.</div>
+                          <div class="mini">Se actualiza como referencia desde Fechas si está vacío, pero podés editarlo.</div>
+                        </div>
+
+                        <div class="field">
+                          <label class="label" for="evDurationHours">Duración</label>
+                          <input class="input" id="evDurationHours" type="text" maxlength="40" placeholder="ej: 2 horas" />
                         </div>
                       </div>
                     </section>

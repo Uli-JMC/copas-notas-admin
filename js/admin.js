@@ -282,6 +282,106 @@
     return cleanSpaces(d.label || d.start_at || "");
   }
 
+
+  function formatDateHuman(value) {
+    if (!value) return "";
+    try {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("es-CR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+    } catch (_) { return ""; }
+  }
+
+  function formatTimeHuman(value) {
+    if (!value) return "";
+    try {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" });
+    } catch (_) { return ""; }
+  }
+
+  function buildDateLabelFromRow(row) {
+    if (!row) return "";
+    const manual = cleanSpaces(row.label || "");
+    const day = formatDateHuman(row.start_at);
+    const start = formatTimeHuman(row.start_at);
+    const end = formatTimeHuman(row.ends_at);
+    if (day && start && end) return `${day} · ${start} a ${end}`;
+    if (day && start) return `${day} · ${start}`;
+    return manual || day || "Fecha configurada";
+  }
+
+  function calculateDurationFromDateRow(row) {
+    if (!row?.start_at || !row?.ends_at) return "";
+    try {
+      const start = new Date(row.start_at).getTime();
+      const end = new Date(row.ends_at).getTime();
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return "";
+      const hours = (end - start) / 1000 / 60 / 60;
+      if (hours <= 0) return "";
+      return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} horas`;
+    } catch (_) { return ""; }
+  }
+
+  function renderEventDatesSummary() {
+    const host = $("#eventDatesSummary");
+    if (!host) return;
+    const dates = Array.isArray(state.selectedEventDates) ? state.selectedEventDates : [];
+
+    if (!dates.length) {
+      host.innerHTML = `
+        <div class="eventDatesEmpty">
+          <strong>Sin fechas configuradas</strong>
+          <span>Entrá a Fechas para agregar fecha, hora y cupos.</span>
+        </div>
+      `;
+      return;
+    }
+
+    host.innerHTML = dates.map((d, idx) => {
+      const label = buildDateLabelFromRow(d);
+      const seatsTotal = d.seats_total ?? "—";
+      const seatsAvailable = d.seats_available ?? "—";
+      const duration = calculateDurationFromDateRow(d);
+      return `
+        <article class="eventDateSummaryItem ${idx === 0 ? "isMain" : ""}">
+          <div>
+            <span class="eventDateSummaryTag">${idx === 0 ? "Fecha principal" : "Fecha"}</span>
+            <strong>${escapeHtml(label)}</strong>
+            ${duration ? `<p>${escapeHtml(duration)}</p>` : ""}
+          </div>
+          <div class="eventDateSummarySeats">
+            <span>${escapeHtml(String(seatsAvailable))}</span>
+            <small>de ${escapeHtml(String(seatsTotal))} cupos</small>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function syncEventFieldsFromDatesIfEmpty() {
+    const first = (state.selectedEventDates || [])[0];
+    if (!first) return;
+    const scheduleEl = $("#evSchedule");
+    const durationEl = $("#evDurationHours");
+    const monthEl = $("#evMonth");
+
+    const label = buildDateLabelFromRow(first);
+    if (scheduleEl && !cleanSpaces(scheduleEl.value || "") && label) scheduleEl.value = label;
+
+    const duration = calculateDurationFromDateRow(first);
+    if (durationEl && !cleanSpaces(durationEl.value || "") && duration) durationEl.value = duration;
+
+    if (monthEl && first.start_at) {
+      try {
+        const d = new Date(first.start_at);
+        const idx = d.getMonth();
+        if (idx >= 0 && idx < MONTHS.length) monthEl.value = MONTHS[idx];
+      } catch (_) {}
+    }
+  }
+
   function calculateEventReadiness(payloadOverride) {
     const payload = payloadOverride || readEditorPayload();
     const desktop = cleanSpaces($("#evBannerDesktopUrl")?.value || state.selectedEventMediaMap?.desktop_event || "");
@@ -529,10 +629,8 @@
     $("#evActive") && ($("#evActive").value = ev.active ? "true" : "false");
     $("#evAlt") && ($("#evAlt").value = ev.more_img_alt || "");
 
-    // Campos visuales de ayuda: no persisten fecha real todavía.
-    $("#evDateUi") && ($("#evDateUi").value = "");
-    $("#evStartTimeUi") && ($("#evStartTimeUi").value = "");
-    $("#evEndTimeUi") && ($("#evEndTimeUi").value = "");
+    // Fechas reales viven en event_dates. El resumen se actualiza al abrir el evento.
+    renderEventDatesSummary();
 
     $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
     $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
@@ -562,6 +660,8 @@
       ]);
       state.selectedEventMediaMap = map || {};
       state.selectedEventDates = dates || [];
+      syncEventFieldsFromDatesIfEmpty();
+      renderEventDatesSummary();
       $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = map.desktop_event || "");
       $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = map.mobile_event || "");
       updateEventMediaSummary();
@@ -618,6 +718,7 @@
     $("#evEndTimeUi")?.addEventListener("change", () => { syncScheduleFromTimeUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
     $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
     $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
+    $("#eventManageDatesBtn")?.addEventListener("click", () => setTab("dates"));
 
     $("#eventCreateClose")?.addEventListener("click", closeCreateEventModal);
     $("#eventCreateCancel")?.addEventListener("click", closeCreateEventModal);
