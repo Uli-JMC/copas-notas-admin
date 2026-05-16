@@ -274,16 +274,21 @@
     items.forEach((ev) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "item";
-      if (ev.id === state.selectedEventId) btn.classList.add("active");
+      btn.className = "item ecn-event-row";
+      if (ev.id === state.selectedEventId) {
+        btn.classList.add("active");
+        btn.classList.add("is-active");
+      }
+      const statusLabel = ev.active ? "Publicado" : "Borrador";
+      const statusClass = ev.active ? "ecn-chip-success" : "ecn-chip-draft";
       btn.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:12px; width:100%;">
-          <div style="min-width:0;">
-            <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(ev.title)}</div>
-            <div style="opacity:.72; font-size:13px;">${escapeHtml(ev.type)} · ${escapeHtml(ev.month_key)}</div>
-          </div>
-          <div style="opacity:.65; font-size:12px;">Editar</div>
-        </div>
+        <span class="ecn-event-icon" aria-hidden="true">📅</span>
+        <span class="ecn-event-content">
+          <strong>${escapeHtml(ev.title || "Sin título")}</strong>
+          <small>${escapeHtml(ev.type)} · ${escapeHtml(ev.month_key)}</small>
+        </span>
+        <span class="ecn-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
+        <span class="ecn-row-arrow" aria-hidden="true">›</span>
       `;
       btn.addEventListener("click", () => openEvent(ev.id));
       frag.appendChild(btn);
@@ -331,6 +336,9 @@
 
     $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
     $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
+    $("#evDate") && ($("#evDate").value = "");
+    $("#evStartTime") && ($("#evStartTime").value = "");
+    $("#evEndTime") && ($("#evEndTime").value = "");
   }
 
   async function openEvent(eventId) {
@@ -375,14 +383,92 @@
     };
   }
 
+  function formatTimeCR(value) {
+    if (!value) return "";
+    const parts = String(value).split(":");
+    const hourRaw = Number(parts[0]);
+    const minute = Number(parts[1] || 0);
+    if (!Number.isFinite(hourRaw) || !Number.isFinite(minute)) return "";
+    const suffix = hourRaw >= 12 ? "pm" : "am";
+    const hour12 = hourRaw % 12 || 12;
+    return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+  }
+
+  function hoursDiff(start, end) {
+    if (!start || !end) return "";
+    const [sh, sm] = String(start).split(":").map(Number);
+    const [eh, em] = String(end).split(":").map(Number);
+    if (![sh, sm, eh, em].every(Number.isFinite)) return "";
+    const startMinutes = sh * 60 + sm;
+    let endMinutes = eh * 60 + em;
+    if (endMinutes < startMinutes) endMinutes += 24 * 60;
+    return ((endMinutes - startMinutes) / 60).toFixed(2).replace(/\.00$/, "");
+  }
+
+  function syncDateToMonth() {
+    const dateInput = $("#evDate");
+    const monthSelect = $("#evMonth");
+    if (!dateInput || !monthSelect || !dateInput.value) return;
+    const parts = String(dateInput.value).split("-").map(Number);
+    const month = parts[1];
+    const monthLabel = MONTHS[month - 1];
+    if (monthLabel) monthSelect.value = monthLabel;
+  }
+
+  function syncTimeLabel() {
+    const start = $("#evStartTime");
+    const end = $("#evEndTime");
+    const label = $("#evSchedule");
+    const duration = $("#evDurationHours");
+    if (!start || !end || !label) return;
+    if (start.value && end.value) {
+      label.value = `${formatTimeCR(start.value)} a ${formatTimeCR(end.value)}`;
+      if (duration) duration.value = hoursDiff(start.value, end.value);
+    }
+  }
+
+  function openMediaSlot(slot) {
+    setTab("media");
+    window.__ecnPreferredMediaSlot = slot || "";
+    setTimeout(() => {
+      const scope = $("#mediaScopeType");
+      const slotSelect = $("#mediaSlotSelect");
+      if (scope) {
+        scope.value = "event";
+        scope.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (slotSelect && slot) slotSelect.value = slot;
+      const eventSelect = $("#mediaEventSelect");
+      if (eventSelect && state.selectedEventId) eventSelect.value = state.selectedEventId;
+    }, 160);
+  }
+
+  function bindEditorUxOnce() {
+    if (window.__ecnAdminUxBound === true) return;
+    window.__ecnAdminUxBound = true;
+
+    $$('[data-toggle-section]', appPanel).forEach((button) => {
+      button.addEventListener("click", () => {
+        const section = button.closest(".ecn-form-section");
+        if (!section) return;
+        section.classList.toggle("is-open");
+      });
+    });
+
+    $("#evDate")?.addEventListener("change", syncDateToMonth);
+    $("#evStartTime")?.addEventListener("change", syncTimeLabel);
+    $("#evEndTime")?.addEventListener("change", syncTimeLabel);
+  }
+
   function bindEditorOnce() {
     if (state.didBindEditor) return;
     state.didBindEditor = true;
 
     ensureMonthSelectOptions();
+    bindEditorUxOnce();
     $("#evDesc")?.addEventListener("input", setDescCount);
-    $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
-    $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
+    $("#evBannerDesktopBtn")?.addEventListener("click", () => openMediaSlot("desktop_event"));
+    $("#evBannerMobileBtn")?.addEventListener("click", () => openMediaSlot("mobile_event"));
 
     $("#newEventBtn")?.addEventListener("click", async () => {
       setTab("events");
