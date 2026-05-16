@@ -14,7 +14,7 @@
   if (window.__ecnAdminMounted === true) return;
   window.__ecnAdminMounted = true;
 
-  const VERSION = "2026-02-26.admin.bd-aligned.1";
+  const VERSION = "2026-05-16.admin.events-phase1.1";
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -274,21 +274,16 @@
     items.forEach((ev) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "item ecn-event-row";
-      if (ev.id === state.selectedEventId) {
-        btn.classList.add("active");
-        btn.classList.add("is-active");
-      }
-      const statusLabel = ev.active ? "Publicado" : "Borrador";
-      const statusClass = ev.active ? "ecn-chip-success" : "ecn-chip-draft";
+      btn.className = "item";
+      if (ev.id === state.selectedEventId) btn.classList.add("active");
       btn.innerHTML = `
-        <span class="ecn-event-icon" aria-hidden="true">📅</span>
-        <span class="ecn-event-content">
-          <strong>${escapeHtml(ev.title || "Sin título")}</strong>
-          <small>${escapeHtml(ev.type)} · ${escapeHtml(ev.month_key)}</small>
-        </span>
-        <span class="ecn-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
-        <span class="ecn-row-arrow" aria-hidden="true">›</span>
+        <div style="display:flex; justify-content:space-between; gap:12px; width:100%;">
+          <div style="min-width:0;">
+            <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(ev.title)}</div>
+            <div style="opacity:.72; font-size:13px;">${escapeHtml(ev.type)} · ${escapeHtml(ev.month_key)}</div>
+          </div>
+          <div style="opacity:.65; font-size:12px;">Editar</div>
+        </div>
       `;
       btn.addEventListener("click", () => openEvent(ev.id));
       frag.appendChild(btn);
@@ -306,6 +301,99 @@
     const count = $("#evDescCount");
     if (!desc || !count) return;
     count.textContent = `${safeStr(desc.value || "").length}/520`;
+  }
+
+
+  function updateEventStatusUi() {
+    const label = $("#eventStatusLabel");
+    const dot = $(".eventStatusDot");
+    const active = $("#evActive")?.value === "true";
+    if (label) label.textContent = active ? "Publicado" : "Borrador";
+    if (dot) dot.classList.toggle("isPublished", active);
+  }
+
+  function formatTime12(value) {
+    const raw = safeStr(value || "").trim();
+    const m = raw.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return "";
+    let h = Number(m[1]);
+    const min = m[2];
+    const suffix = h >= 12 ? "pm" : "am";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${min} ${suffix}`;
+  }
+
+  function syncMonthFromDateUi() {
+    const dateEl = $("#evDateUi");
+    const monthEl = $("#evMonth");
+    const raw = safeStr(dateEl?.value || "");
+    if (!raw || !monthEl) return;
+    const parts = raw.split("-");
+    if (parts.length < 2) return;
+    const idx = Number(parts[1]) - 1;
+    if (idx >= 0 && idx < MONTHS.length) monthEl.value = MONTHS[idx];
+  }
+
+  function syncScheduleFromTimeUi() {
+    const start = $("#evStartTimeUi")?.value || "";
+    const end = $("#evEndTimeUi")?.value || "";
+    const scheduleEl = $("#evSchedule");
+    const durationEl = $("#evDurationHours");
+
+    if (scheduleEl && start && end) {
+      scheduleEl.value = `${formatTime12(start)} a ${formatTime12(end)}`;
+    } else if (scheduleEl && start) {
+      scheduleEl.value = formatTime12(start);
+    }
+
+    if (durationEl && start && end) {
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      if (Number.isFinite(sh) && Number.isFinite(eh)) {
+        let minutes = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+        if (minutes < 0) minutes += 24 * 60;
+        if (minutes > 0) {
+          const hours = minutes / 60;
+          durationEl.value = `${Number.isInteger(hours) ? hours : hours.toFixed(1)} horas`;
+        }
+      }
+    }
+  }
+
+  function updateEventMediaSummary() {
+    const desktop = cleanSpaces($("#evBannerDesktopUrl")?.value || "");
+    const mobile = cleanSpaces($("#evBannerMobileUrl")?.value || "");
+    const desktopPill = $("#eventDesktopMediaStatus");
+    const mobilePill = $("#eventMobileMediaStatus");
+    if (desktopPill) {
+      desktopPill.textContent = desktop ? "Desktop asignado" : "Desktop pendiente";
+      desktopPill.classList.toggle("isReady", !!desktop);
+    }
+    if (mobilePill) {
+      mobilePill.textContent = mobile ? "Mobile asignado" : "Mobile pendiente";
+      mobilePill.classList.toggle("isReady", !!mobile);
+    }
+  }
+
+  function openCreateEventModal() {
+    const modal = $("#eventCreateModal");
+    if (!modal) return false;
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    const title = $("#newEventTitle");
+    if (title) {
+      title.value = "";
+      setTimeout(() => title.focus(), 0);
+    }
+    return true;
+  }
+
+  function closeCreateEventModal() {
+    const modal = $("#eventCreateModal");
+    if (!modal) return;
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
   }
 
   function ensureMonthSelectOptions() {
@@ -334,11 +422,15 @@
     $("#evActive") && ($("#evActive").value = ev.active ? "true" : "false");
     $("#evAlt") && ($("#evAlt").value = ev.more_img_alt || "");
 
+    // Campos visuales de ayuda: no persisten fecha real todavía.
+    $("#evDateUi") && ($("#evDateUi").value = "");
+    $("#evStartTimeUi") && ($("#evStartTimeUi").value = "");
+    $("#evEndTimeUi") && ($("#evEndTimeUi").value = "");
+
     $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
     $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
-    $("#evDate") && ($("#evDate").value = "");
-    $("#evStartTime") && ($("#evStartTime").value = "");
-    $("#evEndTime") && ($("#evEndTime").value = "");
+    updateEventStatusUi();
+    updateEventMediaSummary();
   }
 
   async function openEvent(eventId) {
@@ -354,6 +446,7 @@
       const map = await fetchEventSlotUrlsLatest(ev.id);
       $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = map.desktop_event || "");
       $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = map.mobile_event || "");
+      updateEventMediaSummary();
     } catch (e) {
       console.warn("[admin] media readonly", e);
     }
@@ -383,99 +476,63 @@
     };
   }
 
-  function formatTimeCR(value) {
-    if (!value) return "";
-    const parts = String(value).split(":");
-    const hourRaw = Number(parts[0]);
-    const minute = Number(parts[1] || 0);
-    if (!Number.isFinite(hourRaw) || !Number.isFinite(minute)) return "";
-    const suffix = hourRaw >= 12 ? "pm" : "am";
-    const hour12 = hourRaw % 12 || 12;
-    return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
-  }
-
-  function hoursDiff(start, end) {
-    if (!start || !end) return "";
-    const [sh, sm] = String(start).split(":").map(Number);
-    const [eh, em] = String(end).split(":").map(Number);
-    if (![sh, sm, eh, em].every(Number.isFinite)) return "";
-    const startMinutes = sh * 60 + sm;
-    let endMinutes = eh * 60 + em;
-    if (endMinutes < startMinutes) endMinutes += 24 * 60;
-    return ((endMinutes - startMinutes) / 60).toFixed(2).replace(/\.00$/, "");
-  }
-
-  function syncDateToMonth() {
-    const dateInput = $("#evDate");
-    const monthSelect = $("#evMonth");
-    if (!dateInput || !monthSelect || !dateInput.value) return;
-    const parts = String(dateInput.value).split("-").map(Number);
-    const month = parts[1];
-    const monthLabel = MONTHS[month - 1];
-    if (monthLabel) monthSelect.value = monthLabel;
-  }
-
-  function syncTimeLabel() {
-    const start = $("#evStartTime");
-    const end = $("#evEndTime");
-    const label = $("#evSchedule");
-    const duration = $("#evDurationHours");
-    if (!start || !end || !label) return;
-    if (start.value && end.value) {
-      label.value = `${formatTimeCR(start.value)} a ${formatTimeCR(end.value)}`;
-      if (duration) duration.value = hoursDiff(start.value, end.value);
-    }
-  }
-
-  function openMediaSlot(slot) {
-    setTab("media");
-    window.__ecnPreferredMediaSlot = slot || "";
-    setTimeout(() => {
-      const scope = $("#mediaScopeType");
-      const slotSelect = $("#mediaSlotSelect");
-      if (scope) {
-        scope.value = "event";
-        scope.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      if (slotSelect && slot) slotSelect.value = slot;
-      const eventSelect = $("#mediaEventSelect");
-      if (eventSelect && state.selectedEventId) eventSelect.value = state.selectedEventId;
-    }, 160);
-  }
-
-  function bindEditorUxOnce() {
-    if (window.__ecnAdminUxBound === true) return;
-    window.__ecnAdminUxBound = true;
-
-    $$('[data-toggle-section]', appPanel).forEach((button) => {
-      button.addEventListener("click", () => {
-        const section = button.closest(".ecn-form-section");
-        if (!section) return;
-        section.classList.toggle("is-open");
-      });
-    });
-
-    $("#evDate")?.addEventListener("change", syncDateToMonth);
-    $("#evStartTime")?.addEventListener("change", syncTimeLabel);
-    $("#evEndTime")?.addEventListener("change", syncTimeLabel);
-  }
-
   function bindEditorOnce() {
     if (state.didBindEditor) return;
     state.didBindEditor = true;
 
     ensureMonthSelectOptions();
-    bindEditorUxOnce();
     $("#evDesc")?.addEventListener("input", setDescCount);
-    $("#evBannerDesktopBtn")?.addEventListener("click", () => openMediaSlot("desktop_event"));
-    $("#evBannerMobileBtn")?.addEventListener("click", () => openMediaSlot("mobile_event"));
+    $("#evActive")?.addEventListener("change", updateEventStatusUi);
+    $("#evDateUi")?.addEventListener("change", syncMonthFromDateUi);
+    $("#evStartTimeUi")?.addEventListener("change", syncScheduleFromTimeUi);
+    $("#evEndTimeUi")?.addEventListener("change", syncScheduleFromTimeUi);
+    $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
+    $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
+
+    $("#eventCreateClose")?.addEventListener("click", closeCreateEventModal);
+    $("#eventCreateCancel")?.addEventListener("click", closeCreateEventModal);
+    $("[data-close='eventCreate']")?.addEventListener("click", closeCreateEventModal);
 
     $("#newEventBtn")?.addEventListener("click", async () => {
       setTab("events");
-      const draft = {
+      if (openCreateEventModal()) return;
+
+      // Fallback si el modal no existe.
+      const fallback = {
         title: "Nuevo evento",
         type: "Cata de vino",
         month_key: "ENERO",
+        description: "",
+        location: "",
+        time_range: "",
+        duration_hours: null,
+        price_amount: null,
+        price_currency: "CRC",
+        more_img_alt: "",
+        active: false,
+        badge: null,
+        slug: null,
+      };
+      try {
+        const created = await insertEvent(fallback);
+        state.events.unshift(created);
+        renderEventList();
+        await openEvent(created.id);
+      } catch (e) {
+        console.warn(e);
+        toast("Error", looksLikeRLSError(e) ? "RLS bloquea crear eventos." : (e.message || String(e)), 5200);
+      }
+    });
+
+    $("#eventCreateForm")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = cleanSpaces($("#newEventTitle")?.value || "") || "Nuevo evento";
+      const type = cleanSpaces($("#newEventType")?.value || "Cata de vino") || "Cata de vino";
+      const month = cleanSpaces($("#newEventMonth")?.value || "ENERO") || "ENERO";
+      const draft = {
+        title,
+        type,
+        month_key: month,
         description: "",
         location: "",
         time_range: "",
@@ -492,12 +549,13 @@
         toast("Evento", "Creando…", 900);
         const created = await insertEvent(draft);
         state.events.unshift(created);
+        closeCreateEventModal();
         renderEventList();
         await openEvent(created.id);
         toast("Evento", "Creado. Completá el editor y guardá.", 2200);
-      } catch (e) {
-        console.warn(e);
-        toast("Error", looksLikeRLSError(e) ? "RLS bloquea crear eventos." : (e.message || String(e)), 5200);
+      } catch (e2) {
+        console.warn(e2);
+        toast("Error", looksLikeRLSError(e2) ? "RLS bloquea crear eventos." : (e2.message || String(e2)), 5200);
       }
     });
 
