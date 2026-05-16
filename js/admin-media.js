@@ -39,7 +39,7 @@
   if (window.__ecnMediaMounted === true) return;
   window.__ecnMediaMounted = true;
 
-  const VERSION = "2026-05-16.media.assigned-actions.1.1";
+  const VERSION = "2026-05-16.media.folder-picker.existing-assets.1.0";
   const $ = (sel, root = document) => root.querySelector(sel);
 
   if (!document.getElementById("appPanel")) return;
@@ -219,7 +219,9 @@
     loading: false,
     lastLoadAt: 0,
     assets: [],
+    folders: [],
     selected: null,
+    assetFilter: "",
   };
 
   function withLock(fn) {
@@ -284,10 +286,102 @@
     if (!f && dom.folderEl) dom.folderEl.value = b === "video" ? "events-video" : "events-img";
   }
 
+  function guessBucketFromAsset(asset) {
+    const mime = clean(asset?.mime || "").toLowerCase();
+    const url = clean(asset?.public_url || "").toLowerCase();
+    const path = clean(asset?.path || "").toLowerCase();
+
+    if (mime.startsWith("video/") || url.includes("/object/public/video/") || /\.(mp4|webm|mov)(\?|$)/i.test(path)) return "video";
+    return "media";
+  }
+
+  function getFolderValue(dom) {
+    const raw = clean(dom.folderEl?.value || "");
+    // vacío = todos los folders del bucket actual
+    if (!raw || raw === "__all__") return "";
+    return raw;
+  }
+
+  function buildFolderTools(dom) {
+    if (!dom.folderEl || dom.folderEl.dataset.ecnFolderTools === "1") return;
+    dom.folderEl.dataset.ecnFolderTools = "1";
+
+    const datalist = document.createElement("datalist");
+    datalist.id = "mediaFolderDatalist";
+    document.body.appendChild(datalist);
+    dom.folderEl.setAttribute("list", datalist.id);
+
+    const tools = document.createElement("div");
+    tools.className = "mediaFolderTools";
+    tools.innerHTML = `
+      <select class="input mediaFolderSelect" id="mediaFolderSelect" aria-label="Folders existentes">
+        <option value="">Todos los folders del bucket</option>
+      </select>
+      <button class="btn btn--ghost sm mediaFolderRefresh" id="mediaFolderRefreshBtn" type="button">Actualizar folders</button>
+    `;
+
+    dom.folderEl.insertAdjacentElement("afterend", tools);
+
+    const hint = document.createElement("div");
+    hint.className = "mini mediaFolderHint";
+    hint.textContent = "Podés elegir un folder existente, escribir uno nuevo y al subir se guardará para futuras selecciones.";
+    tools.insertAdjacentElement("afterend", hint);
+
+    const listWrap = dom.listEl?.closest(".card") || dom.listEl?.parentElement;
+    if (listWrap && !document.getElementById("mediaAssetSearch")) {
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "mediaAssetTools";
+      searchWrap.innerHTML = `
+        <input class="input mediaAssetSearch" id="mediaAssetSearch" type="search" placeholder="Buscar en medios subidos: nombre, folder o URL..." />
+        <button class="btn btn--ghost sm" id="mediaShowAllAssetsBtn" type="button">Ver todos</button>
+      `;
+      dom.listEl.insertAdjacentElement("beforebegin", searchWrap);
+
+      const search = searchWrap.querySelector("#mediaAssetSearch");
+      search?.addEventListener("input", () => {
+        S.assetFilter = clean(search.value || "").toLowerCase();
+        renderList(dom);
+      });
+
+      searchWrap.querySelector("#mediaShowAllAssetsBtn")?.addEventListener("click", async () => {
+        dom.folderEl.value = "";
+        const select = document.getElementById("mediaFolderSelect");
+        if (select) select.value = "";
+        await refreshList(dom, { silent: false });
+      });
+    }
+
+    tools.querySelector("#mediaFolderSelect")?.addEventListener("change", async (e) => {
+      dom.folderEl.value = clean(e.target.value || "");
+      await refreshList(dom, { silent: true });
+    });
+
+    tools.querySelector("#mediaFolderRefreshBtn")?.addEventListener("click", async () => {
+      await refreshFolders(dom);
+      await refreshList(dom, { silent: false });
+    });
+  }
+
+  function renderFolderOptions(dom) {
+    const select = document.getElementById("mediaFolderSelect");
+    const datalist = document.getElementById("mediaFolderDatalist");
+    if (!select && !datalist) return;
+
+    const current = clean(dom.folderEl?.value || "");
+    const options = (S.folders || []).map((folder) => `<option value="${escapeHtml(folder)}">${escapeHtml(folder)}</option>`).join("");
+
+    if (select) {
+      select.innerHTML = `<option value="">Todos los folders del bucket</option>${options}`;
+      select.value = S.folders.includes(current) ? current : "";
+    }
+
+    if (datalist) datalist.innerHTML = options;
+  }
+
   // ---------------------------
   // DB helpers
   // ---------------------------
-  async function fetchAssetsLatest(sb, { folder, limit = 60 }) {
+  async function fetchAssetsLatest(sb, { folder, limit = 120 }) {
     let q = sb
       .from(ASSETS_TABLE)
       .select("id, folder, name, path, public_url, mime, bytes, created_at")
@@ -300,6 +394,26 @@
     const { data, error } = await q;
     if (error) throw error;
     return Array.isArray(data) ? data : [];
+  }
+
+  async function fetchAssetFolders(sb, bucket) {
+    const { data, error } = await sb
+      .from(ASSETS_TABLE)
+      .select("folder, path, public_url, mime, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+
+    if (error) throw error;
+
+    const targetBucket = clean(bucket || "media");
+    const set = new Set();
+    (Array.isArray(data) ? data : []).forEach((asset) => {
+      if (guessBucketFromAsset(asset) !== targetBucket) return;
+      const f = clean(asset.folder || "");
+      if (f) set.add(f);
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }
 
   async function insertAsset(sb, payload) {
@@ -416,6 +530,18 @@
     return false;
   }
 
+  async function refreshFolders(dom) {
+    const sb = getSB();
+    if (!sb) return;
+    try {
+      S.folders = await fetchAssetFolders(sb, getBucket(dom));
+      renderFolderOptions(dom);
+    } catch (e) {
+      console.warn(e);
+      // No bloquea medios: si falla, el input manual sigue funcionando.
+    }
+  }
+
   // ---------------------------
   // Render list
   // ---------------------------
@@ -425,16 +551,25 @@
 
     listEl.innerHTML = "";
 
-    if (!S.assets.length) {
+    const assets = (S.assets || []).filter((a) => {
+      const q = clean(S.assetFilter || "").toLowerCase();
+      if (!q) return true;
+      const hay = `${a.name || ""} ${a.folder || ""} ${a.path || ""} ${a.public_url || ""} ${a.mime || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+    if (!assets.length) {
       const div = document.createElement("div");
       div.className = "empty";
-      div.textContent = "No hay medios en esta carpeta. Subí uno o pegá una URL.";
+      div.textContent = getFolderValue(dom)
+        ? "No hay medios en este folder. Cambiá el folder, elegí Ver todos o subí uno nuevo."
+        : "No hay medios para mostrar en este bucket.";
       listEl.appendChild(div);
       return;
     }
 
     const frag = document.createDocumentFragment();
-    S.assets.forEach((a) => {
+    assets.forEach((a) => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "item";
@@ -454,8 +589,8 @@
             ${url ? `<img src="${url}" alt="" style="width:100%; height:100%; object-fit:cover;">` : ""}
           </div>
           <div style="min-width:0;">
-            <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
-            <div style="opacity:.72; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${meta}</div>
+            <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(name)}</div>
+            <div style="opacity:.72; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(meta)}</div>
           </div>
         </div>
       `;
@@ -483,11 +618,12 @@
     const session = await ensureSession(sb);
     if (!session) return;
 
-    const folder = clean(dom.folderEl?.value || "");
-    if (!silent) setNote(dom.noteEl, "Cargando lista…");
+    const folder = getFolderValue(dom);
+    if (!silent) setNote(dom.noteEl, folder ? "Cargando lista del folder…" : "Cargando medios del bucket…");
 
     try {
-      S.assets = await fetchAssetsLatest(sb, { folder, limit: 60 });
+      S.assets = (await fetchAssetsLatest(sb, { folder, limit: folder ? 120 : 250 }))
+        .filter((asset) => guessBucketFromAsset(asset) === getBucket(dom));
       renderList(dom);
       setNote(dom.noteEl, "");
       S.didLoadOnce = true;
@@ -536,6 +672,7 @@
 
     S.selected = created;
     setPreview(dom, created);
+    await refreshFolders(dom);
     await refreshList(dom, { silent: true });
     return created;
   }
@@ -854,15 +991,24 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     // permitir pegar URL
     try { dom.urlEl.readOnly = false; } catch (_) {}
 
+    buildFolderTools(dom);
     applyAccept(dom);
     syncScopeUI(dom);
 
-    dom.bucketEl.addEventListener("change", () => {
+    dom.bucketEl.addEventListener("change", async () => {
       applyAccept(dom);
-      refreshList(dom, { silent: true });
+      S.selected = null;
+      if (dom.urlEl) dom.urlEl.value = "";
+      setPreview(dom, null);
+      await refreshFolders(dom);
+      await refreshList(dom, { silent: true });
     });
 
-    dom.folderEl.addEventListener("change", () => refreshList(dom, { silent: true }));
+    dom.folderEl.addEventListener("change", async () => {
+      const select = document.getElementById("mediaFolderSelect");
+      if (select) select.value = S.folders.includes(clean(dom.folderEl.value || "")) ? clean(dom.folderEl.value || "") : "";
+      await refreshList(dom, { silent: true });
+    });
     dom.btnRefresh?.addEventListener("click", () => refreshList(dom, { silent: false }));
 
     dom.btnCopy?.addEventListener("click", () => {
@@ -939,6 +1085,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
         dom.urlEl.value = clean(asset.public_url || "");
         setPreview(dom, asset);
         setNote(dom.noteEl, "Subido. Ahora podés asignar.");
+        await refreshFolders(dom);
         await refreshList(dom, { silent: true });
       } catch (e2) {
         console.warn(e2);
@@ -952,8 +1099,9 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     dom.btnAssign?.addEventListener("click", () => assignNow(dom));
     dom.btnViewAssigned?.addEventListener("click", () => viewAssigned(dom));
 
-    // carga selectors + lista
+    // carga selectors + folders + lista
     await loadEventsAndMenu(dom);
+    await refreshFolders(dom);
     await refreshList(dom, { silent: true });
   }
 
