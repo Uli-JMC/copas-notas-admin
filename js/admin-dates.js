@@ -78,6 +78,12 @@
     if (note) note.textContent = String(msg || "");
   }
 
+  function emitDatesChanged(detail) {
+    const data = Object.assign({ source: "admin-dates", version: VERSION }, detail || {});
+    try { window.dispatchEvent(new CustomEvent("admin:dates:changed", { detail: data })); } catch (_) {}
+    try { document.dispatchEvent(new CustomEvent("admin:dates:changed", { detail: data })); } catch (_) {}
+  }
+
   function cleanSpaces(s) {
     return String(s ?? "").replace(/\s+/g, " ").trim();
   }
@@ -716,6 +722,7 @@
         setNote("Fecha creada.");
         toast("Listo", "Fecha creada.", 1200);
         renderAll();
+        emitDatesChanged({ action: "created", eventId: S.activeEventId, dateId: created.id });
         return;
       }
 
@@ -755,6 +762,7 @@
         1400
       );
       renderAll();
+      emitDatesChanged({ action: "updated", eventId: S.activeEventId, dateId: updated.id });
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {
@@ -802,12 +810,14 @@
       S.dates = S.dates.filter((d) => String(d.id) !== String(S.activeDateId));
       delete S.bookedByDateId[id];
 
+      const deletedDateId = id;
       S.activeDateId = null;
       setFormMode(null);
 
       setNote("Eliminada.");
       toast("Eliminada", "Se eliminó la fecha.", 1200);
       renderAll();
+      emitDatesChanged({ action: "deleted", eventId: S.activeEventId, dateId: deletedDateId });
     } catch (err) {
       console.error(err);
       if (isRLSError(err)) {

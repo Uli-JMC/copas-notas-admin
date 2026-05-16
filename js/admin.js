@@ -143,6 +143,13 @@
     if (panel) panel.hidden = false;
 
     dispatchAdminTab(state.activeTab);
+
+    // Si volvemos a Eventos después de editar fechas/medios, refrescamos relaciones
+    // sin tocar la funcionalidad base. Esto evita que campos/resúmenes queden vacíos
+    // o desactualizados después de guardar en otros módulos.
+    if (state.activeTab === "events" && state.selectedEventId) {
+      refreshSelectedEventRelations({ silent: true });
+    }
   }
 
   function bindTabsOnce() {
@@ -518,55 +525,6 @@
     if (dot) dot.classList.toggle("isPublished", active);
   }
 
-  function formatTime12(value) {
-    const raw = safeStr(value || "").trim();
-    const m = raw.match(/^(\d{1,2}):(\d{2})/);
-    if (!m) return "";
-    let h = Number(m[1]);
-    const min = m[2];
-    const suffix = h >= 12 ? "pm" : "am";
-    h = h % 12;
-    if (h === 0) h = 12;
-    return `${h}:${min} ${suffix}`;
-  }
-
-  function syncMonthFromDateUi() {
-    const dateEl = $("#evDateUi");
-    const monthEl = $("#evMonth");
-    const raw = safeStr(dateEl?.value || "");
-    if (!raw || !monthEl) return;
-    const parts = raw.split("-");
-    if (parts.length < 2) return;
-    const idx = Number(parts[1]) - 1;
-    if (idx >= 0 && idx < MONTHS.length) monthEl.value = MONTHS[idx];
-  }
-
-  function syncScheduleFromTimeUi() {
-    const start = $("#evStartTimeUi")?.value || "";
-    const end = $("#evEndTimeUi")?.value || "";
-    const scheduleEl = $("#evSchedule");
-    const durationEl = $("#evDurationHours");
-
-    if (scheduleEl && start && end) {
-      scheduleEl.value = `${formatTime12(start)} a ${formatTime12(end)}`;
-    } else if (scheduleEl && start) {
-      scheduleEl.value = formatTime12(start);
-    }
-
-    if (durationEl && start && end) {
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      if (Number.isFinite(sh) && Number.isFinite(eh)) {
-        let minutes = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
-        if (minutes < 0) minutes += 24 * 60;
-        if (minutes > 0) {
-          const hours = minutes / 60;
-          durationEl.value = `${Number.isInteger(hours) ? hours : hours.toFixed(1)} horas`;
-        }
-      }
-    }
-  }
-
   function updateEventMediaSummary() {
     const desktop = cleanSpaces($("#evBannerDesktopUrl")?.value || "");
     const mobile = cleanSpaces($("#evBannerMobileUrl")?.value || "");
@@ -629,16 +587,44 @@
     $("#evActive") && ($("#evActive").value = ev.active ? "true" : "false");
     $("#evAlt") && ($("#evAlt").value = ev.more_img_alt || "");
 
-    // Fechas reales viven en event_dates. El resumen se actualiza al abrir el evento.
-    renderEventDatesSummary();
-
-    $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
-    $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
+    // Fechas y medios reales se recargan al abrir el evento.
+    // Importante: primero limpiamos estado y luego renderizamos, para no mostrar
+    // datos viejos ni dejar labels/resúmenes en blanco de forma inconsistente.
     state.selectedEventMediaMap = {};
     state.selectedEventDates = [];
+    $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = "");
+    $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = "");
+    renderEventDatesSummary();
     setSaveStatus("Sin cambios", "neutral");
     updateEventStatusUi();
     updateEventMediaSummary();
+  }
+
+  async function refreshSelectedEventRelations(opts = {}) {
+    const id = state.selectedEventId;
+    if (!id) return;
+
+    try {
+      const [map, dates] = await Promise.all([
+        fetchEventSlotUrlsLatest(id).catch((err) => { console.warn("[admin] refresh media", err); return state.selectedEventMediaMap || {}; }),
+        fetchEventDatesForEvent(id).catch((err) => { console.warn("[admin] refresh dates", err); return state.selectedEventDates || []; }),
+      ]);
+
+      state.selectedEventMediaMap = map || {};
+      state.selectedEventDates = dates || [];
+
+      $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = state.selectedEventMediaMap.desktop_event || "");
+      $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = state.selectedEventMediaMap.mobile_event || "");
+
+      syncEventFieldsFromDatesIfEmpty();
+      renderEventDatesSummary();
+      updateEventMediaSummary();
+      renderEventReadiness();
+
+      if (!opts.silent) toast("Actualizado", "Se sincronizaron fechas y medios del evento.", 1400);
+    } catch (err) {
+      console.warn("[admin] refreshSelectedEventRelations", err);
+    }
   }
 
   async function openEvent(eventId) {
@@ -650,26 +636,7 @@
     fillEditor(ev);
     renderEventList();
 
-    try {
-      const [map, dates] = await Promise.all([
-        fetchEventSlotUrlsLatest(ev.id),
-        fetchEventDatesForEvent(ev.id).catch((err) => {
-          console.warn("[admin] dates readiness", err);
-          return [];
-        }),
-      ]);
-      state.selectedEventMediaMap = map || {};
-      state.selectedEventDates = dates || [];
-      syncEventFieldsFromDatesIfEmpty();
-      renderEventDatesSummary();
-      $("#evBannerDesktopUrl") && ($("#evBannerDesktopUrl").value = map.desktop_event || "");
-      $("#evBannerMobileUrl") && ($("#evBannerMobileUrl").value = map.mobile_event || "");
-      updateEventMediaSummary();
-      renderEventReadiness();
-    } catch (e) {
-      console.warn("[admin] media readonly", e);
-      renderEventReadiness();
-    }
+    await refreshSelectedEventRelations({ silent: true });
   }
 
   function readEditorPayload() {
@@ -713,12 +680,24 @@
       const r = renderEventReadiness();
       toast(r.ok ? "Validación OK" : "Faltan datos", r.ok ? "El evento está listo para publicarse." : `Faltan ${r.missing.length} punto(s) para publicar.`, 2600);
     });
-    $("#evDateUi")?.addEventListener("change", () => { syncMonthFromDateUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
-    $("#evStartTimeUi")?.addEventListener("change", () => { syncScheduleFromTimeUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
-    $("#evEndTimeUi")?.addEventListener("change", () => { syncScheduleFromTimeUi(); setSaveStatus("Cambios sin guardar", "dirty"); refreshReadinessSoon(); });
     $("#evBannerDesktopBtn")?.addEventListener("click", () => setTab("media"));
     $("#evBannerMobileBtn")?.addEventListener("click", () => setTab("media"));
     $("#eventManageDatesBtn")?.addEventListener("click", () => setTab("dates"));
+
+    // Sincronización entre módulos: si Fechas o Medios cambian el evento actual,
+    // refrescamos el resumen/labels/checklist sin obligar a recargar la página.
+    const onRelatedChange = (e) => {
+      const detail = e?.detail || {};
+      if (!state.selectedEventId) return;
+      if (detail.scope && detail.scope !== "event") return;
+      if (detail.eventId && String(detail.eventId) !== String(state.selectedEventId)) return;
+      if (detail.scope_id && String(detail.scope_id) !== String(state.selectedEventId)) return;
+      refreshSelectedEventRelations({ silent: true });
+    };
+    window.addEventListener("admin:dates:changed", onRelatedChange);
+    document.addEventListener("admin:dates:changed", onRelatedChange);
+    window.addEventListener("admin:media:changed", onRelatedChange);
+    document.addEventListener("admin:media:changed", onRelatedChange);
 
     $("#eventCreateClose")?.addEventListener("click", closeCreateEventModal);
     $("#eventCreateCancel")?.addEventListener("click", closeCreateEventModal);

@@ -144,11 +144,35 @@
   const SLOT_LABELS = Object.fromEntries([...EVENT_SLOTS, ...MENU_SLOTS].map((s) => [s.value, s.label]));
   const SLOT_HELP = Object.fromEntries([...EVENT_SLOTS, ...MENU_SLOTS].map((s) => [s.value, s.help || s.label]));
 
+  function emitMediaChanged(detail) {
+    const data = Object.assign({ source: "admin-media", version: VERSION }, detail || {});
+    try { window.dispatchEvent(new CustomEvent("admin:media:changed", { detail: data })); } catch (_) {}
+    try { document.dispatchEvent(new CustomEvent("admin:media:changed", { detail: data })); } catch (_) {}
+  }
+
+  function hydrateFormFromAsset(dom, asset) {
+    if (!asset) return;
+    const folder = clean(asset.folder || "");
+    const name = clean(asset.name || "");
+    const url = clean(asset.public_url || asset.path || "");
+    const bucket = guessBucketFromAsset(asset);
+
+    if (dom.mediaId) dom.mediaId.value = clean(asset.id || "");
+    if (dom.folderEl && folder) dom.folderEl.value = folder;
+    if (dom.nameEl && name) dom.nameEl.value = name;
+    if (dom.urlEl) dom.urlEl.value = url;
+    if (dom.bucketEl && bucket && dom.bucketEl.value !== bucket) {
+      dom.bucketEl.value = bucket;
+      applyAccept(dom);
+    }
+  }
+
   // ---------------------------
   // DOM (solo se usa cuando el tab media existe)
   // ---------------------------
   function getDom() {
     const form = $("#mediaForm");
+    const mediaId = $("#mediaId");
     const fileEl = $("#mediaFile");
     const bucketEl = $("#mediaBucket");
     const folderEl = $("#mediaFolder");
@@ -181,6 +205,7 @@
 
     return {
       form,
+      mediaId,
       fileEl,
       bucketEl,
       folderEl,
@@ -595,6 +620,7 @@
     setPreview(dom, updated);
     await refreshFolders(dom);
     await refreshList(dom, { silent: true });
+    emitMediaChanged({ action: "asset-updated", mediaId: updated?.id || asset.id });
     return updated;
   }
 
@@ -700,7 +726,7 @@
   function openMediaUpdateModal(dom, asset) {
     if (!asset?.id) return toast("Actualizar", "Seleccioná un medio primero.", 2400);
     S.selected = asset;
-    if (dom.urlEl) dom.urlEl.value = clean(asset.public_url || "");
+    hydrateFormFromAsset(dom, asset);
     setPreview(dom, asset);
 
     const modal = ensureMediaUpdateModal(dom);
@@ -785,7 +811,7 @@
 
       const selectAsset = () => {
         S.selected = a;
-        if (urlEl) urlEl.value = clean(a.public_url || "");
+        hydrateFormFromAsset(dom, a);
         setPreview(dom, a);
         setNote(dom.noteEl, "Seleccionado. Podés asignarlo, actualizarlo o eliminarlo.");
         setMediaMode("assign");
@@ -808,7 +834,7 @@
       item.querySelector("[data-update]")?.addEventListener("click", (e) => {
         e.stopPropagation();
         S.selected = a;
-        if (urlEl) urlEl.value = clean(a.public_url || "");
+        hydrateFormFromAsset(dom, a);
         setPreview(dom, a);
         openMediaUpdateModal(dom, a);
       });
@@ -816,7 +842,7 @@
       item.querySelector("[data-delete]")?.addEventListener("click", async (e) => {
         e.stopPropagation();
         S.selected = a;
-        if (urlEl) urlEl.value = clean(a.public_url || "");
+        hydrateFormFromAsset(dom, a);
         setPreview(dom, a);
         await deleteSelected(dom);
       });
@@ -889,7 +915,9 @@
     });
 
     S.selected = created;
+    hydrateFormFromAsset(dom, created);
     setPreview(dom, created);
+    emitMediaChanged({ action: "asset-created", mediaId: created.id });
     await refreshFolders(dom);
     await refreshList(dom, { silent: true });
     return created;
@@ -988,7 +1016,7 @@
       bytes: r.bytes || null,
     };
     S.selected = asset;
-    if (dom.urlEl) dom.urlEl.value = clean(asset.public_url || "");
+    hydrateFormFromAsset(dom, asset);
     setPreview(dom, asset);
     setNote(dom.noteEl, `Vista previa: ${SLOT_LABELS[r.slot] || r.slot}.`);
     setMediaMode("assign");
@@ -1127,6 +1155,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
 
     try {
       await deleteBinding(sb, { scope, scope_id, slot });
+      emitMediaChanged({ action: "unassigned", scope, scope_id, eventId: scope === "event" ? scope_id : null, slot, mediaId: row.media_id || null });
       if (S.selected?.id && String(S.selected.id) === String(row.media_id)) {
         S.selected = null;
         if (dom.urlEl) dom.urlEl.value = "";
@@ -1155,6 +1184,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
 
     try {
       await upsertBinding(sb, { scope, scope_id, slot, media_id: String(asset.id), note: null });
+      emitMediaChanged({ action: "assigned", scope, scope_id, eventId: scope === "event" ? scope_id : null, slot, mediaId: String(asset.id) });
       toast("Asignado", "Listo. Se actualizó el slot.", 2200);
       await viewAssigned(dom);
     } catch (e) {
@@ -1187,9 +1217,12 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
         await removeFromStorageAnyBucket(sb, p).catch(() => {});
       }
 
+      const deletedId = deleted?.id || asset.id;
       S.selected = null;
+      if (dom.mediaId) dom.mediaId.value = "";
       if (dom.urlEl) dom.urlEl.value = "";
       setPreview(dom, null);
+      emitMediaChanged({ action: "asset-deleted", mediaId: deletedId });
       setNote(dom.noteEl, "Eliminado.");
       await refreshFolders(dom);
       await refreshList(dom, { silent: true });
@@ -1224,6 +1257,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     dom.bucketEl.addEventListener("change", async () => {
       applyAccept(dom);
       S.selected = null;
+      if (dom.mediaId) dom.mediaId.value = "";
       if (dom.urlEl) dom.urlEl.value = "";
       setPreview(dom, null);
       await refreshFolders(dom);
@@ -1249,6 +1283,7 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
     dom.btnReset?.addEventListener("click", () => {
       S.selected = null;
       try { dom.fileEl.value = ""; } catch (_) {}
+      if (dom.mediaId) dom.mediaId.value = "";
       dom.urlEl.value = "";
       if (dom.nameEl) dom.nameEl.value = "";
       if (dom.tagsEl) dom.tagsEl.value = "";
@@ -1308,8 +1343,9 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
         });
 
         S.selected = asset;
-        dom.urlEl.value = clean(asset.public_url || "");
+        hydrateFormFromAsset(dom, asset);
         setPreview(dom, asset);
+        emitMediaChanged({ action: "asset-created", mediaId: asset.id });
         setNote(dom.noteEl, "Subido. Ahora podés asignar.");
         setMediaMode("assign");
         await refreshFolders(dom);
