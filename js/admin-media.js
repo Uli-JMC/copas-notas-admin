@@ -293,15 +293,42 @@
     noteEl.textContent = clean(msg || "");
   }
 
+  function ensurePreviewVideo(previewWrap) {
+    if (!previewWrap) return null;
+    let video = previewWrap.querySelector("#mediaPreviewVideo");
+    if (!video) {
+      const holder = previewWrap.querySelector(".preview") || previewWrap;
+      video = document.createElement("video");
+      video.id = "mediaPreviewVideo";
+      video.className = "mediaPreviewVideo";
+      video.controls = true;
+      video.preload = "metadata";
+      video.playsInline = true;
+      holder.appendChild(video);
+    }
+    return video;
+  }
+
   function setPreview(dom, asset) {
     const { previewEmpty, previewWrap, previewImg, previewMeta } = dom;
 
     if (!previewEmpty || !previewWrap) return;
 
+    const previewVideo = ensurePreviewVideo(previewWrap);
+
     if (!asset) {
       previewEmpty.hidden = false;
       previewWrap.hidden = true;
-      if (previewImg) previewImg.src = "";
+      if (previewImg) {
+        previewImg.src = "";
+        previewImg.hidden = false;
+      }
+      if (previewVideo) {
+        previewVideo.pause?.();
+        previewVideo.removeAttribute("src");
+        previewVideo.load?.();
+        previewVideo.hidden = true;
+      }
       if (previewMeta) previewMeta.textContent = "";
       return;
     }
@@ -309,17 +336,45 @@
     previewEmpty.hidden = true;
     previewWrap.hidden = false;
 
-    const url = clean(asset.public_url || "");
-    if (previewImg) previewImg.src = url;
+    const url = clean(asset.public_url || asset.path || "");
+    const kind = getAssetKind(asset);
+
+    if (kind === "video") {
+      if (previewImg) {
+        previewImg.src = "";
+        previewImg.hidden = true;
+      }
+      if (previewVideo) {
+        previewVideo.hidden = false;
+        if (previewVideo.getAttribute("src") !== url) {
+          previewVideo.src = url;
+          previewVideo.load?.();
+        }
+      }
+    } else {
+      if (previewVideo) {
+        previewVideo.pause?.();
+        previewVideo.removeAttribute("src");
+        previewVideo.load?.();
+        previewVideo.hidden = true;
+      }
+      if (previewImg) {
+        previewImg.hidden = false;
+        previewImg.src = url;
+      }
+    }
 
     if (previewMeta) {
       previewMeta.textContent = [
         `ID: ${asset.id || "—"}`,
+        `Tipo: ${kind === "video" ? "Video" : "Imagen"}`,
         `Folder: ${asset.folder || "—"}`,
         `Name: ${asset.name || "—"}`,
         `URL: ${url || "—"}`,
       ].join(" · ");
     }
+
+    try { syncScopeUI(dom); } catch (_) {}
   }
 
   function getBucket(dom) {
@@ -342,6 +397,35 @@
 
     if (mime.startsWith("video/") || url.includes("/object/public/video/") || /\.(mp4|webm|mov)(\?|$)/i.test(path)) return "video";
     return "media";
+  }
+
+  function getAssetKind(asset) {
+    const mime = clean(asset?.mime || "").toLowerCase();
+    const url = clean(asset?.public_url || asset?.path || "").toLowerCase();
+    const path = clean(asset?.path || "").toLowerCase();
+    if (mime.startsWith("video/") || url.includes("/object/public/video/") || /\.(mp4|webm|mov)(\?|$)/i.test(url) || /\.(mp4|webm|mov)(\?|$)/i.test(path)) return "video";
+    return "image";
+  }
+
+  function isVideoSlot(slot) {
+    return clean(slot) === "slide_video";
+  }
+
+  function isImageOnlySlot(slot) {
+    return ["slide_img", "desktop_event", "mobile_event", "event_more", "icon", "image"].includes(clean(slot));
+  }
+
+  function isCompatibleAssetSlot(asset, slot) {
+    if (!asset || !slot) return true;
+    const kind = getAssetKind(asset);
+    if (kind === "video") return isVideoSlot(slot);
+    if (kind === "image") return !isVideoSlot(slot);
+    return true;
+  }
+
+  function firstCompatibleSlot(slots, asset) {
+    const found = (slots || []).find((s) => isCompatibleAssetSlot(asset, s.value));
+    return found?.value || slots?.[0]?.value || "";
   }
 
   function getFolderValue(dom) {
@@ -735,9 +819,10 @@
     if (file) file.setAttribute("accept", ACCEPTS[guessBucketFromAsset(asset)] || "image/*,video/*");
     if (current) {
       const u = clean(asset.public_url || asset.path || "");
+      const isVideo = getAssetKind(asset) === "video";
       current.innerHTML = `
         <div class="mediaUpdatePreview">
-          ${u && !/\.(mp4|webm|mov)(\?|$)/i.test(u) ? `<img src="${escapeHtml(u)}" alt="">` : `<span>Archivo seleccionado</span>`}
+          ${u && !isVideo ? `<img src="${escapeHtml(u)}" alt="">` : isVideo ? `<video src="${escapeHtml(u)}" controls preload="metadata" playsinline></video>` : `<span>Archivo seleccionado</span>`}
         </div>
         <div>
           <strong>${escapeHtml(clean(asset.name || "Medio"))}</strong>
@@ -813,7 +898,8 @@
         S.selected = a;
         hydrateFormFromAsset(dom, a);
         setPreview(dom, a);
-        setNote(dom.noteEl, "Seleccionado. Podés asignarlo, actualizarlo o eliminarlo.");
+        syncScopeUI(dom);
+        setNote(dom.noteEl, getAssetKind(a) === "video" ? "Video seleccionado. Solo se puede asignar a Home Slider · Video." : "Imagen seleccionada. Podés asignarla a slots de imagen.");
         setMediaMode("assign");
         renderList(dom);
       };
@@ -929,7 +1015,18 @@
   function setSlotOptionsForScope(dom, scope) {
     if (!dom.slotSel) return;
     const arr = scope === "menu_item" ? MENU_SLOTS : EVENT_SLOTS;
-    dom.slotSel.innerHTML = arr.map((s) => `<option value="${s.value}">${s.label}</option>`).join("");
+    const asset = S.selected || null;
+    const current = clean(dom.slotSel.value || "");
+    dom.slotSel.innerHTML = arr
+      .map((s) => {
+        const ok = isCompatibleAssetSlot(asset, s.value);
+        const suffix = !ok ? (getAssetKind(asset) === "video" ? " · no compatible con video" : " · no compatible con imagen") : "";
+        return `<option value="${s.value}" ${ok ? "" : "disabled"}>${s.label}${suffix}</option>`;
+      })
+      .join("");
+
+    if (current && isCompatibleAssetSlot(asset, current)) dom.slotSel.value = current;
+    else dom.slotSel.value = firstCompatibleSlot(arr, asset);
   }
 
   function syncScopeUI(dom) {
@@ -1049,7 +1146,9 @@
       const slotLabel = SLOT_LABELS[r.slot] || clean(r.slot || "Slot");
       const slotHelp = SLOT_HELP[r.slot] || "Recurso asignado.";
       const filename = clean(r.name || (u.split("/").pop() || "Medio asignado"));
-      const isVideo = /video\//i.test(clean(r.mime || "")) || /\.(mp4|webm|mov)$/i.test(u);
+      const isVideo = /video\//i.test(clean(r.mime || "")) || /\.(mp4|webm|mov)(\?|$)/i.test(u);
+      const compatible = isCompatibleAssetSlot({ mime: r.mime || "", public_url: u, path: r.path || "" }, r.slot);
+      if (!compatible) row.classList.add("isIncompatible");
 
       row.innerHTML = `
         <div class="mediaAssignedThumb" aria-hidden="true">
@@ -1060,7 +1159,7 @@
             <strong>${escapeHtml(slotLabel)}</strong>
             <span>${escapeHtml(clean(r.slot || ""))}</span>
           </div>
-          <p class="mediaAssignedHelp">${escapeHtml(slotHelp)}</p>
+          <p class="mediaAssignedHelp">${escapeHtml(slotHelp)}${compatible ? "" : " · ⚠ Archivo incompatible con este slot"}</p>
           <p class="mediaAssignedName">${escapeHtml(filename)}</p>
           <p class="mediaAssignedUrl">${escapeHtml(u || "—")}</p>
           <p class="mediaAssignedDate">Actualizado: ${escapeHtml(updated)}</p>
@@ -1181,6 +1280,16 @@ Esto NO elimina el archivo de Medios, solo lo desasigna de este destino.`);
 
     const asset = await ensureAssetSelectedOrFromUrl(dom);
     if (!asset) return toast("Medio", "Seleccioná un medio o pegá una URL.", 3000);
+
+    if (!isCompatibleAssetSlot(asset, slot)) {
+      const kind = getAssetKind(asset);
+      const msg = kind === "video"
+        ? "Este archivo es video. Para evitar que el sitio público quede en blanco, asignalo únicamente a Home Slider · Video (slide_video)."
+        : "Este archivo es imagen. No se puede asignar al slot de video; usá un slot de imagen.";
+      toast("Slot incompatible", msg, 5200);
+      syncScopeUI(dom);
+      return;
+    }
 
     try {
       await upsertBinding(sb, { scope, scope_id, slot, media_id: String(asset.id), note: null });

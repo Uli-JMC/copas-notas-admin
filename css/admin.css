@@ -3146,3 +3146,44 @@ body.adminPage #tab-media.mediaPanelPro{
   .mediaAssetActions{grid-column:1 / -1; justify-content:flex-start;}
   .mediaUpdateCurrent{grid-template-columns:1fr;}
 }
+
+/* ============================================================
+   ECN Media video preview + slot compatibility patch
+============================================================ */
+.mediaPreviewVideo{
+  width: 100%;
+  max-height: 520px;
+  display: block;
+  border-radius: 18px;
+  background: #101010;
+  object-fit: contain;
+}
+#mediaPreview .preview{
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+#mediaPreviewImg[hidden],
+#mediaPreviewVideo[hidden]{
+  display: none !important;
+}
+.mediaUpdatePreview video{
+  width: 100%;
+  max-height: 180px;
+  display: block;
+  border-radius: 14px;
+  background: #101010;
+  object-fit: contain;
+}
+.mediaAssignedItem.isIncompatible{
+  border-color: rgba(255, 149, 0, .42) !important;
+  background: linear-gradient(180deg, rgba(255, 149, 0, .07), rgba(255,255,255,.92)) !important;
+}
+.mediaAssignedItem.isIncompatible .mediaAssignedHelp{
+  color: #9a5b00;
+  font-weight: 700;
+}
+#mediaSlotSelect option:disabled{
+  color: #9aa3b2;
+}
