@@ -658,7 +658,47 @@
     return normFolder(base) || "asset";
   }
 
+  const FILE_RULES = {
+    media: {
+      maxBytes: 8 * 1024 * 1024,
+      mimes: ["image/jpeg", "image/png", "image/webp", "image/avif"],
+      exts: ["jpg", "jpeg", "png", "webp", "avif"],
+      label: "imagen",
+    },
+    video: {
+      maxBytes: 50 * 1024 * 1024,
+      mimes: ["video/mp4", "video/webm", "video/quicktime"],
+      exts: ["mp4", "webm", "mov"],
+      label: "video",
+    },
+  };
+
+  function formatBytes(bytes) {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return "0 MB";
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function validateFileForBucket(file, bucket) {
+    if (!file) throw new Error("Seleccioná un archivo.");
+    const b = BUCKETS.includes(bucket) ? bucket : "media";
+    const rules = FILE_RULES[b];
+    const ext = extFromFile(file);
+    const mime = clean(file.type || "").toLowerCase();
+
+    const extOk = rules.exts.includes(ext);
+    const mimeOk = !mime || rules.mimes.includes(mime);
+    if (!extOk || !mimeOk) {
+      throw new Error(`Archivo inválido para bucket ${b}. Subí un ${rules.label} permitido (${rules.exts.join(", ")}).`);
+    }
+
+    if (Number(file.size || 0) > rules.maxBytes) {
+      throw new Error(`Archivo muy pesado. Máximo ${formatBytes(rules.maxBytes)} para ${rules.label}; este archivo pesa ${formatBytes(file.size)}.`);
+    }
+  }
+
   async function uploadToStorage(sb, file, bucket, folder, nameBase) {
+    validateFileForBucket(file, bucket);
     const ext = extFromFile(file) || (bucket === "video" ? "mp4" : "jpg");
     const safeName = safeNameBase(nameBase, file.name);
     const path = `${normFolder(folder || "misc")}/${safeName}-${Date.now()}.${ext}`;
